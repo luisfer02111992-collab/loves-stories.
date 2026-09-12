@@ -18,6 +18,7 @@ import Papelera from "./pages/Papelera";
 import Configuracion from "./pages/Configuracion";
 import PedidosCatalogo from "./pages/PedidosCatalogo";
 import Ventas from "./pages/Ventas";
+import ResetPassword from "./pages/ResetPassword";
 
 function Privado({ children }: { children: React.ReactNode }) {
   const { loading, userId } = useAuth();
@@ -36,64 +37,85 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <Routes>
-          {/* El catálogo público se ve sin iniciar sesión, con un link para compartir por WhatsApp */}
-          <Route path="/catalogo-publico" element={<CatalogoPublico />} />
-          <Route path="/login" element={<Login />} />
-
-          <Route
-            path="/"
-            element={
-              <Privado>
-                <Layout />
-              </Privado>
-            }
-          >
-            <Route index element={<Dashboard />} />
-            <Route path="clientes" element={<Clientes />} />
-            <Route path="reportes-dia" element={<ReportesDelDia />} />
-            <Route path="productos" element={<Productos />} />
-            <Route path="inventario" element={<Inventario />} />
-            <Route
-              path="compras"
-              element={
-                <SoloAdmin>
-                  <Compras />
-                </SoloAdmin>
-              }
-            />
-            <Route path="asignacion" element={<Asignacion />} />
-            <Route path="asignacion-multiple" element={<AsignacionMultiple />} />
-            <Route path="catalogo" element={<Catalogo />} />
-            <Route path="pedidos-catalogo" element={<PedidosCatalogo />} />
-            <Route path="ventas" element={<Ventas />} />
-            <Route
-              path="reportes"
-              element={
-                <SoloAdmin>
-                  <Reportes />
-                </SoloAdmin>
-              }
-            />
-            <Route
-              path="papelera"
-              element={
-                <SoloAdmin>
-                  <Papelera />
-                </SoloAdmin>
-              }
-            />
-            <Route
-              path="configuracion"
-              element={
-                <SoloAdmin>
-                  <Configuracion />
-                </SoloAdmin>
-              }
-            />
-          </Route>
-        </Routes>
+        <AppRoutes />
       </AuthProvider>
     </BrowserRouter>
+  );
+}
+
+function AppRoutes() {
+  const { recovery } = useAuth();
+
+  // El enlace de recuperación de Supabase puede caer en cualquier ruta de la app
+  // (según la Site URL configurada en Supabase). En cuanto detectamos la sesión de
+  // recuperación (evento PASSWORD_RECOVERY, ver useAuth), mostramos siempre la
+  // pantalla de nueva contraseña, sin importar la ruta, hasta que el usuario la cambie.
+  if (recovery) {
+    return (
+      <Routes>
+        <Route path="*" element={<ResetPassword />} />
+      </Routes>
+    );
+  }
+
+  return (
+    <Routes>
+      {/* El catálogo público se ve sin iniciar sesión, con un link para compartir por WhatsApp */}
+      <Route path="/catalogo-publico" element={<CatalogoPublico />} />
+      <Route path="/login" element={<Login />} />
+      <Route path="/restablecer-contrasena" element={<ResetPassword />} />
+
+      <Route
+        path="/"
+        element={
+          <Privado>
+            <Layout />
+          </Privado>
+        }
+      >
+        <Route index element={<Dashboard />} />
+        <Route path="clientes" element={<Clientes />} />
+        <Route path="reportes-dia" element={<ReportesDelDia />} />
+        <Route path="productos" element={<Productos />} />
+        <Route path="inventario" element={<Inventario />} />
+        <Route
+          path="compras"
+          element={
+            <SoloAdmin>
+              <Compras />
+            </SoloAdmin>
+          }
+        />
+        <Route path="asignacion" element={<Asignacion />} />
+        <Route path="asignacion-multiple" element={<AsignacionMultiple />} />
+        <Route path="catalogo" element={<Catalogo />} />
+        <Route path="pedidos-catalogo" element={<PedidosCatalogo />} />
+        <Route path="ventas" element={<Ventas />} />
+        <Route
+          path="reportes"
+          element={
+            <SoloAdmin>
+              <Reportes />
+            </SoloAdmin>
+          }
+        />
+        <Route
+          path="papelera"
+          element={
+            <SoloAdmin>
+              <Papelera />
+            </SoloAdmin>
+          }
+        />
+        <Route
+          path="configuracion"
+          element={
+            <SoloAdmin>
+              <Configuracion />
+            </SoloAdmin>
+          }
+        />
+      </Route>
+    </Routes>
   );
 }
