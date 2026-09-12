@@ -6,6 +6,7 @@ interface AuthState {
   loading: boolean;
   userId: string | null;
   profile: Profile | null;
+  recovery: boolean;
   signOut: () => Promise<void>;
 }
 
@@ -13,6 +14,7 @@ const AuthContext = createContext<AuthState>({
   loading: true,
   userId: null,
   profile: null,
+  recovery: false,
   signOut: async () => {},
 });
 
@@ -20,6 +22,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [userId, setUserId] = useState<string | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [recovery, setRecovery] = useState(false);
 
   async function cargarPerfil(uid: string) {
     const { data } = await supabase.from("profiles").select("*").eq("id", uid).single();
@@ -42,7 +45,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      // Supabase dispara este evento cuando la sesión viene de un enlace de recuperación
+      // de contraseña (el correo que envía resetPasswordForEmail). En ese caso no lo
+      // tratamos como un inicio de sesión normal: mostramos la pantalla de nueva contraseña.
+      if (event === "PASSWORD_RECOVERY") {
+        setRecovery(true);
+      }
       const uid = session?.user.id ?? null;
       setUserId(uid);
       if (uid) cargarPerfil(uid);
@@ -56,10 +65,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
     setUserId(null);
     setProfile(null);
+    setRecovery(false);
   }
 
   return (
-    <AuthContext.Provider value={{ loading, userId, profile, signOut }}>
+    <AuthContext.Provider value={{ loading, userId, profile, recovery, signOut }}>
       {children}
     </AuthContext.Provider>
   );
