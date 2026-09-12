@@ -1,0 +1,32 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  background: #EDE7DE;
+  color: #2B1E2E;
+  font-family: 'Helvetica Neue', system-ui, -apple-system, sans-serif;
+}
+
+.font-cursive {
+  font-family: 'Dancing Script', 'Segoe Script', cursive;
+}
+.font-serif {
+  font-family: 'Iowan Old Style', Georgia, serif;
+}
+
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  #recibo-termico, #recibo-termico * {
+    visibility: visible;
+  }
+  #recibo-termico {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 8cm;
+  }
+}

@@ -1,0 +1,126 @@
+import React, { useEffect, useState } from "react";
+import { Clock } from "lucide-react";
+import { supabase } from "../lib/supabase";
+import StatCard from "../components/StatCard";
+
+interface PedidoPorVencer {
+  id: string;
+  cliente: string;
+  dias: number;
+}
+
+function inicioDeHoy() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d.toISOString();
+}
+
+function badgeDias(dias: number) {
+  if (dias >= 5) return { label: `Día ${dias} · alerta`, bg: "#F4E3E6", fg: "#7A2540" };
+  if (dias === 4) return { label: `Día ${dias} · atención`, bg: "#F6EAD2", fg: "#7A5F2D" };
+  return { label: `Día ${dias}`, bg: "#E4EBE1", fg: "#4F6F52" };
+}
+
+export default function Dashboard() {
+  const [ventasHoy, setVentasHoy] = useState(0);
+  const [pedidosAbiertosValor, setPedidosAbiertosValor] = useState(0);
+  const [depositosHoy, setDepositosHoy] = useState(0);
+  const [unidadesHoy, setUnidadesHoy] = useState(0);
+  const [stockBajo, setStockBajo] = useState(0);
+  const [porVencer, setPorVencer] = useState<PedidoPorVencer[]>([]);
+  const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    cargar();
+  }, []);
+
+  async function cargar() {
+    setCargando(true);
+    const hoy = inicioDeHoy();
+
+    // Pedidos cerrados hoy → ventas del día
+    const { data: cerradosHoy } = await supabase
+      .from("orders")
+      .select("id, order_items(quantity, unit_price)")
+      .eq("status", "closed")
+      .gte("closed_at", hoy);
+    let ventas = 0, unidades = 0;
+    (cerradosHoy ?? []).forEach((o: any) => {
+      (o.order_items ?? []).forEach((it: any) => {
+        ventas += it.quantity * it.unit_price;
+        unidades += it.quantity;
+      });
+    });
+
+    // Pedidos abiertos → valor total pendiente y antigüedad
+    const { data: abiertos } = await supabase
+      .from("orders")
+      .select("id, opened_at, customers(name), order_items(quantity, unit_price)")
+      .in("status", ["open", "reopened"]);
+    let valorAbiertos = 0;
+    const vencer: PedidoPorVencer[] = [];
+    (abiertos ?? []).forEach((o: any) => {
+      let subtotal = 0;
+      (o.order_items ?? []).forEach((it: any) => (subtotal += it.quantity * it.unit_price));
+      valorAbiertos += subtotal;
+      const dias = Math.floor((Date.now() - new Date(o.opened_at).getTime()) / 86400000) + 1;
+      if (dias >= 3) vencer.push({ id: o.id, cliente: o.customers?.name ?? "Cliente", dias });
+    });
+
+    // Depósitos de hoy
+    const { data: depositos } = await supabase.from("payments").select("amount").gte("paid_at", hoy);
+    const totalDepositos = (depositos ?? []).reduce((a: number, p: any) => a + p.amount, 0);
+
+    // Stock bajo (menos de 6 disponibles)
+    const { count } = await supabase
+      .from("products")
+      .select("id", { count: "exact", head: true })
+      .lt("stock_available", 6)
+      .eq("active", true);
+
+    setVentasHoy(ventas);
+    setUnidadesHoy(unidades);
+    setPedidosAbiertosValor(valorAbiertos);
+    setDepositosHoy(totalDepositos);
+    setStockBajo(count ?? 0);
+    setPorVencer(vencer.sort((a, b) => b.dias - a.dias).slice(0, 6));
+    setCargando(false);
+  }
+
+  if (cargando) return <p className="text-sm">Cargando panel…</p>;
+
+  return (
+    <div>
+      <p className="font-serif text-lg mb-3">Hoy</p>
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <StatCard label="Ventas cerradas" value={`Bs ${ventasHoy.toLocaleString("es-BO")}`} />
+        <StatCard label="Pedidos abiertos" value={`Bs ${pedidosAbiertosValor.toLocaleString("es-BO")}`} />
+        <StatCard label="Depósitos recibidos" value={`Bs ${depositosHoy.toLocaleString("es-BO")}`} accent="#4F6F52" />
+        <StatCard label="Unidades vendidas" value={unidadesHoy} />
+        <StatCard label="Pedidos por vencer" value={porVencer.length} accent="#B7791F" />
+        <StatCard label="Stock bajo" value={stockBajo} sub="productos" accent="#7A2540" />
+      </div>
+
+      <div className="mt-5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        <div className="px-4 py-3" style={{ borderBottom: "1px solid #D9D0C2" }}>
+          <p className="font-serif text-base">Pedidos por antigüedad</p>
+        </div>
+        <div>
+          {porVencer.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay pedidos por vencer.</p>}
+          {porVencer.map((p) => {
+            const b = badgeDias(p.dias);
+            return (
+              <div key={p.id} className="flex items-center justify-between px-4 py-3" style={{ borderBottom: "1px solid #D9D0C2" }}>
+                <div className="flex items-center gap-2">
+                  <Clock size={15} style={{ color: "#5B4E5E" }} />
+                  <span className="text-sm">{p.cliente}</span>
+                </div>
+                <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: b.bg, color: b.fg }}>{b.label}</span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
