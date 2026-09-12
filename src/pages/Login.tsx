@@ -33,7 +33,24 @@ export default function Login() {
 
   async function recuperarClave(e: React.FormEvent) {
     e.preventDefault();
-    await supabase.auth.resetPasswordForEmail(email);
+    setError(null);
+
+    const correo = email.trim();
+    if (!correo) {
+      setError("Escribe tu correo antes de solicitar el enlace.");
+      return;
+    }
+
+    setCargando(true);
+    const { error: err } = await supabase.auth.resetPasswordForEmail(correo, {
+      redirectTo: window.location.origin + "/restablecer-contrasena",
+    });
+    setCargando(false);
+
+    if (err) {
+      setError(err.message);
+      return;
+    }
     setEnviado(true);
   }
 
@@ -47,8 +64,8 @@ export default function Login() {
           </p>
           {enviado ? (
             <div className="text-center">
-              <p className="text-sm mb-4">Si el correo existe, te llegará un enlace para elegir una contraseña nueva.</p>
-              <button onClick={() => { setRecuperar(false); setEnviado(false); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+              <p className="text-sm mb-4">Te enviamos un enlace a tu correo.</p>
+              <button onClick={() => { setRecuperar(false); setEnviado(false); setError(null); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                 Volver al inicio de sesión
               </button>
             </div>
@@ -56,10 +73,13 @@ export default function Login() {
             <form onSubmit={recuperarClave}>
               <label className="text-xs" style={{ color: "#5B4E5E" }}>Tu correo</label>
               <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required
-                className="w-full mb-4 mt-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
-              <div className="flex gap-2">
-                <button type="submit" className="flex-1 py-2 rounded-md text-sm" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Enviar enlace</button>
-                <button type="button" onClick={() => setRecuperar(false)} className="flex-1 py-2 rounded-md text-sm" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
+                className="w-full mb-2 mt-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+              {error && <p className="text-xs mb-2" style={{ color: "#7A2540" }}>{error}</p>}
+              <div className="flex gap-2 mt-2">
+                <button type="submit" disabled={cargando} className="flex-1 py-2 rounded-md text-sm" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                  {cargando ? "Enviando..." : "Enviar enlace"}
+                </button>
+                <button type="button" onClick={() => { setRecuperar(false); setError(null); }} className="flex-1 py-2 rounded-md text-sm" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
               </div>
             </form>
           )}
@@ -84,7 +104,7 @@ export default function Login() {
           <input value={password} onChange={(e) => setPassword(e.target.value)} type="password" required
             className="flex-1 text-sm outline-none bg-transparent" />
         </div>
-        <button type="button" onClick={() => setRecuperar(true)} className="text-xs mb-3" style={{ color: "#7A5F2D" }}>
+        <button type="button" onClick={() => { setRecuperar(true); setError(null); }} className="text-xs mb-3" style={{ color: "#7A5F2D" }}>
           ¿Olvidaste tu contraseña?
         </button>
 
