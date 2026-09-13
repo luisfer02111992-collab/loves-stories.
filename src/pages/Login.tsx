@@ -1,8 +1,10 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Lock, KeyRound } from "lucide-react";
 import { supabase } from "../lib/supabase";
 
 export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +30,11 @@ export default function Login() {
     setCargando(true);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     setCargando(false);
-    if (error) setError("Usuario o contraseña incorrectos.");
+    if (error) {
+      setError("Usuario o contraseña incorrectos.");
+    } else {
+      navigate("/", { replace: true });
+    }
   }
 
   async function recuperarClave(e: React.FormEvent) {
