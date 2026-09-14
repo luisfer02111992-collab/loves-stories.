@@ -32,19 +32,27 @@ export default function Catalogo() {
       name: producto.name,
       price: producto.price,
       image_url: producto.image_url,
-      stock_available: producto.stock_physical,
+      // Nunca stock_physical: el límite real de disponibilidad es stock_available
+      // (físico menos lo ya reservado/asignado). Supabase además lo vuelve a
+      // recortar por su cuenta con un trigger si llegara a exceder el stock real.
+      stock_available: producto.stock_available,
     });
     setPendiente("");
     cargar();
   }
 
-  // Cambio directo de cantidad (sin +/- y sin recargar toda la lista, para que sea instantáneo).
-  function actualizarCantidadLocal(id: string, cantidad: number) {
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, stock_available: Math.max(0, cantidad) } : it)));
+  // Nunca deja pasar de largo el máximo real del producto: si escriben más de lo
+  // que hay, se recorta al tope. La validación definitiva igual vive en Supabase
+  // (trigger validar_catalog_stock), esto es solo para que se sienta instantáneo.
+  function actualizarCantidadLocal(id: string, cantidad: number, maximo: number) {
+    const limitada = Math.min(Math.max(0, cantidad), maximo);
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, stock_available: limitada } : it)));
   }
 
-  async function guardarCantidad(id: string, cantidad: number) {
-    await supabase.from("catalog_products").update({ stock_available: Math.max(0, cantidad) }).eq("id", id);
+  async function guardarCantidad(id: string, cantidad: number, maximo: number) {
+    const limitada = Math.min(Math.max(0, cantidad), maximo);
+    await supabase.from("catalog_products").update({ stock_available: limitada }).eq("id", id);
+    cargar();
   }
 
   async function subirImagenCatalogo(id: string, file: File) {
@@ -111,13 +119,14 @@ export default function Catalogo() {
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && subirImagenCatalogo(p.id, e.target.files[0])} />
                 </label>
               )}
-              <p className="text-xs" style={{ color: "#5B4E5E" }}>Cant.</p>
+              <p className="text-xs" style={{ color: "#5B4E5E" }}>Cant. (máx. {productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available})</p>
               <input
                 type="number"
                 min={0}
+                max={productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available}
                 value={p.stock_available}
-                onChange={(e) => actualizarCantidadLocal(p.id, Number(e.target.value))}
-                onBlur={(e) => guardarCantidad(p.id, Number(e.target.value))}
+                onChange={(e) => actualizarCantidadLocal(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
+                onBlur={(e) => guardarCantidad(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
                 className="w-16 px-2 py-1.5 rounded text-sm text-center outline-none"
                 style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
               />

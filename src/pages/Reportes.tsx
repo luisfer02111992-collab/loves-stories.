@@ -16,7 +16,12 @@ function desde(periodo: string) {
 export default function Reportes() {
   const [periodo, setPeriodo] = useState("dia");
   const [ventas, setVentas] = useState(0);
+  const [devolucionProducto, setDevolucionProducto] = useState(0);
+  const [reembolsoCorreccion, setReembolsoCorreccion] = useState(0);
+  const [cobrado, setCobrado] = useState(0);
   const [costo, setCosto] = useState(0);
+  const [costoBuenEstado, setCostoBuenEstado] = useState(0);
+  const [costoMerma, setCostoMerma] = useState(0);
   const [unidades, setUnidades] = useState(0);
   const [porCategoria, setPorCategoria] = useState<{ cat: string; ventas: number }[]>([]);
   const [productos, setProductos] = useState<Product[]>([]);
@@ -32,25 +37,66 @@ export default function Reportes() {
   }, []);
 
   async function cargarPeriodo() {
+    const inicio = desde(periodo);
     const { data } = await supabase
       .from("orders")
-      .select("closed_at, order_items(quantity, unit_price, products(cost, categories(name)))")
+      .select("id, closed_at, total_cerrado, order_items(quantity, unit_price, products(cost, categories(name)))")
       .eq("status", "closed")
-      .gte("closed_at", desde(periodo));
+      .gte("closed_at", inicio);
 
-    let v = 0, c = 0, u = 0;
+    let bruta = 0, c = 0, u = 0;
     const cat: Record<string, number> = {};
+    const idsOrdenes: string[] = [];
     (data ?? []).forEach((o: any) => {
+      bruta += o.total_cerrado ?? 0;
+      idsOrdenes.push(o.id);
       (o.order_items ?? []).forEach((it: any) => {
-        v += it.quantity * it.unit_price;
         c += it.quantity * (it.products?.cost ?? 0);
         u += it.quantity;
         const nombreCat = it.products?.categories?.name ?? "Otros";
         cat[nombreCat] = (cat[nombreCat] ?? 0) + it.quantity * it.unit_price;
       });
     });
-    setVentas(v);
+
+    let devolucionProducto = 0, reembolsoCorreccion = 0;
+    let costoBuenEstado = 0, costoMerma = 0;
+    if (idsOrdenes.length > 0) {
+      const { data: devs } = await supabase.from("returns").select("total_amount, type, order_id").eq("status", "activa").in("order_id", idsOrdenes);
+      (devs ?? []).forEach((d: any) => {
+        if (d.type === "correccion") reembolsoCorreccion += d.total_amount;
+        else devolucionProducto += d.total_amount;
+      });
+
+      // Costo de las unidades devueltas: si volvieron al inventario (restock),
+      // ese costo se resta de "mercadería vendida" (ya no se considera vendido,
+      // volvió al stock). Si NO volvieron (dañadas), el costo se mantiene como
+      // vendido pero se muestra aparte como pérdida/merma — sin restarlo dos veces.
+      const { data: retItems } = await supabase
+        .from("return_items")
+        .select("quantity, restock, products(cost), returns!inner(order_id, status, type)")
+        .eq("returns.status", "activa")
+        .eq("returns.type", "producto")
+        .in("returns.order_id", idsOrdenes);
+      (retItems ?? []).forEach((ri: any) => {
+        const costoUnidad = (ri.quantity ?? 0) * (ri.products?.cost ?? 0);
+        if (ri.restock) costoBuenEstado += costoUnidad;
+        else costoMerma += costoUnidad;
+      });
+    }
+
+    let cobrado = 0;
+    if (idsOrdenes.length > 0) {
+      const { data: pagosData } = await supabase.from("payments").select("amount, order_id").in("order_id", idsOrdenes);
+      cobrado = (pagosData ?? []).reduce((a: number, p: any) => a + p.amount, 0);
+    }
+
+    setVentas(bruta);
+    setDevolucionProducto(devolucionProducto);
+    setReembolsoCorreccion(reembolsoCorreccion);
+    setCobrado(cobrado);
     setCosto(c);
+    setCostoBuenEstado(costoBuenEstado);
+    setCostoMerma(costoMerma);
     setUnidades(u);
     setPorCategoria(Object.entries(cat).map(([cat, ventas]) => ({ cat, ventas })));
   }
@@ -62,7 +108,18 @@ export default function Reportes() {
     setStockMuerto((data ?? []).map((p: any) => ({ ...p, ultima: p.updated_at })));
   }
 
-  const ganancia = ventas - costo;
+  // Venta neta solo resta devoluciones REALES de producto. El reembolso por
+  // corrección no se vuelve a restar aquí: "ventas" (bruta) ya viene de
+  // total_cerrado, que quedó en el valor correcto tras cualquier corrección.
+  const ventaNeta = ventas - devolucionProducto;
+  const devueltoTotal = devolucionProducto + reembolsoCorreccion;
+  const cobroNeto = cobrado - devueltoTotal;
+  // Costo de mercadería vendida ajustado: al producto devuelto en buen estado
+  // se le resta su costo (volvió al inventario, ya no se considera vendido).
+  // El costo de un producto devuelto dañado/no vendible se queda contado aquí
+  // (de verdad se perdió) y se muestra aparte, sin restarlo dos veces.
+  const costoVendidoAjustado = costo - costoBuenEstado;
+  const ganancia = ventaNeta - costoVendidoAjustado;
   const valorCosto = productos.reduce((a, p) => a + p.cost * p.stock_available, 0);
   const valorVenta = productos.reduce((a, p) => a + p.price * p.stock_available, 0);
   const gananciaPotencial = valorVenta - valorCosto;
@@ -81,11 +138,22 @@ export default function Reportes() {
         </div>
       </div>
 
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
+        <StatCard label="Venta bruta" value={`Bs ${ventas.toLocaleString("es-BO")}`} />
+        <StatCard label="Devolución de producto" value={`Bs ${devolucionProducto.toLocaleString("es-BO")}`} accent="#7A2540" />
+        <StatCard label="Reembolso por corrección" value={`Bs ${reembolsoCorreccion.toLocaleString("es-BO")}`} accent="#7A5F2D" />
+        <StatCard label="Venta neta" value={`Bs ${ventaNeta.toLocaleString("es-BO")}`} accent="#4F6F52" />
+      </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <StatCard label="Ventas" value={`Bs ${ventas.toLocaleString("es-BO")}`} />
-        <StatCard label="Costo" value={`Bs ${costo.toLocaleString("es-BO")}`} />
-        <StatCard label="Ganancia" value={`Bs ${ganancia.toLocaleString("es-BO")}`} accent="#4F6F52" />
+        <StatCard label="Cobrado" value={`Bs ${cobrado.toLocaleString("es-BO")}`} />
+        <StatCard label="Dinero devuelto" value={`Bs ${devueltoTotal.toLocaleString("es-BO")}`} accent="#7A2540" />
+        <StatCard label="Cobro neto" value={`Bs ${cobroNeto.toLocaleString("es-BO")}`} accent="#4F6F52" />
         <StatCard label="Unidades vendidas" value={unidades} />
+      </div>
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        <StatCard label="Costo de mercadería vendida" value={`Bs ${costoVendidoAjustado.toLocaleString("es-BO")}`} />
+        <StatCard label="Pérdida por merma (devoluciones)" value={`Bs ${costoMerma.toLocaleString("es-BO")}`} accent="#7A2540" />
+        <StatCard label="Ganancia neta" value={`Bs ${ganancia.toLocaleString("es-BO")}`} accent="#4F6F52" />
       </div>
 
       <div className="p-4 mb-4" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>

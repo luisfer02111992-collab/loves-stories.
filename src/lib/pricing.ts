@@ -21,8 +21,64 @@ export async function loadPricingRules(): Promise<PricingRule[]> {
   return data as PricingRule[];
 }
 
-// Calcula el precio por unidad aplicando la regla configurable con mayor cantidad mínima
-// que la cantidad pedida cumpla, para la categoría indicada.
+export interface LineaPedido {
+  id: string;
+  product_id: string;
+  codigo: string;
+  nombre: string;
+  categoria_id: string | null;
+  cantidad: number;
+  precio_base: number;
+  fecha: string;
+}
+
+export interface GrupoProducto {
+  product_id: string;
+  codigo: string;
+  nombre: string;
+  categoria_id: string | null;
+  cantidadTotal: number;
+  precioUnitarioFinal: number;
+  subtotalSinDescuento: number;
+  subtotalConDescuento: number;
+  descuento: number;
+  detalle: { id: string; cantidad: number; fecha: string }[];
+}
+
+// Agrupa las líneas de un pedido por producto (mismo código), sumando la cantidad
+// de TODAS las fechas en que se asignó ese producto dentro del pedido abierto, y
+// calcula el descuento sobre esa cantidad acumulada — no por cada asignación suelta.
+export function agruparPorProducto(reglas: PricingRule[], lineas: LineaPedido[]): GrupoProducto[] {
+  const grupos = new Map<string, GrupoProducto>();
+  for (const l of lineas) {
+    let g = grupos.get(l.product_id);
+    if (!g) {
+      g = {
+        product_id: l.product_id,
+        codigo: l.codigo,
+        nombre: l.nombre,
+        categoria_id: l.categoria_id,
+        cantidadTotal: 0,
+        precioUnitarioFinal: l.precio_base,
+        subtotalSinDescuento: 0,
+        subtotalConDescuento: 0,
+        descuento: 0,
+        detalle: [],
+      };
+      grupos.set(l.product_id, g);
+    }
+    g.cantidadTotal += l.cantidad;
+    g.subtotalSinDescuento += l.precio_base * l.cantidad;
+    g.detalle.push({ id: l.id, cantidad: l.cantidad, fecha: l.fecha });
+  }
+  for (const g of grupos.values()) {
+    const base = g.subtotalSinDescuento / g.cantidadTotal;
+    g.precioUnitarioFinal = precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
+    g.subtotalConDescuento = g.precioUnitarioFinal * g.cantidadTotal;
+    g.descuento = g.subtotalSinDescuento - g.subtotalConDescuento;
+  }
+  return Array.from(grupos.values());
+}
 export function precioUnitario(
   reglas: PricingRule[],
   categoryId: string | null,

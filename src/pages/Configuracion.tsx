@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Pencil, MessageCircle, Palette } from "lucide-react";
+import { Pencil, MessageCircle, Palette, ShieldCheck, Mail, KeyRound } from "lucide-react";
 import { supabase, supabaseSignUpClient } from "../lib/supabase";
 import type { Profile } from "../lib/types";
 
@@ -35,8 +35,21 @@ export default function Configuracion() {
   const [creando, setCreando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
+  // Cuenta y seguridad (usuario autenticado)
+  const [correoActual, setCorreoActual] = useState("");
+  const [correoNuevo, setCorreoNuevo] = useState("");
+  const [cambiandoCorreo, setCambiandoCorreo] = useState(false);
+  const [mensajeCorreo, setMensajeCorreo] = useState<string | null>(null);
+
+  const [claveActual, setClaveActual] = useState("");
+  const [claveNueva, setClaveNueva] = useState("");
+  const [claveConfirmar, setClaveConfirmar] = useState("");
+  const [cambiandoClave, setCambiandoClave] = useState(false);
+  const [mensajeClave, setMensajeClave] = useState<string | null>(null);
+
   useEffect(() => {
     cargar();
+    supabase.auth.getUser().then(({ data }) => setCorreoActual(data.user?.email ?? ""));
   }, []);
 
   async function cargar() {
@@ -97,6 +110,63 @@ export default function Configuracion() {
     setEditandoNumero(true);
   }
 
+  // Cambiar el correo de acceso del usuario autenticado. Supabase exige (según la
+  // configuración del proyecto) confirmar el cambio desde el correo nuevo antes de
+  // que quede efectivo — nunca se toca auth.users directamente por SQL.
+  async function cambiarCorreo(e: React.FormEvent) {
+    e.preventDefault();
+    setMensajeCorreo(null);
+    if (!correoNuevo.trim()) return;
+    if (!confirm(`¿Cambiar el correo de acceso a "${correoNuevo}"?`)) return;
+    setCambiandoCorreo(true);
+    const { error } = await supabase.auth.updateUser({ email: correoNuevo.trim() });
+    setCambiandoCorreo(false);
+    if (error) {
+      setMensajeCorreo(error.message);
+      return;
+    }
+    setMensajeCorreo("Te enviamos un enlace de confirmación a tu correo nuevo (y puede que también al actual). El cambio no es efectivo hasta que lo confirmes.");
+    setCorreoNuevo("");
+  }
+
+  // Cambiar la contraseña del usuario autenticado. Se vuelve a autenticar con la
+  // contraseña actual antes de cambiarla (Supabase no valida la anterior por sí solo),
+  // así solo el propio usuario puede cambiar su contraseña. Nunca se guarda en tablas propias.
+  async function cambiarContrasena(e: React.FormEvent) {
+    e.preventDefault();
+    setMensajeClave(null);
+
+    if (claveNueva.length < 6) {
+      setMensajeClave("La nueva contraseña debe tener al menos 6 caracteres.");
+      return;
+    }
+    if (claveNueva !== claveConfirmar) {
+      setMensajeClave("Las contraseñas no coinciden.");
+      return;
+    }
+    if (!claveActual) {
+      setMensajeClave("Escribe tu contraseña actual para confirmar el cambio.");
+      return;
+    }
+
+    setCambiandoClave(true);
+    const { error: errorReauth } = await supabase.auth.signInWithPassword({ email: correoActual, password: claveActual });
+    if (errorReauth) {
+      setCambiandoClave(false);
+      setMensajeClave("Tu contraseña actual no es correcta.");
+      return;
+    }
+
+    const { error } = await supabase.auth.updateUser({ password: claveNueva });
+    setCambiandoClave(false);
+    if (error) {
+      setMensajeClave(error.message);
+      return;
+    }
+    setMensajeClave("Contraseña actualizada correctamente.");
+    setClaveActual(""); setClaveNueva(""); setClaveConfirmar("");
+  }
+
   async function crearUsuario(e: React.FormEvent) {
     e.preventDefault();
     setMensaje(null);
@@ -125,6 +195,41 @@ export default function Configuracion() {
   return (
     <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-2">
+        <p className="font-serif text-lg mb-3 flex items-center gap-2"><ShieldCheck size={16} style={{ color: "#5B4E5E" }} /> Cuenta y seguridad</p>
+        <div className="p-4 mb-5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+          <form onSubmit={cambiarCorreo} className="mb-4 pb-4" style={{ borderBottom: "1px solid #D9D0C2" }}>
+            <p className="text-xs mb-2 flex items-center gap-1.5" style={{ color: "#5B4E5E" }}><Mail size={13} /> Correo actual: <strong>{correoActual || "—"}</strong></p>
+            <div className="flex gap-2">
+              <input value={correoNuevo} onChange={(e) => setCorreoNuevo(e.target.value)} type="email" placeholder="Nuevo correo de acceso"
+                className="flex-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+              <button type="submit" disabled={cambiandoCorreo || !correoNuevo} className="text-xs px-3 py-2 rounded-md shrink-0" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                {cambiandoCorreo ? "Enviando..." : "Cambiar correo"}
+              </button>
+            </div>
+            {mensajeCorreo && <p className="text-xs mt-2" style={{ color: mensajeCorreo.startsWith("Te enviamos") ? "#4F6F52" : "#7A2540" }}>{mensajeCorreo}</p>}
+          </form>
+
+          <form onSubmit={cambiarContrasena}>
+            <p className="text-xs mb-2 flex items-center gap-1.5" style={{ color: "#5B4E5E" }}><KeyRound size={13} /> Cambiar contraseña</p>
+            <input value={claveActual} onChange={(e) => setClaveActual(e.target.value)} type="password" placeholder="Contraseña actual"
+              className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+            <div className="grid sm:grid-cols-2 gap-2 mb-2">
+              <input value={claveNueva} onChange={(e) => setClaveNueva(e.target.value)} type="password" placeholder="Nueva contraseña" minLength={6}
+                className="px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+              <input value={claveConfirmar} onChange={(e) => setClaveConfirmar(e.target.value)} type="password" placeholder="Confirmar contraseña" minLength={6}
+                className="px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+            </div>
+            <button type="submit" disabled={cambiandoClave} className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+              {cambiandoClave ? "Cambiando..." : "Cambiar contraseña"}
+            </button>
+            {mensajeClave && <p className="text-xs mt-2" style={{ color: mensajeClave === "Contraseña actualizada correctamente." ? "#4F6F52" : "#7A2540" }}>{mensajeClave}</p>}
+          </form>
+          <p className="text-xs mt-3" style={{ color: "#5B4E5E" }}>
+            Cada usuario solo puede cambiar su propio correo y contraseña desde aquí. Cambiar la contraseña de otro usuario
+            requiere una función segura del lado del servidor (con la clave service_role, que nunca debe estar en el navegador) — no está implementado por seguridad.
+          </p>
+        </div>
+
         <p className="font-serif text-lg mb-3">Nombre de la página</p>
         <div className="p-4 mb-5 flex items-center gap-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <Pencil size={15} style={{ color: "#5B4E5E" }} />

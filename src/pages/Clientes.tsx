@@ -1,20 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Minus, MessageCircle, Printer, AlertTriangle, UserX, Pencil, Trash2, Wallet } from "lucide-react";
+import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, Wallet } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { loadPricingRules, precioUnitario, PricingRule } from "../lib/pricing";
+import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido, GrupoProducto } from "../lib/pricing";
+import { generarPdfPedido } from "../lib/pdf";
 import type { Customer } from "../lib/types";
-
-interface ItemDetalle {
-  id: string;
-  product_id: string;
-  codigo: string;
-  nombre: string;
-  categoria_id: string | null;
-  categoria: string;
-  cantidad: number;
-  precio_base: number;
-  fecha: string;
-}
 
 interface DepositoDetalle {
   id: string;
@@ -28,11 +17,10 @@ export default function Clientes() {
   const [seleccionado, setSeleccionado] = useState<Customer | null>(null);
   const [ordenId, setOrdenId] = useState<string | null>(null);
   const [fechaApertura, setFechaApertura] = useState<string | null>(null);
-  const [items, setItems] = useState<ItemDetalle[]>([]);
+  const [items, setItems] = useState<LineaPedido[]>([]);
   const [depositos, setDepositos] = useState<DepositoDetalle[]>([]);
   const [reglas, setReglas] = useState<PricingRule[]>([]);
   const [nombreNegocio, setNombreNegocio] = useState("Loves Stories");
-  const [verRecibo, setVerRecibo] = useState(false);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoTelefono, setNuevoTelefono] = useState("");
   const [mostrarNuevo, setMostrarNuevo] = useState(false);
@@ -42,6 +30,8 @@ export default function Clientes() {
   const [mostrarDeposito, setMostrarDeposito] = useState(false);
   const [montoDeposito, setMontoDeposito] = useState(0);
   const [metodoDeposito, setMetodoDeposito] = useState("efectivo");
+  const [ultimoPdf, setUltimoPdf] = useState<{ blob: Blob; texto: string } | null>(null);
+  const [cerrando, setCerrando] = useState(false);
 
   useEffect(() => {
     cargarClientes();
@@ -58,6 +48,7 @@ export default function Clientes() {
       setEdicion({ name: seleccionado.name, phone: seleccionado.phone, notes: seleccionado.notes ?? "" });
       setEditando(false);
       setMostrarDeposito(false);
+      setUltimoPdf(null);
     }
   }, [seleccionado]);
 
@@ -71,10 +62,7 @@ export default function Clientes() {
   async function cargarInactivos() {
     const limite = new Date();
     limite.setDate(limite.getDate() - 60);
-    const { data } = await supabase
-      .from("customers")
-      .select("name, phone, payments(paid_at)")
-      .is("deleted_at", null);
+    const { data } = await supabase.from("customers").select("name, phone, payments(paid_at)").is("deleted_at", null);
     const lista = (data ?? [])
       .map((c: any) => {
         const fechas = (c.payments ?? []).map((p: any) => p.paid_at).sort();
@@ -105,18 +93,18 @@ export default function Clientes() {
       setFechaApertura(orden.opened_at);
       const { data: filas } = await supabase
         .from("order_items")
-        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id, categories(name))")
-        .eq("order_id", orden.id);
-      const detalle: ItemDetalle[] = (filas ?? []).map((f: any) => ({
+        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id)")
+        .eq("order_id", orden.id)
+        .order("assigned_at", { ascending: true });
+      const detalle: LineaPedido[] = (filas ?? []).map((f: any) => ({
         id: f.id,
         product_id: f.product_id,
         codigo: f.products?.code ?? "",
         nombre: f.products?.name ?? "",
         categoria_id: f.products?.category_id ?? null,
-        categoria: f.products?.categories?.name ?? "Otros",
         cantidad: f.quantity,
         precio_base: f.unit_price,
-        fecha: new Date(f.assigned_at).toLocaleString("es-BO"),
+        fecha: new Date(f.assigned_at).toLocaleDateString("es-BO"),
       }));
       setItems(detalle);
     }
@@ -125,17 +113,9 @@ export default function Clientes() {
     setDepositos((pagos as DepositoDetalle[]) ?? []);
   }
 
-  const porCategoria = useMemo(() => {
-    const grupos: Record<string, ItemDetalle[]> = {};
-    items.forEach((it) => {
-      grupos[it.categoria] = grupos[it.categoria] || [];
-      grupos[it.categoria].push(it);
-    });
-    return grupos;
-  }, [items]);
-
-  const total = items.reduce((acc, it) => acc + precioUnitario(reglas, it.categoria_id, it.cantidad, it.precio_base) * it.cantidad, 0);
-  const subtotalSinDescuento = items.reduce((acc, it) => acc + it.precio_base * it.cantidad, 0);
+  const grupos: GrupoProducto[] = useMemo(() => agruparPorProducto(reglas, items), [items, reglas]);
+  const subtotalSinDescuento = grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0);
+  const total = grupos.reduce((a, g) => a + g.subtotalConDescuento, 0);
   const descuentoTotal = subtotalSinDescuento - total;
   const depositado = depositos.reduce((a, d) => a + d.amount, 0);
   const saldo = total - depositado;
@@ -146,10 +126,74 @@ export default function Clientes() {
   }
 
   async function cerrarPedido() {
-    if (!ordenId) return;
-    await supabase.rpc("close_order", { p_order_id: ordenId });
-    if (seleccionado) cargarPedido(seleccionado.id);
-    setVerRecibo(true);
+    if (!ordenId || !seleccionado) return;
+    setCerrando(true);
+    // El total y el pago final se calculan y registran DENTRO de Supabase (calcular_total_pedido
+    // + close_order), no se envía ningún total desde el navegador.
+    const { error } = await supabase.rpc("close_order", { p_order_id: ordenId });
+    if (error) {
+      alert(error.message);
+      setCerrando(false);
+      return;
+    }
+    const { data: pagoFinalRow } = await supabase
+      .from("payments")
+      .select("amount")
+      .eq("order_id", ordenId)
+      .eq("method", "cierre_pedido")
+      .order("paid_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    const pagoFinal = pagoFinalRow?.amount ?? 0;
+    const blob = generarPdfPedido({
+      negocio: nombreNegocio,
+      cliente: seleccionado.name,
+      telefono: seleccionado.phone,
+      fecha: new Date().toLocaleDateString("es-BO"),
+      grupos,
+      subtotalSinDescuento,
+      descuentoTotal,
+      total,
+      depositado,
+      saldo: 0,
+      cerrado: true,
+      pagoFinal,
+    });
+    setUltimoPdf({ blob, texto: mensajeWhatsapp(true, pagoFinal) });
+    setCerrando(false);
+    await cargarPedido(seleccionado.id);
+    await cargarClientes();
+  }
+
+  function generarPdfAbierto() {
+    if (!seleccionado) return;
+    const blob = generarPdfPedido({
+      negocio: nombreNegocio,
+      cliente: seleccionado.name,
+      telefono: seleccionado.phone,
+      fecha: new Date().toLocaleDateString("es-BO"),
+      grupos,
+      subtotalSinDescuento,
+      descuentoTotal,
+      total,
+      depositado,
+      saldo,
+      cerrado: false,
+    });
+    setUltimoPdf({ blob, texto: mensajeWhatsapp(false) });
+  }
+
+  function mensajeWhatsapp(cerrado: boolean, pagoFinal?: number) {
+    if (!seleccionado) return "";
+    if (cerrado) {
+      return `Hola ${seleccionado.name}. Te comparto el recibo de tu compra en ${nombreNegocio}. Total: Bs ${total}. Pago final registrado: Bs ${(pagoFinal ?? 0).toFixed(2)}. Saldo: Bs 0. Te adjunto el PDF que acabamos de descargar.`;
+    }
+    return `Hola ${seleccionado.name}. Te comparto el detalle de tu pedido en ${nombreNegocio} hasta hoy. Total: Bs ${total}. Depósitos: Bs ${depositado}. Saldo: Bs ${saldo}. Te adjunto el PDF que acabamos de descargar.`;
+  }
+
+  function linkWhatsapp(telefono: string, mensaje: string) {
+    const limpio = telefono.replace(/\D/g, "");
+    return `https://wa.me/${limpio}?text=${encodeURIComponent(mensaje)}`;
   }
 
   async function crearCliente(e: React.FormEvent) {
@@ -179,27 +223,11 @@ export default function Clientes() {
 
   async function registrarDeposito() {
     if (!seleccionado || montoDeposito <= 0) return;
-    await supabase.from("payments").insert({
-      customer_id: seleccionado.id,
-      order_id: ordenId,
-      amount: montoDeposito,
-      method: metodoDeposito,
-    });
+    await supabase.from("payments").insert({ customer_id: seleccionado.id, order_id: ordenId, amount: montoDeposito, method: metodoDeposito });
     setMontoDeposito(0);
     setMostrarDeposito(false);
     await cargarPedido(seleccionado.id);
     await cargarInactivos();
-  }
-
-  function linkWhatsapp(telefono: string, mensaje: string) {
-    const limpio = telefono.replace(/\D/g, "");
-    return `https://wa.me/${limpio}?text=${encodeURIComponent(mensaje)}`;
-  }
-
-  function mensajeResumen() {
-    if (!seleccionado) return "";
-    const lineas = items.map((it) => `${it.codigo} x${it.cantidad} = Bs ${precioUnitario(reglas, it.categoria_id, it.cantidad, it.precio_base) * it.cantidad}`);
-    return `Hola ${seleccionado.name}. Te envío el detalle de tu pedido en ${nombreNegocio}:\n\n${lineas.join("\n")}\n\nTotal: Bs ${total}\nDepósitos: Bs ${depositado}\nSaldo: Bs ${saldo}`;
   }
 
   return (
@@ -224,12 +252,8 @@ export default function Clientes() {
 
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           {clientes.map((c, i) => (
-            <button
-              key={c.id}
-              onClick={() => { setSeleccionado(c); setVerRecibo(false); }}
-              className="w-full text-left px-3.5 py-3 flex items-center justify-between"
-              style={{ background: seleccionado?.id === c.id ? "#EDE7DE" : "transparent", borderBottom: i < clientes.length - 1 ? "1px solid #D9D0C2" : "none" }}
-            >
+            <button key={c.id} onClick={() => setSeleccionado(c)} className="w-full text-left px-3.5 py-3 flex items-center justify-between"
+              style={{ background: seleccionado?.id === c.id ? "#EDE7DE" : "transparent", borderBottom: i < clientes.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <div>
                 <p className="text-sm">{c.name}</p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
@@ -294,19 +318,13 @@ export default function Clientes() {
                       </p>
                     )}
                   </div>
-                  <div className="flex flex-col gap-1.5 items-end">
-                    <a href={linkWhatsapp(seleccionado.phone, mensajeResumen())} target="_blank" rel="noreferrer"
-                      className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
-                      <MessageCircle size={13} /> Enviar reporte
-                    </a>
-                    <div className="flex gap-1.5">
-                      <button onClick={() => setEditando(true)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                        <Pencil size={12} /> Editar
-                      </button>
-                      <button onClick={eliminarCliente} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
-                        <Trash2 size={12} /> Eliminar
-                      </button>
-                    </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setEditando(true)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+                      <Pencil size={12} /> Editar
+                    </button>
+                    <button onClick={eliminarCliente} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
+                      <Trash2 size={12} /> Eliminar
+                    </button>
                   </div>
                 </div>
               )}
@@ -357,86 +375,60 @@ export default function Clientes() {
               </div>
             </div>
 
-            {verRecibo ? (
-              <div className="flex flex-col items-center">
-                <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 280, fontFamily: "monospace" }} className="p-3 text-xs shadow-md">
-                  <p className="font-cursive text-center" style={{ fontSize: "1.3rem" }}>{nombreNegocio}</p>
-                  <p className="text-center mb-1">Recibo de pedido</p>
-                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  <p>Cliente: {seleccionado.name}</p>
-                  <p>Tel: {seleccionado.phone}</p>
-                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  {items.map((it) => (
-                    <div key={it.id} className="flex justify-between">
-                      <span>{it.codigo} x{it.cantidad}</span>
-                      <span>Bs {precioUnitario(reglas, it.categoria_id, it.cantidad, it.precio_base) * it.cantidad}</span>
-                    </div>
-                  ))}
-                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  <div className="flex justify-between"><span>Descuento cant.</span><span>-Bs {descuentoTotal}</span></div>
-                  <div className="flex justify-between font-bold"><span>Total</span><span>Bs {total}</span></div>
-                  <div className="flex justify-between"><span>Depósitos</span><span>Bs {depositado}</span></div>
-                  <div className="flex justify-between font-bold"><span>Saldo</span><span>Bs {saldo}</span></div>
-                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  <p className="text-center">¡Gracias por tu compra!</p>
-                </div>
-                <div className="flex gap-2 mt-3">
-                  <button onClick={() => window.print()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                    <Printer size={13} /> Imprimir (térmica 8x8 cm)
-                  </button>
-                  <button onClick={() => setVerRecibo(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                    Volver al pedido
-                  </button>
-                </div>
-              </div>
+            {grupos.length === 0 ? (
+              <p className="text-sm mb-3" style={{ color: "#5B4E5E" }}>Este cliente no tiene un pedido abierto.</p>
             ) : (
-              <>
-                {(Object.entries(porCategoria) as [string, ItemDetalle[]][]).map(([cat, filas]) => (
-                  <div key={cat} className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                    <div className="px-3.5 py-2" style={{ borderBottom: "1px solid #D9D0C2", color: "#7A5F2D" }}>
-                      <p className="text-sm font-medium">{cat}</p>
+              <div className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                {grupos.map((g, i) => (
+                  <div key={g.product_id} className="px-3.5 py-2.5" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
+                      <div className="flex items-center gap-3">
+                        <span className="font-serif text-sm">Bs {g.subtotalConDescuento.toFixed(2)}</span>
+                        <button onClick={() => quitarUnidad(g.detalle[g.detalle.length - 1].id)} className="p-1 rounded" style={{ color: "#7A2540" }} title="Quitar una unidad (de la última asignación)">
+                          <Minus size={14} />
+                        </button>
+                      </div>
                     </div>
-                    {filas.map((it) => {
-                      const pu = precioUnitario(reglas, it.categoria_id, it.cantidad, it.precio_base);
-                      return (
-                        <div key={it.id} className="flex items-center justify-between px-3.5 py-2.5" style={{ borderBottom: "1px solid #D9D0C2" }}>
-                          <div>
-                            <p className="text-sm">{it.nombre}</p>
-                            <p className="text-xs" style={{ color: "#5B4E5E" }}>{it.codigo} · {it.cantidad} × Bs {pu} · asignado {it.fecha}</p>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            <span className="font-serif text-sm">Bs {pu * it.cantidad}</span>
-                            <button onClick={() => quitarUnidad(it.id)} className="p-1 rounded" style={{ color: "#7A2540" }} title="Quitar una unidad">
-                              <Minus size={14} />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    })}
+                    <p className="text-xs mt-0.5" style={{ color: "#5B4E5E" }}>
+                      {g.detalle.map((d) => `${d.cantidad} unidad(es) — ${d.fecha}`).join(" · ")}
+                      {g.descuento > 0 && ` · descuento aplicado: Bs ${g.descuento.toFixed(2)}`}
+                    </p>
                   </div>
                 ))}
+              </div>
+            )}
 
-                {items.length === 0 && <p className="text-sm mb-3" style={{ color: "#5B4E5E" }}>Este cliente no tiene un pedido abierto.</p>}
+            <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Subtotal sin descuento</span><span>Bs {subtotalSinDescuento.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#4F6F52" }}>Descuento por cantidad</span><span style={{ color: "#4F6F52" }}>− Bs {descuentoTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm mb-1.5 pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total</span><span className="font-serif">Bs {total.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Depósitos</span><span>Bs {depositado.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#7A2540" }}>Saldo</span><span className="font-serif" style={{ color: "#7A2540" }}>Bs {saldo.toFixed(2)}</span></div>
+            </div>
 
-                <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                  <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Subtotal sin descuento</span><span>Bs {subtotalSinDescuento}</span></div>
-                  <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#4F6F52" }}>Descuento por cantidad</span><span style={{ color: "#4F6F52" }}>− Bs {descuentoTotal}</span></div>
-                  <div className="flex justify-between text-sm mb-1.5 pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total</span><span className="font-serif">Bs {total}</span></div>
-                  <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Depósitos</span><span>Bs {depositado}</span></div>
-                  <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#7A2540" }}>Saldo</span><span className="font-serif" style={{ color: "#7A2540" }}>Bs {saldo}</span></div>
-                </div>
+            {ordenId && (
+              <div className="flex gap-2 mb-3">
+                <button onClick={cerrarPedido} disabled={cerrando} className="flex-1 py-2.5 rounded-md text-sm" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
+                  {cerrando ? "Cerrando..." : "Cerrar pedido (pago completo)"}
+                </button>
+                <button onClick={generarPdfAbierto} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                  <FileDown size={15} /> PDF del pedido abierto
+                </button>
+              </div>
+            )}
 
-                {ordenId && (
-                  <div className="flex gap-2">
-                    <button onClick={cerrarPedido} className="flex-1 py-2.5 rounded-md text-sm" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
-                      Cerrar pedido
-                    </button>
-                    <button onClick={() => setVerRecibo(true)} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                      <Printer size={15} /> Ver / imprimir recibo
-                    </button>
-                  </div>
-                )}
-              </>
+            {ultimoPdf && (
+              <div className="p-3 rounded-md flex items-center justify-between" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C" }}>
+                <p className="text-xs" style={{ color: "#5B4E5E" }}>
+                  PDF descargado. WhatsApp Web no permite adjuntarlo automáticamente desde el navegador:
+                  abre el chat y adjunta el archivo que se acaba de descargar.
+                </p>
+                <a href={linkWhatsapp(seleccionado.phone, ultimoPdf.texto)} target="_blank" rel="noreferrer"
+                  className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5 shrink-0 ml-2" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
+                  <MessageCircle size={13} /> Abrir chat
+                </a>
+              </div>
             )}
           </>
         )}

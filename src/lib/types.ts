@@ -24,6 +24,7 @@ export interface PurchaseBatch {
   original_data: unknown;
   created_by: string | null;
   created_at: string;
+  deleted_at: string | null;
 }
 
 export interface Product {
@@ -63,7 +64,35 @@ export interface Order {
   status: "open" | "closed" | "reopened" | "cancelled";
   opened_at: string;
   closed_at: string | null;
+  total_cerrado: number | null;
+  total_original: number | null;
   created_by: string | null;
+}
+
+export interface Devolucion {
+  id: string;
+  order_id: string;
+  customer_id: string;
+  type: "producto" | "correccion";
+  total_amount: number;
+  reason: string | null;
+  observation: string | null;
+  status: "activa" | "anulada";
+  created_at: string;
+  cancelled_at: string | null;
+  cancel_reason: string | null;
+}
+
+export interface DevolucionItem {
+  id: string;
+  return_id: string;
+  product_id: string | null;
+  order_item_id: string | null;
+  quantity: number;
+  amount: number;
+  reason: string;
+  restock: boolean;
+  observation: string | null;
 }
 
 export interface OrderItem {

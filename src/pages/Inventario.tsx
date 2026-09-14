@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, AlertTriangle, Search, Camera } from "lucide-react";
+import { Upload, AlertTriangle, Search, Camera, Image as ImageIcon } from "lucide-react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabase";
+import CamaraCaptura from "../components/CamaraCaptura";
 import type { Product, Category } from "../lib/types";
 
 interface FilaExcel {
+  fila: number;
   code: string;
   name: string;
   category?: string;
@@ -13,12 +15,15 @@ interface FilaExcel {
   price: number;
   cost: number;
   image_url?: string;
+  error?: string;
 }
 
 interface Duplicado extends FilaExcel {
   existente: Product;
   cantidadACargar: number;
   precioACargar: number;
+  codigoACargar: string;
+  nombreACargar: string;
   decision: "revisar" | "manual" | "omitir";
 }
 
@@ -44,8 +49,13 @@ export default function Inventario() {
   const [filtroLote, setFiltroLote] = useState<string>("Todos");
   const [busqueda, setBusqueda] = useState("");
   const [buscarFoto, setBuscarFoto] = useState(false);
+  const [mostrarCamara, setMostrarCamara] = useState(false);
+  const [fotoBusqueda, setFotoBusqueda] = useState<string | null>(null);
   const [duplicados, setDuplicados] = useState<Duplicado[] | null>(null);
   const [nuevos, setNuevos] = useState<FilaExcel[]>([]);
+  const [conError, setConError] = useState<FilaExcel[]>([]);
+  const [resumenCarga, setResumenCarga] = useState<{ importados: number; conError: number; stockAgregado: number } | null>(null);
+  const [pestanaStock, setPestanaStock] = useState<"disponibles" | "agotados">("disponibles");
   const [mostrarMerma, setMostrarMerma] = useState(false);
   const [mermaCodigo, setMermaCodigo] = useState("");
   const [mermaCantidad, setMermaCantidad] = useState(1);
@@ -71,27 +81,48 @@ export default function Inventario() {
       const wb = XLSX.read(ev.target?.result, { type: "binary" });
       const hoja = wb.Sheets[wb.SheetNames[0]];
       const filas: any[] = XLSX.utils.sheet_to_json(hoja, { defval: "" });
-      const parseadas: FilaExcel[] = filas
-        .map((f) => {
-          const code = String(buscarValor(f, "codigo")).trim();
-          const name = String(buscarValor(f, "descripcion")).trim();
-          const quantity = Number(buscarValor(f, "cantidad")) || 0;
-          const precioTotal = Number(buscarValor(f, "precio total", "preciototal")) || 0;
-          const price = Number(buscarValor(f, "precio de venta", "preciodeventa", "precioventa")) || 0;
-          const image_url = String(buscarValor(f, "imagen", "imagen url", "foto")).trim();
-          const category = String(buscarValor(f, "categoria")).trim();
-          return {
-            code,
-            name,
-            category,
-            quantity,
-            precioTotal,
-            price,
-            cost: quantity > 0 ? Math.round((precioTotal / quantity) * 100) / 100 : 0,
-            image_url: image_url || undefined,
-          };
-        })
-        .filter((f) => f.code);
+      const errores: FilaExcel[] = [];
+      const parseadas: FilaExcel[] = [];
+
+      filas.forEach((f, idx) => {
+        const numeroFila = idx + 2; // +2: fila 1 es el encabezado en el Excel
+        const code = String(buscarValor(f, "codigo")).trim();
+        const name = String(buscarValor(f, "descripcion")).trim();
+        const quantity = Number(buscarValor(f, "cantidad", "disponible"));
+        const costoDirecto = buscarValor(f, "costo");
+        const precioTotal = Number(buscarValor(f, "precio total", "preciototal")) || 0;
+        const price = Number(buscarValor(f, "precio de venta", "preciodeventa", "precioventa"));
+        const image_url = String(buscarValor(f, "imagen", "imagen url", "foto")).trim();
+        const category = String(buscarValor(f, "categoria")).trim();
+
+        if (!code && !name && !quantity && !price) return; // fila totalmente vacía, se ignora sin marcar error
+
+        const problemas: string[] = [];
+        if (!code) problemas.push("falta el código");
+        if (!name) problemas.push("falta la descripción");
+        if (!Number.isFinite(quantity) || quantity < 0) problemas.push("cantidad inválida");
+        if (!Number.isFinite(price) || price < 0) problemas.push("precio de venta inválido");
+
+        const cost = costoDirecto !== "" && Number.isFinite(Number(costoDirecto))
+          ? Number(costoDirecto)
+          : quantity > 0 ? Math.round((precioTotal / quantity) * 100) / 100 : 0;
+
+        const fila: FilaExcel = {
+          fila: numeroFila,
+          code, name, category,
+          quantity: Number.isFinite(quantity) ? quantity : 0,
+          precioTotal,
+          price: Number.isFinite(price) ? price : 0,
+          cost,
+          image_url: image_url || undefined,
+        };
+
+        if (problemas.length > 0) {
+          errores.push({ ...fila, error: `Fila ${numeroFila}: ${problemas.join(", ")}` });
+        } else {
+          parseadas.push(fila);
+        }
+      });
 
       const existentesPorCodigo = new Map<string, Product>(productos.map((p) => [p.code, p] as [string, Product]));
       const dup: Duplicado[] = [];
@@ -99,13 +130,22 @@ export default function Inventario() {
       parseadas.forEach((f) => {
         const existente = existentesPorCodigo.get(f.code);
         if (existente) {
-          dup.push({ ...f, existente, cantidadACargar: f.quantity ?? 0, precioACargar: f.price ?? existente.price, decision: "revisar" });
+          dup.push({
+            ...f, existente,
+            cantidadACargar: f.quantity ?? 0,
+            precioACargar: f.price ?? existente.price,
+            codigoACargar: existente.code,
+            nombreACargar: existente.name,
+            decision: "revisar",
+          });
         } else {
           nue.push(f);
         }
       });
       setDuplicados(dup);
       setNuevos(nue);
+      setConError(errores);
+      setResumenCarga(null);
     };
     reader.readAsBinaryString(file);
   }
@@ -117,13 +157,15 @@ export default function Inventario() {
       .insert({
         label: loteLabel,
         source: "excel",
-        total_detected: (duplicados?.length ?? 0) + nuevos.length,
-        total_ok: nuevos.length,
-        total_errors: 0,
-        original_data: { nuevos, duplicados },
+        total_detected: (duplicados?.length ?? 0) + nuevos.length + conError.length,
+        total_ok: nuevos.length + (duplicados?.filter((d) => d.decision !== "omitir").length ?? 0),
+        total_errors: conError.length,
+        original_data: { nuevos, duplicados, conError },
       })
       .select()
       .single();
+
+    let stockAgregado = 0;
 
     if (nuevos.length > 0) {
       const categoriaPorNombre = new Map(categorias.map((c) => [c.name.toLowerCase(), c.id]));
@@ -138,10 +180,12 @@ export default function Inventario() {
         batch_id: lote?.id ?? null,
       }));
       await supabase.from("products").insert(filas);
+      stockAgregado += nuevos.reduce((a, f) => a + (f.quantity ?? 0), 0);
     }
 
+    let actualizados = 0;
     for (const d of duplicados ?? []) {
-      if (d.decision !== "manual") continue;
+      if (d.decision === "omitir" || d.decision === "revisar") continue;
       await supabase.from("inventory_movements").insert({
         product_id: d.existente.id,
         type: "entrada",
@@ -151,17 +195,34 @@ export default function Inventario() {
       await supabase
         .from("products")
         .update({
+          code: d.codigoACargar || d.existente.code,
+          name: d.nombreACargar || d.existente.name,
           stock_physical: d.existente.stock_physical + d.cantidadACargar,
           price: d.precioACargar,
+          cost: d.cost || d.existente.cost,
           image_url: d.image_url ?? d.existente.image_url,
           updated_at: new Date().toISOString(),
         })
         .eq("id", d.existente.id);
+      stockAgregado += d.cantidadACargar;
+      actualizados++;
     }
 
+    setResumenCarga({
+      importados: nuevos.length + actualizados,
+      conError: conError.length,
+      stockAgregado,
+    });
     setDuplicados(null);
     setNuevos([]);
     if (fileRef.current) fileRef.current.value = "";
+    cargar();
+  }
+
+  async function eliminarProductoExistente(id: string) {
+    if (!confirm("¿Eliminar este producto existente? Podrás restaurarlo luego desde la Papelera.")) return;
+    await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id);
+    setDuplicados((prev) => prev?.filter((d) => d.existente.id !== id) ?? null);
     cargar();
   }
 
@@ -176,11 +237,15 @@ export default function Inventario() {
 
   const lotes = ["Todos", ...Array.from(new Set(productos.map((p) => p.batch_id).filter(Boolean)))] as string[];
   const listaPorLote = filtroLote === "Todos" ? productos : productos.filter((p) => p.batch_id === filtroLote);
+  const disponibles = listaPorLote.filter((p) => p.stock_available > 0);
+  const agotados = listaPorLote.filter((p) => p.stock_available <= 0);
+  const listaPestana = pestanaStock === "disponibles" ? disponibles : agotados;
   const lista = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return listaPorLote;
-    return listaPorLote.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
-  }, [listaPorLote, busqueda]);
+    if (!q) return listaPestana;
+    return listaPestana.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [listaPestana, busqueda]);
 
   return (
     <div>
@@ -197,9 +262,27 @@ export default function Inventario() {
         </div>
       </div>
       <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>
-        Columnas del Excel, en este orden: <strong>Código, Descripción, Cantidad, Precio total, Precio de venta, Imagen</strong>.
-        "Precio total" es lo que costó esa cantidad en total (el costo unitario se calcula solo). "Imagen" puede ser un enlace directo a la foto.
+        Columnas del Excel, en este orden: <strong>Código, Descripción, Cantidad, Costo (o Precio total), Precio de venta, Imagen</strong>.
+        Si no hay columna "Costo", se calcula solo dividiendo "Precio total" entre la cantidad. "Imagen" puede ser un enlace directo a la foto.
       </p>
+
+      {resumenCarga && (
+        <div className="p-3 mb-3 rounded-md flex gap-4" style={{ background: "#E4EBE1", border: "1px solid #4F6F52" }}>
+          <p className="text-xs" style={{ color: "#4F6F52" }}><strong>{resumenCarga.importados}</strong> productos importados/actualizados</p>
+          <p className="text-xs" style={{ color: resumenCarga.conError > 0 ? "#7A2540" : "#4F6F52" }}><strong>{resumenCarga.conError}</strong> con error</p>
+          <p className="text-xs" style={{ color: "#4F6F52" }}><strong>{resumenCarga.stockAgregado}</strong> unidades de stock agregadas</p>
+        </div>
+      )}
+
+      {conError.length > 0 && (
+        <div className="p-3 mb-3 rounded-md" style={{ background: "#F4E3E6", border: "1px solid #7A2540" }}>
+          <p className="text-xs mb-1.5" style={{ color: "#7A2540" }}>{conError.length} fila(s) del Excel no se importaron:</p>
+          {conError.map((e, i) => (
+            <p key={i} className="text-xs" style={{ color: "#7A2540" }}>{e.error}</p>
+          ))}
+        </div>
+      )}
+
 
       <div className="flex items-center gap-2 mb-3">
         <div className="flex items-center gap-2 px-3 py-2 rounded flex-1" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
@@ -216,15 +299,43 @@ export default function Inventario() {
 
       {buscarFoto && (
         <div className="p-3 mb-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          <label className="flex items-center gap-2 px-3 py-3 rounded mb-2 cursor-pointer justify-center text-sm" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C", color: "#7A5F2D" }}>
-            <Camera size={16} /> Tomar o subir foto del producto
-            <input type="file" accept="image/*" capture="environment" className="hidden" />
-          </label>
+          {fotoBusqueda ? (
+            <div className="flex items-center gap-3 mb-2">
+              <img src={fotoBusqueda} alt="Foto tomada" className="w-16 h-16 rounded object-cover" />
+              <button onClick={() => setFotoBusqueda(null)} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+                Tomar otra foto
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2 mb-2">
+              <button onClick={() => setMostrarCamara(true)} className="flex-1 flex items-center gap-2 px-3 py-3 rounded justify-center text-sm" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C", color: "#7A5F2D" }}>
+                <Camera size={16} /> Abrir cámara
+              </button>
+              <label className="flex-1 flex items-center gap-2 px-3 py-3 rounded justify-center text-sm cursor-pointer" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C", color: "#7A5F2D" }}>
+                <ImageIcon size={16} /> Subir foto
+                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) setFotoBusqueda(URL.createObjectURL(f));
+                }} />
+              </label>
+            </div>
+          )}
           <p className="text-xs" style={{ color: "#5B4E5E" }}>
             La búsqueda por similitud de imagen todavía no está conectada a un servicio real de reconocimiento —
             cuando definamos ese servicio, aquí aparecerán los productos con foto más parecidos a la que subas.
+            La cámara y la foto ya funcionan de verdad (pide permiso, muestra la vista previa y captura la imagen).
           </p>
         </div>
+      )}
+
+      {mostrarCamara && (
+        <CamaraCaptura
+          onCerrar={() => setMostrarCamara(false)}
+          onCapturar={(file) => {
+            setFotoBusqueda(URL.createObjectURL(file));
+            setMostrarCamara(false);
+          }}
+        />
       )}
 
       {mostrarMerma && (
@@ -269,37 +380,59 @@ export default function Inventario() {
                     <p style={{ color: "#5B4E5E" }}>Ya existe</p>
                     <p>Cantidad: {d.existente.stock_physical}</p>
                     <p>Precio: Bs {d.existente.price}</p>
+                    <p>Costo: Bs {d.existente.cost}</p>
                   </div>
                   <div className="p-2 rounded" style={{ background: "#E4EBE1" }}>
                     <p style={{ color: "#4F6F52" }}>Viene en el Excel</p>
                     <p>Cantidad: {d.quantity}</p>
                     <p>Precio: Bs {d.price}</p>
+                    <p>Costo: Bs {d.cost}</p>
+                  </div>
+                </div>
+                <div className="grid sm:grid-cols-2 gap-2 mb-2">
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Código a guardar</p>
+                    <input value={d.codigoACargar} onChange={(e) => {
+                      const v = e.target.value;
+                      setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, codigoACargar: v } : x)));
+                    }} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+                  </div>
+                  <div>
+                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Descripción a guardar</p>
+                    <input value={d.nombreACargar} onChange={(e) => {
+                      const v = e.target.value;
+                      setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, nombreACargar: v } : x)));
+                    }} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
                   </div>
                 </div>
                 <div className="flex items-end gap-2 mb-2">
                   <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Cantidad a cargar</p>
+                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Cantidad a sumar al stock</p>
                     <input type="number" value={d.cantidadACargar} onChange={(e) => {
                       const v = Number(e.target.value);
                       setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, cantidadACargar: v } : x)));
                     }} className="w-24 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
                   </div>
                   <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Precio a cargar</p>
+                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Precio a guardar</p>
                     <input type="number" value={d.precioACargar} onChange={(e) => {
                       const v = Number(e.target.value);
                       setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, precioACargar: v } : x)));
                     }} className="w-24 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
                   </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                   <button onClick={() => setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, decision: "manual" } : x)))}
                     className="text-xs px-3 py-1.5 rounded-md" style={{ background: d.decision === "manual" ? "#9C7A3C" : "#F7F3EC", color: d.decision === "manual" ? "#F7F3EC" : "#2B1E2E", border: "1px solid #D9D0C2" }}>
-                    Cargar como registro manual aparte
+                    Actualizar el producto existente con estos datos
                   </button>
                   <button onClick={() => setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, decision: "omitir" } : x)))}
                     className="text-xs px-3 py-1.5 rounded-md" style={{ background: d.decision === "omitir" ? "#F4E3E6" : "#F7F3EC", color: d.decision === "omitir" ? "#7A2540" : "#2B1E2E", border: "1px solid #D9D0C2" }}>
                     Omitir este código
+                  </button>
+                  <button onClick={() => eliminarProductoExistente(d.existente.id)}
+                    className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#F4E3E6", color: "#7A2540", border: "1px solid #D9D0C2" }}>
+                    Eliminar el producto existente (papelera)
                   </button>
                 </div>
               </div>
@@ -322,6 +455,17 @@ export default function Inventario() {
             {l === "Todos" ? "Todos" : "Lote"}
           </button>
         ))}
+      </div>
+
+      <div className="flex gap-1.5 mb-3">
+        <button onClick={() => setPestanaStock("disponibles")} className="text-xs px-3 py-1.5 rounded-md"
+          style={{ background: pestanaStock === "disponibles" ? "#4F6F52" : "#F7F3EC", color: pestanaStock === "disponibles" ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
+          Disponibles ({disponibles.length})
+        </button>
+        <button onClick={() => setPestanaStock("agotados")} className="text-xs px-3 py-1.5 rounded-md"
+          style={{ background: pestanaStock === "agotados" ? "#7A2540" : "#F7F3EC", color: pestanaStock === "agotados" ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
+          Agotados ({agotados.length})
+        </button>
       </div>
 
       <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>

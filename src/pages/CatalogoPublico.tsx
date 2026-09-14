@@ -31,7 +31,7 @@ export default function CatalogoPublico() {
   }, []);
 
   async function cargar() {
-    const { data } = await supabase.from("catalog_products").select("*").eq("active", true).order("created_at");
+    const { data } = await supabase.from("catalog_products").select("*").eq("active", true).gt("stock_available", 0).order("created_at");
     setItems((data as CatalogProduct[]) ?? []);
   }
 
