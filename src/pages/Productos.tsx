@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { Plus, Pencil, History, Trash2, Image as ImageIcon } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Pencil, History, Trash2, Image as ImageIcon, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { subirImagen } from "../lib/imagenes";
 import { useAuth } from "../hooks/useAuth";
@@ -10,17 +10,38 @@ export default function Productos() {
   const verPrecios = profile?.role === "admin";
   const [productos, setProductos] = useState<Product[]>([]);
   const [categorias, setCategorias] = useState<Category[]>([]);
-  const [seleccionado, setSeleccionado] = useState<Product | null>(null);
+  const [seleccionadoId, setSeleccionadoId] = useState<string | null>(null);
   const [form, setForm] = useState<Partial<Product>>({});
   const [historial, setHistorial] = useState<{ price: number; valid_from: string; valid_to: string | null }[]>([]);
   const [mostrarNuevo, setMostrarNuevo] = useState(false);
   const [nuevo, setNuevo] = useState({ code: "", name: "", category_id: "", cost: 0, price: 0, stock_physical: 0, image_url: "" });
   const [subiendo, setSubiendo] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const buscadorRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     cargar();
     supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
   }, []);
+
+  // Se ordena SIEMPRE por código (estable): editar la descripción ya no mueve
+  // el producto de posición en la lista.
+  async function cargar(mantenerSeleccion = false) {
+    const { data } = await supabase.from("products").select("*").is("deleted_at", null).order("code");
+    const lista = (data as Product[]) ?? [];
+    setProductos(lista);
+    if (!mantenerSeleccion || !lista.some((p) => p.id === seleccionadoId)) {
+      setSeleccionadoId(lista.length > 0 ? lista[0].id : null);
+    }
+  }
+
+  const lista = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return productos;
+    return productos.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
+  }, [productos, busqueda]);
+
+  const seleccionado = lista.find((p) => p.id === seleccionadoId) ?? productos.find((p) => p.id === seleccionadoId) ?? null;
 
   useEffect(() => {
     if (seleccionado) {
@@ -32,14 +53,27 @@ export default function Productos() {
         .order("valid_from", { ascending: true })
         .then(({ data }) => setHistorial(data ?? []));
     }
-  }, [seleccionado]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seleccionado?.id]);
 
-  async function cargar() {
-    const { data } = await supabase.from("products").select("*").is("deleted_at", null).order("name");
-    setProductos((data as Product[]) ?? []);
-    if (data && data.length > 0) setSeleccionado(data[0] as Product);
-    else setSeleccionado(null);
-  }
+  // Navegación con ↑ / ↓: mueve la selección dentro de la lista visible
+  // (respetando la búsqueda), sin interferir con lo que se está escribiendo
+  // en otros campos de texto.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const activo = document.activeElement;
+      const enCampoDeTexto = activo && activo !== buscadorRef.current && (activo.tagName === "INPUT" || activo.tagName === "TEXTAREA" || activo.tagName === "SELECT");
+      if (enCampoDeTexto) return;
+      if (lista.length === 0) return;
+      e.preventDefault();
+      const idx = lista.findIndex((p) => p.id === seleccionadoId);
+      const siguiente = e.key === "ArrowDown" ? Math.min(lista.length - 1, idx + 1) : Math.max(0, idx - 1);
+      setSeleccionadoId(lista[siguiente]?.id ?? lista[0].id);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [lista, seleccionadoId]);
 
   async function guardar() {
     if (!seleccionado) return;
@@ -47,6 +81,7 @@ export default function Productos() {
     await supabase
       .from("products")
       .update({
+        code: form.code,
         name: form.name,
         description: form.description,
         cost: form.cost,
@@ -61,7 +96,11 @@ export default function Productos() {
       await supabase.from("price_history").update({ valid_to: new Date().toISOString() }).eq("product_id", seleccionado.id).is("valid_to", null);
       await supabase.from("price_history").insert({ product_id: seleccionado.id, price: form.price });
     }
-    cargar();
+    cargar(true);
+  }
+
+  function cancelar() {
+    if (seleccionado) setForm(seleccionado);
   }
 
   async function subirImagenEditar(file: File) {
@@ -119,6 +158,12 @@ export default function Productos() {
           </button>
         </div>
 
+        <div className="flex items-center gap-2 px-3 py-2 rounded mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+          <Search size={14} style={{ color: "#5B4E5E" }} />
+          <input ref={buscadorRef} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por código o descripción… (↑↓ para moverte)"
+            className="flex-1 text-sm outline-none bg-transparent" />
+        </div>
+
         {mostrarNuevo && (
           <form onSubmit={crearProducto} className="p-3 mb-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
             <input value={nuevo.code} onChange={(e) => setNuevo({ ...nuevo, code: e.target.value })} placeholder="Código" required
@@ -170,14 +215,14 @@ export default function Productos() {
         )}
 
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          {productos.map((p, i) => (
-            <button key={p.id} onClick={() => setSeleccionado(p)} className="w-full text-left px-3.5 py-2.5 flex items-center justify-between"
-              style={{ background: seleccionado?.id === p.id ? "#EDE7DE" : "transparent", borderBottom: i < productos.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+          {lista.map((p, i) => (
+            <button key={p.id} onClick={() => setSeleccionadoId(p.id)} className="w-full text-left px-3.5 py-2.5 flex items-center justify-between"
+              style={{ background: seleccionadoId === p.id ? "#EDE7DE" : "transparent", borderBottom: i < lista.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <span className="text-sm">{p.name}</span>
               <span className="text-xs" style={{ color: "#5B4E5E" }}>{p.code}</span>
             </button>
           ))}
-          {productos.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay productos.</p>}
+          {lista.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Ningún producto coincide con la búsqueda.</p>}
         </div>
       </div>
 
@@ -187,9 +232,13 @@ export default function Productos() {
             <div className="p-4" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               <div className="flex items-center justify-between mb-3">
                 <p className="font-serif text-lg flex items-center gap-2"><Pencil size={15} /> Editar producto</p>
-                <button onClick={eliminarProducto} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#F4E3E6", color: "#7A2540" }}>
-                  <Trash2 size={13} /> Eliminar producto
-                </button>
+                <div className="flex gap-1.5">
+                  <button onClick={guardar} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar</button>
+                  <button onClick={cancelar} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
+                  <button onClick={eliminarProducto} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#F4E3E6", color: "#7A2540" }}>
+                    <Trash2 size={13} /> Eliminar
+                  </button>
+                </div>
               </div>
 
               <div className="flex items-center gap-3 mb-3">
@@ -207,7 +256,11 @@ export default function Productos() {
               </div>
 
               <div className="grid sm:grid-cols-2 gap-3">
-                <Campo label="Código">{seleccionado.code}</Campo>
+                <div>
+                  <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Código</p>
+                  <input value={form.code ?? ""} onChange={(e) => setForm({ ...form, code: e.target.value })}
+                    className="w-full px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+                </div>
                 <Campo label="Cantidad física en inventario">
                   <input type="number" value={form.stock_physical ?? 0} onChange={(e) => setForm({ ...form, stock_physical: Number(e.target.value) })}
                     className="w-full bg-transparent outline-none" />
@@ -238,7 +291,6 @@ export default function Productos() {
                   <span className="font-serif" style={{ color: "#4F6F52" }}>Bs {(form.price ?? 0) - (form.cost ?? 0)}</span>
                 </div>
               )}
-              <button onClick={guardar} className="mt-4 text-sm px-4 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar cambios</button>
             </div>
 
             {verPrecios && historial.length > 0 && (

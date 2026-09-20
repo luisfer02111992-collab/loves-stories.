@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Calendar, Minus, Plus, Pencil, FileDown, RotateCcw, Undo2 } from "lucide-react";
+import { Calendar, Minus, Plus, Pencil, FileDown, RotateCcw, Undo2, Save, Printer, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useSellerSession } from "../hooks/useSellerSession";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "../lib/pricing";
-import { generarPdfPedido, generarPdfDevolucion } from "../lib/pdf";
+import { generarPdfPedido, generarPdfGrande, generarPdfDevolucion } from "../lib/pdf";
 import type { Devolucion, DevolucionItem } from "../lib/types";
 
 interface VentaCerrada {
@@ -18,15 +19,19 @@ interface VentaCerrada {
 const MOTIVOS = ["Producto roto", "Producto defectuoso", "Producto equivocado", "Otro"];
 
 export default function Ventas() {
+  const { vendedorActivoId, sesionActivaId } = useSellerSession();
+  const [cambiosSinGuardar, setCambiosSinGuardar] = useState<Set<string>>(new Set());
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
   const [ventas, setVentas] = useState<VentaCerrada[]>([]);
   const [reglas, setReglas] = useState<PricingRule[]>([]);
+  const [vendedoresMapa, setVendedoresMapa] = useState<Record<string, string>>({});
   const [editando, setEditando] = useState<string | null>(null);
   const [codigoNuevo, setCodigoNuevo] = useState("");
   const [cantidadNueva, setCantidadNueva] = useState(1);
   const [devoluciones, setDevoluciones] = useState<Record<string, (Devolucion & { items: DevolucionItem[] })[]>>({});
   const [pagos, setPagos] = useState<Record<string, number>>({});
   const [banner, setBanner] = useState<{ orderId: string; original: number; anterior: number; nuevo: number; pagado: number; diferencia: number } | null>(null);
+  const [reciboVenta, setReciboVenta] = useState<string | null>(null);
   const [mostrarDevolucion, setMostrarDevolucion] = useState<string | null>(null);
   const [devItemId, setDevItemId] = useState("");
   const [devCantidad, setDevCantidad] = useState(1);
@@ -37,18 +42,35 @@ export default function Ventas() {
 
   useEffect(() => {
     loadPricingRules().then(setReglas);
+    supabase.from("sellers").select("id, name").then(({ data }) => {
+      const mapa: Record<string, string> = {};
+      (data ?? []).forEach((v: any) => (mapa[v.id] = v.name));
+      setVendedoresMapa(mapa);
+    });
   }, []);
 
   useEffect(() => {
     cargar();
   }, [fecha]);
 
+  // Advertencia del navegador si hay cambios sin guardar y se intenta salir/recargar la página.
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (cambiosSinGuardar.size > 0) {
+        e.preventDefault();
+        e.returnValue = "";
+      }
+    }
+    window.addEventListener("beforeunload", onBeforeUnload);
+    return () => window.removeEventListener("beforeunload", onBeforeUnload);
+  }, [cambiosSinGuardar]);
+
   async function cargar() {
     const desde = new Date(fecha + "T00:00:00");
     const hasta = new Date(fecha + "T23:59:59");
     const { data } = await supabase
       .from("orders")
-      .select("id, order_number, closed_at, total_cerrado, customers(name, phone), order_items(id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id))")
+      .select("id, order_number, closed_at, total_cerrado, customers(name, phone), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, products(code, name, category_id))")
       .eq("status", "closed")
       .gte("closed_at", desde.toISOString())
       .lte("closed_at", hasta.toISOString())
@@ -70,6 +92,7 @@ export default function Ventas() {
         cantidad: it.quantity,
         precio_base: it.unit_price,
         fecha: new Date(it.assigned_at).toLocaleDateString("es-BO"),
+        vendedorNombre: it.seller_id ? (vendedoresMapa[it.seller_id] ?? "Vendedor eliminado") : "Sin vendedor",
       })),
     }));
     setVentas(lista);
@@ -132,9 +155,14 @@ export default function Ventas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ventas, reglas, devoluciones, pagos]);
 
+  // Quitar/agregar SÍ ajusta el inventario de inmediato (es necesario para que
+  // el stock quede siempre correcto), pero el total OFICIAL de la venta
+  // (total_cerrado) y el aviso de diferencia solo se actualizan cuando se
+  // presiona "Guardar cambios" — nada queda confirmado accidentalmente mientras editas.
   async function quitarUnidad(orderId: string, itemId: string) {
     await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
-    await recalcular(orderId);
+    setCambiosSinGuardar((prev) => new Set(prev).add(orderId));
+    await cargar();
   }
 
   async function agregarItem(orderId: string) {
@@ -143,16 +171,23 @@ export default function Ventas() {
     if (!producto) { alert("No se encontró ese código en el inventario."); return; }
     const { error } = await supabase.rpc("assign_product_to_order", {
       p_order_id: orderId, p_product_id: producto.id, p_quantity: cantidadNueva, p_origin: "correccion",
+      p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
     });
     if (error) { alert(error.message); return; }
     setCodigoNuevo("");
     setCantidadNueva(1);
-    await recalcular(orderId);
+    setCambiosSinGuardar((prev) => new Set(prev).add(orderId));
+    await cargar();
   }
 
-  // Después de cualquier corrección (agregar/quitar producto), se recalcula el
-  // total EN SUPABASE y se muestra la diferencia frente a lo ya pagado — la
-  // decisión de qué hacer con esa diferencia la tomas tú, nunca es automática.
+  // "Guardar cambios": recién aquí se recalcula el total EN SUPABASE y se
+  // muestra la diferencia frente a lo ya pagado — la decisión de qué hacer
+  // con esa diferencia la tomas tú, nunca es automática.
+  async function guardarCambios(orderId: string) {
+    await recalcular(orderId);
+    setCambiosSinGuardar((prev) => { const n = new Set(prev); n.delete(orderId); return n; });
+  }
+
   async function recalcular(orderId: string) {
     const { data, error } = await supabase.rpc("recalcular_total_venta", { p_order_id: orderId }).single();
     if (error) { alert(error.message); await cargar(); return; }
@@ -236,20 +271,25 @@ export default function Ventas() {
 
   function regenerarPdf(v: VentaCerrada) {
     const t = totalesVenta(v);
-    generarPdfPedido({
+    generarPdfGrande({
       negocio: "Loves Stories",
       cliente: v.cliente,
       telefono: v.telefono,
       fecha: new Date(v.closed_at).toLocaleDateString("es-BO"),
+      titulo: "Cuenta cerrada",
       grupos: t.grupos,
       subtotalSinDescuento: t.grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0),
       descuentoTotal: t.grupos.reduce((a, g) => a + g.descuento, 0),
       total: t.bruta,
       depositado: t.cobrado,
-      saldo: 0,
-      cerrado: true,
-      pagoFinal: 0,
+      saldoPendiente: 0,
+      saldoAFavor: Math.max(0, t.cobrado - t.bruta),
+      mostrarPagos: true,
     });
+  }
+
+  function imprimirRecibo(v: VentaCerrada) {
+    setReciboVenta(v.id);
   }
 
   return (
@@ -301,10 +341,19 @@ export default function Ventas() {
                   <button onClick={() => regenerarPdf(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
                     <FileDown size={12} /> PDF
                   </button>
+                  <button onClick={() => imprimirRecibo(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Recibo térmico 80×80mm, sin fotos">
+                    <Printer size={12} /> Imprimir
+                  </button>
                   <button onClick={() => abrirDevolucion(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
                     <Undo2 size={12} /> Registrar devolución
                   </button>
-                  <button onClick={() => setEditando(abierto ? null : v.id)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+                  <button onClick={() => {
+                    if (abierto && cambiosSinGuardar.has(v.id)) {
+                      const salir = confirm("Tienes cambios sin guardar en esta venta. Si sales ahora, el total oficial NO se actualizará. ¿Salir de todas formas?");
+                      if (!salir) return;
+                    }
+                    setEditando(abierto ? null : v.id);
+                  }} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
                     <Pencil size={12} /> {abierto ? "Cerrar edición" : "Editar (corregir)"}
                   </button>
                 </div>
@@ -324,7 +373,7 @@ export default function Ventas() {
                         )}
                       </div>
                     </div>
-                    <p className="text-xs" style={{ color: "#5B4E5E" }}>{g.detalle.map((d) => `${d.cantidad} un. — ${d.fecha}`).join(" · ")}</p>
+                    <p className="text-xs" style={{ color: "#5B4E5E" }}>{g.detalle.map((d) => `${d.cantidad} un. — ${d.fecha}${d.vendedorNombre ? ` (${d.vendedorNombre})` : ""}`).join(" · ")}</p>
                   </div>
                 ))}
               </div>
@@ -341,6 +390,15 @@ export default function Ventas() {
                   </div>
                   <button onClick={() => agregarItem(v.id)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                     <Plus size={13} /> Agregar (corrección)
+                  </button>
+                </div>
+              )}
+
+              {abierto && cambiosSinGuardar.has(v.id) && (
+                <div className="p-2 mb-2 rounded-md flex items-center justify-between" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
+                  <p className="text-xs" style={{ color: "#7A5F2D" }}>Hay cambios sin guardar en esta venta. El total oficial no se actualiza hasta que guardes.</p>
+                  <button onClick={() => guardarCambios(v.id)} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shrink-0 ml-2" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
+                    <Save size={12} /> Guardar cambios
                   </button>
                 </div>
               )}
@@ -441,6 +499,41 @@ export default function Ventas() {
         })}
         {ventas.length === 0 && <p className="text-sm" style={{ color: "#5B4E5E" }}>No hay ventas cerradas en esta fecha.</p>}
       </div>
+
+      {reciboVenta && (() => {
+        const v = ventas.find((x) => x.id === reciboVenta);
+        if (!v) return null;
+        const t = totalesVenta(v);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(43,30,46,0.85)" }}>
+            <div className="flex flex-col items-center">
+              <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 302, fontFamily: "monospace" }} className="p-2 text-xs shadow-md">
+                <p className="text-center font-bold" style={{ fontSize: "1rem" }}>Loves Stories</p>
+                <p className="text-center">Recibo — Pedido #{v.order_number}</p>
+                <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                <p>Cliente: {v.cliente}</p>
+                {t.grupos.map((g) => (
+                  <div key={g.product_id} className="flex justify-between"><span>{g.codigo} x{g.cantidadTotal}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
+                ))}
+                <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                <div className="flex justify-between font-bold"><span>Total</span><span>Bs {t.bruta.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Cobrado</span><span>Bs {t.cobrado.toFixed(2)}</span></div>
+                {t.devolucionProducto + t.reembolsoCorreccion > 0 && (
+                  <div className="flex justify-between"><span>Devuelto</span><span>Bs {(t.devolucionProducto + t.reembolsoCorreccion).toFixed(2)}</span></div>
+                )}
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => window.print()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                  <Printer size={13} /> Imprimir (térmica 80×80mm)
+                </button>
+                <button onClick={() => setReciboVenta(null)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                  <X size={13} /> Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

@@ -29,4 +29,8 @@ body {
     left: 0;
     width: 8cm;
   }
+  @page {
+    size: 80mm auto;
+    margin: 2mm;
+  }
 }

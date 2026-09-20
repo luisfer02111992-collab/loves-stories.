@@ -97,7 +97,10 @@ export default function PedidosCatalogo() {
           <div key={p.id} className="p-4 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
             <div className="flex items-center justify-between mb-2">
               <div>
-                <p className="text-sm font-medium">{p.code} · {p.customer_name}</p>
+                <p className="text-sm font-medium flex items-center gap-2">
+                  {p.code} · {p.customer_name}
+                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#EDE7DE", color: "#5B4E5E" }}>Catálogo / Sin vendedor</span>
+                </p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{p.customer_phone} · <Clock size={11} className="inline -mt-0.5" /> {new Date(p.created_at).toLocaleString("es-BO")}</p>
               </div>
             </div>

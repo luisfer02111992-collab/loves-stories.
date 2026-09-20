@@ -1,15 +1,16 @@
 import React from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
+import { SellerSessionProvider } from "./hooks/useSellerSession";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import InicioVentas from "./pages/InicioVentas";
 import Clientes from "./pages/Clientes";
 import ReportesDelDia from "./pages/ReportesDelDia";
 import Productos from "./pages/Productos";
 import Inventario from "./pages/Inventario";
 import Compras from "./pages/Compras";
-import Asignacion from "./pages/Asignacion";
 import AsignacionMultiple from "./pages/AsignacionMultiple";
 import Catalogo from "./pages/Catalogo";
 import CatalogoPublico from "./pages/CatalogoPublico";
@@ -19,6 +20,8 @@ import Configuracion from "./pages/Configuracion";
 import PedidosCatalogo from "./pages/PedidosCatalogo";
 import Ventas from "./pages/Ventas";
 import ResetPassword from "./pages/ResetPassword";
+import Vendedores from "./pages/Vendedores";
+import ReporteVendedores from "./pages/ReporteVendedores";
 
 function Privado({ children }: { children: React.ReactNode }) {
   const { loading, userId } = useAuth();
@@ -37,7 +40,9 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <AppRoutes />
+        <SellerSessionProvider>
+          <AppRoutes />
+        </SellerSessionProvider>
       </AuthProvider>
     </BrowserRouter>
   );
@@ -73,7 +78,8 @@ function AppRoutes() {
           </Privado>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route index element={<InicioVentas />} />
+        <Route path="resumen" element={<Dashboard />} />
         <Route path="clientes" element={<Clientes />} />
         <Route path="reportes-dia" element={<ReportesDelDia />} />
         <Route path="productos" element={<Productos />} />
@@ -86,11 +92,26 @@ function AppRoutes() {
             </SoloAdmin>
           }
         />
-        <Route path="asignacion" element={<Asignacion />} />
         <Route path="asignacion-multiple" element={<AsignacionMultiple />} />
         <Route path="catalogo" element={<Catalogo />} />
         <Route path="pedidos-catalogo" element={<PedidosCatalogo />} />
         <Route path="ventas" element={<Ventas />} />
+        <Route
+          path="vendedores"
+          element={
+            <SoloAdmin>
+              <Vendedores />
+            </SoloAdmin>
+          }
+        />
+        <Route
+          path="reporte-vendedores"
+          element={
+            <SoloAdmin>
+              <ReporteVendedores />
+            </SoloAdmin>
+          }
+        />
         <Route
           path="reportes"
           element={

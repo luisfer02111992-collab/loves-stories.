@@ -60,13 +60,34 @@ export interface Customer {
 export interface Order {
   id: string;
   order_number: number;
-  customer_id: string;
+  customer_id: string | null;
   status: "open" | "closed" | "reopened" | "cancelled";
   opened_at: string;
   closed_at: string | null;
   total_cerrado: number | null;
   total_original: number | null;
+  direct_sale: boolean;
+  direct_sale_name: string | null;
   created_by: string | null;
+}
+
+export interface Seller {
+  id: string;
+  name: string;
+  active: boolean;
+  commission_type: "none" | "percentage" | "fixed";
+  commission_value: number;
+  linked_profile_id: string | null;
+  created_at: string;
+}
+
+export interface SalesSession {
+  id: string;
+  seller_id: string;
+  started_at: string;
+  ended_at: string | null;
+  started_by: string | null;
+  notes: string | null;
 }
 
 export interface Devolucion {
@@ -102,6 +123,8 @@ export interface OrderItem {
   quantity: number;
   unit_price: number;
   origin: string;
+  seller_id: string | null;
+  session_id: string | null;
   assigned_by: string | null;
   assigned_at: string;
 }

@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, Wallet } from "lucide-react";
+import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, Wallet, Printer, Bell } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useSellerSession } from "../hooks/useSellerSession";
+import { useAuth } from "../hooks/useAuth";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido, GrupoProducto } from "../lib/pricing";
-import { generarPdfPedido } from "../lib/pdf";
+import { generarPdfGrande } from "../lib/pdf";
 import type { Customer } from "../lib/types";
 
 interface DepositoDetalle {
@@ -12,13 +14,21 @@ interface DepositoDetalle {
   paid_at: string;
 }
 
+const PLAZO_DIAS = 5;
+
 export default function Clientes() {
+  const { vendedorActivoId, sesionActivaId } = useSellerSession();
+  const { userId } = useAuth();
+  const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
+  const [depositoSeleccionado, setDepositoSeleccionado] = useState<string | null>(null);
+  const [guardandoDeposito, setGuardandoDeposito] = useState(false);
   const [clientes, setClientes] = useState<Customer[]>([]);
   const [seleccionado, setSeleccionado] = useState<Customer | null>(null);
   const [ordenId, setOrdenId] = useState<string | null>(null);
   const [fechaApertura, setFechaApertura] = useState<string | null>(null);
   const [items, setItems] = useState<LineaPedido[]>([]);
   const [depositos, setDepositos] = useState<DepositoDetalle[]>([]);
+  const [disponible, setDisponible] = useState(0);
   const [reglas, setReglas] = useState<PricingRule[]>([]);
   const [nombreNegocio, setNombreNegocio] = useState("Loves Stories");
   const [nuevoNombre, setNuevoNombre] = useState("");
@@ -32,6 +42,13 @@ export default function Clientes() {
   const [metodoDeposito, setMetodoDeposito] = useState("efectivo");
   const [ultimoPdf, setUltimoPdf] = useState<{ blob: Blob; texto: string } | null>(null);
   const [cerrando, setCerrando] = useState(false);
+  const [mostrarResumenCierre, setMostrarResumenCierre] = useState(false);
+  const [mostrarRecibo, setMostrarRecibo] = useState(false);
+  const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
+  const [mensajeRecordatorio, setMensajeRecordatorio] = useState("");
+  const [pendienteSobrante, setPendienteSobrante] = useState(false);
+  const [generandoPdf, setGenerandoPdf] = useState(false);
+  const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
 
   useEffect(() => {
     cargarClientes();
@@ -49,6 +66,9 @@ export default function Clientes() {
       setEditando(false);
       setMostrarDeposito(false);
       setUltimoPdf(null);
+      setMostrarResumenCierre(false);
+      setMostrarRecibo(false);
+      setMostrarRecordatorio(false);
     }
   }, [seleccionado]);
 
@@ -93,7 +113,7 @@ export default function Clientes() {
       setFechaApertura(orden.opened_at);
       const { data: filas } = await supabase
         .from("order_items")
-        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id)")
+        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id, image_url)")
         .eq("order_id", orden.id)
         .order("assigned_at", { ascending: true });
       const detalle: LineaPedido[] = (filas ?? []).map((f: any) => ({
@@ -102,6 +122,7 @@ export default function Clientes() {
         codigo: f.products?.code ?? "",
         nombre: f.products?.name ?? "",
         categoria_id: f.products?.category_id ?? null,
+        imagen: f.products?.image_url ?? null,
         cantidad: f.quantity,
         precio_base: f.unit_price,
         fecha: new Date(f.assigned_at).toLocaleDateString("es-BO"),
@@ -109,86 +130,184 @@ export default function Clientes() {
       setItems(detalle);
     }
 
+    // "Banco del cliente": dinero real depositado (se excluyen los pagos que
+    // el propio sistema genera al cerrar o devolver sobrantes) menos lo ya
+    // consumido en pedidos anteriores de este cliente que ya están cerrados.
+    // Es la misma fórmula que usa close_order en Supabase, para que la
+    // pantalla muestre exactamente lo mismo que va a pasar al cerrar.
     const { data: pagos } = await supabase.from("payments").select("id, amount, method, paid_at").eq("customer_id", customerId).order("paid_at", { ascending: false });
     setDepositos((pagos as DepositoDetalle[]) ?? []);
+    const pagadoReal = (pagos ?? []).filter((p: any) => p.method !== "cierre_pedido" && p.method !== "devolucion_sobrante").reduce((a: number, p: any) => a + p.amount, 0);
+    const { data: cerrados } = await supabase.from("orders").select("total_cerrado").eq("customer_id", customerId).eq("status", "closed");
+    const consumidoPrevio = (cerrados ?? []).reduce((a: number, o: any) => a + (o.total_cerrado ?? 0), 0);
+    setDisponible(pagadoReal - consumidoPrevio);
   }
 
   const grupos: GrupoProducto[] = useMemo(() => agruparPorProducto(reglas, items), [items, reglas]);
+
+  // Supr/Delete: quita el producto o el depósito seleccionado (con la misma
+  // confirmación que el botón correspondiente), sin interferir con lo que
+  // se esté escribiendo en un campo de texto.
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== "Delete" && e.key !== "Backspace") return;
+      const activo = document.activeElement;
+      const enCampoDeTexto = activo && (activo.tagName === "INPUT" || activo.tagName === "TEXTAREA" || activo.tagName === "SELECT");
+      if (enCampoDeTexto) return;
+      if (productoSeleccionado) {
+        e.preventDefault();
+        const g = grupos.find((x) => x.product_id === productoSeleccionado);
+        if (g) quitarProductoCompleto(g);
+      } else if (depositoSeleccionado) {
+        e.preventDefault();
+        const d = depositos.find((x) => x.id === depositoSeleccionado);
+        if (d) eliminarDeposito(d);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [productoSeleccionado, depositoSeleccionado, grupos, depositos]);
   const subtotalSinDescuento = grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0);
   const total = grupos.reduce((a, g) => a + g.subtotalConDescuento, 0);
   const descuentoTotal = subtotalSinDescuento - total;
   const depositado = depositos.reduce((a, d) => a + d.amount, 0);
-  const saldo = total - depositado;
+  // Nunca se muestra un número negativo: se separa en "saldo a favor" (pagó de
+  // más) o "saldo pendiente" (falta pagar), nunca los dos a la vez. Usa el
+  // "banco del cliente" (disponible), no la simple suma de depósitos, para
+  // no volver a contar dinero que ya se consumió en un pedido cerrado anterior.
+  const diferencia = total - disponible; // > 0 = pendiente, < 0 = a favor
+  const saldoPendiente = Math.max(0, diferencia);
+  const saldoAFavor = Math.max(0, -diferencia);
+
+  // Semáforo de plazo: verde/amarillo/rojo según los días desde la apertura.
+  // El rojo es solo una advertencia visual — nunca bloquea nada.
+  const diasApertura = fechaApertura ? Math.floor((Date.now() - new Date(fechaApertura).getTime()) / 86400000) : 0;
+  const semaforo = diasApertura >= PLAZO_DIAS ? "rojo" : diasApertura >= PLAZO_DIAS - 1 ? "amarillo" : "verde";  const colorSemaforo = { verde: "#4F6F52", amarillo: "#B7791F", rojo: "#7A2540" }[semaforo];
+  const textoSemaforo = { verde: "Plazo vigente", amarillo: "Se acerca al vencimiento", rojo: "Plazo vencido (aviso, no bloquea)" }[semaforo];
 
   async function quitarUnidad(itemId: string) {
     await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
     if (seleccionado) cargarPedido(seleccionado.id);
   }
 
-  async function cerrarPedido() {
-    if (!ordenId || !seleccionado) return;
+  async function aumentarUnidad(productId: string) {
+    if (!ordenId) return;
+    await supabase.rpc("assign_product_to_order", {
+      p_order_id: ordenId, p_product_id: productId, p_quantity: 1, p_origin: "manual",
+      p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
+    });
+    if (seleccionado) cargarPedido(seleccionado.id);
+  }
+
+  async function quitarProductoCompleto(g: GrupoProducto) {
+    if (!confirm(`¿Quitar "${g.nombre}" completo (${g.cantidadTotal} unidades) de este pedido? Se devuelve todo al inventario.`)) return;
+    for (const d of g.detalle) {
+      await supabase.rpc("remove_order_item_unit", { p_order_item_id: d.id, p_quantity: d.cantidad });
+    }
+    setProductoSeleccionado(null);
+    if (seleccionado) cargarPedido(seleccionado.id);
+  }
+
+  // Eliminar un depósito registrado por error: pide confirmación, deja
+  // constancia en audit_log de qué se borró y por qué (nunca se borra en
+  // silencio), y recalcula solo automáticamente porque saldo/disponible
+  // se recalculan a partir de la lista de depósitos.
+  async function eliminarDeposito(d: DepositoDetalle) {
+    const motivo = prompt(`¿Eliminar el depósito de Bs ${d.amount} (${d.method}, ${new Date(d.paid_at).toLocaleDateString("es-BO")})? Escribe el motivo para continuar:`);
+    if (!motivo) return;
+    await supabase.from("audit_log").insert({
+      actor: userId,
+      action: "deposito_eliminado",
+      details: { payment_id: d.id, customer_id: seleccionado?.id, amount: d.amount, method: d.method, paid_at: d.paid_at, motivo },
+    });
+    await supabase.from("payments").delete().eq("id", d.id);
+    setDepositoSeleccionado(null);
+    if (seleccionado) cargarPedido(seleccionado.id);
+  }
+
+  async function confirmarCierre() {
+    if (!ordenId || !seleccionado || cerrando) return;
     setCerrando(true);
-    // El total y el pago final se calculan y registran DENTRO de Supabase (calcular_total_pedido
-    // + close_order), no se envía ningún total desde el navegador.
     const { error } = await supabase.rpc("close_order", { p_order_id: ordenId });
     if (error) {
       alert(error.message);
       setCerrando(false);
       return;
     }
-    const { data: pagoFinalRow } = await supabase
-      .from("payments")
-      .select("amount")
-      .eq("order_id", ordenId)
-      .eq("method", "cierre_pedido")
-      .order("paid_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    const pagoFinal = pagoFinalRow?.amount ?? 0;
-    const blob = generarPdfPedido({
-      negocio: nombreNegocio,
-      cliente: seleccionado.name,
-      telefono: seleccionado.phone,
-      fecha: new Date().toLocaleDateString("es-BO"),
-      grupos,
-      subtotalSinDescuento,
-      descuentoTotal,
-      total,
-      depositado,
-      saldo: 0,
-      cerrado: true,
-      pagoFinal,
+    // close_order NUNCA registra un pago — el saldo que queda tras cerrar es
+    // exactamente el mismo saldo a favor / pendiente que ya se mostraba
+    // antes de cerrar (con dinero realmente depositado, nada inventado).
+    const blob = await generarPdfGrande({
+      negocio: nombreNegocio, cliente: seleccionado.name, telefono: seleccionado.phone,
+      fecha: new Date().toLocaleDateString("es-BO"), titulo: "Cuenta cerrada",
+      grupos, subtotalSinDescuento, descuentoTotal, total,
+      depositado, saldoPendiente, saldoAFavor, mostrarPagos: true,
     });
-    setUltimoPdf({ blob, texto: mensajeWhatsapp(true, pagoFinal) });
+    setUltimoPdf({ blob, texto: mensajeWhatsapp(true) });
     setCerrando(false);
+    setMostrarResumenCierre(false);
     await cargarPedido(seleccionado.id);
     await cargarClientes();
   }
 
-  function generarPdfAbierto() {
+  // Sobrante al cerrar: si queda saldo a favor, preguntar qué hacer (nunca decidir solo).
+  async function devolverSobrante() {
+    if (!seleccionado || saldoAFavor <= 0) return;
+    await supabase.from("payments").insert({ customer_id: seleccionado.id, order_id: ordenId, amount: -saldoAFavor, method: "devolucion_sobrante" });
+    setPendienteSobrante(false);
+    await cargarPedido(seleccionado.id);
+  }
+
+  async function generarPdfAbierto() {
     if (!seleccionado) return;
-    const blob = generarPdfPedido({
-      negocio: nombreNegocio,
-      cliente: seleccionado.name,
-      telefono: seleccionado.phone,
-      fecha: new Date().toLocaleDateString("es-BO"),
-      grupos,
-      subtotalSinDescuento,
-      descuentoTotal,
-      total,
-      depositado,
-      saldo,
-      cerrado: false,
+    setGenerandoPdf(true);
+    const blob = await generarPdfGrande({
+      negocio: nombreNegocio, cliente: seleccionado.name, telefono: seleccionado.phone,
+      fecha: new Date().toLocaleDateString("es-BO"), titulo: "Pedido acumulado",
+      grupos, subtotalSinDescuento, descuentoTotal, total,
+      depositado, saldoPendiente, saldoAFavor, mostrarPagos: true,
     });
+    setGenerandoPdf(false);
     setUltimoPdf({ blob, texto: mensajeWhatsapp(false) });
   }
 
-  function mensajeWhatsapp(cerrado: boolean, pagoFinal?: number) {
+  // PDF por fecha: solo lo asignado ese día puntual, no todo el acumulado.
+  // No modifica ni cierra el pedido.
+  const fechasConAsignaciones = useMemo(() => Array.from(new Set(items.map((it) => it.fecha))).sort().reverse(), [items]);
+
+  async function generarPdfPorFecha(fechaElegida: string) {
+    if (!seleccionado) return;
+    const itemsDeEseDia = items.filter((it) => it.fecha === fechaElegida);
+    const gruposDia = agruparPorProducto(reglas, itemsDeEseDia);
+    const subDia = gruposDia.reduce((a, g) => a + g.subtotalSinDescuento, 0);
+    const totalDia = gruposDia.reduce((a, g) => a + g.subtotalConDescuento, 0);
+    setGenerandoPdf(true);
+    await generarPdfGrande({
+      negocio: nombreNegocio, cliente: seleccionado.name, telefono: seleccionado.phone,
+      fecha: fechaElegida, titulo: `Detalle del ${fechaElegida}`,
+      grupos: gruposDia, subtotalSinDescuento: subDia, descuentoTotal: subDia - totalDia, total: totalDia,
+      depositado: 0, saldoPendiente: 0, saldoAFavor: 0, mostrarPagos: false,
+    });
+    setGenerandoPdf(false);
+    setMostrarSelectorFecha(false);
+  }
+
+  function mensajeWhatsapp(cerrado: boolean) {
     if (!seleccionado) return "";
     if (cerrado) {
-      return `Hola ${seleccionado.name}. Te comparto el recibo de tu compra en ${nombreNegocio}. Total: Bs ${total}. Pago final registrado: Bs ${(pagoFinal ?? 0).toFixed(2)}. Saldo: Bs 0. Te adjunto el PDF que acabamos de descargar.`;
+      return `Hola ${seleccionado.name}. Te comparto el recibo de tu compra en ${nombreNegocio}. Total: Bs ${total.toFixed(2)}. Depositado: Bs ${depositado.toFixed(2)}. ${saldoAFavor > 0 ? `Saldo a favor: Bs ${saldoAFavor.toFixed(2)}` : `Saldo pendiente: Bs ${saldoPendiente.toFixed(2)}`}. Te adjunto el PDF que acabamos de descargar.`;
     }
-    return `Hola ${seleccionado.name}. Te comparto el detalle de tu pedido en ${nombreNegocio} hasta hoy. Total: Bs ${total}. Depósitos: Bs ${depositado}. Saldo: Bs ${saldo}. Te adjunto el PDF que acabamos de descargar.`;
+    return `Hola ${seleccionado.name}. Te comparto el detalle de tu pedido en ${nombreNegocio} hasta hoy. Total: Bs ${total.toFixed(2)}. Depósitos: Bs ${depositado.toFixed(2)}. ${saldoAFavor > 0 ? `Saldo a favor: Bs ${saldoAFavor.toFixed(2)}` : `Saldo pendiente: Bs ${saldoPendiente.toFixed(2)}`}. Te adjunto el PDF que acabamos de descargar.`;
+  }
+
+  function abrirRecordatorio() {
+    if (!seleccionado) return;
+    const msg = `Hola ${seleccionado.name}, te escribimos de ${nombreNegocio}. Tu pedido: Bs ${total.toFixed(2)}. Pagado: Bs ${depositado.toFixed(2)}. Saldo pendiente: Bs ${saldoPendiente.toFixed(2)}. Llevas ${diasApertura} día(s) desde la apertura` +
+      (semaforo === "rojo" ? " y tu plazo de 5 días ya se cumplió." : semaforo === "amarillo" ? ", tu plazo de 5 días está por cumplirse." : ".") +
+      ` Te pedimos completar el pago cuando puedas. ¡Gracias!`;
+    setMensajeRecordatorio(msg);
+    setMostrarRecordatorio(true);
   }
 
   function linkWhatsapp(telefono: string, mensaje: string) {
@@ -222,10 +341,13 @@ export default function Clientes() {
   }
 
   async function registrarDeposito() {
-    if (!seleccionado || montoDeposito <= 0) return;
+    if (!seleccionado || montoDeposito <= 0 || guardandoDeposito) return;
+    setGuardandoDeposito(true);
     await supabase.from("payments").insert({ customer_id: seleccionado.id, order_id: ordenId, amount: montoDeposito, method: metodoDeposito });
     setMontoDeposito(0);
     setMostrarDeposito(false);
+    setGuardandoDeposito(false);
+    // Registrar un pago renueva el plazo de 5 días (vuelve a verde) y NUNCA cierra el pedido.
     await cargarPedido(seleccionado.id);
     await cargarInactivos();
   }
@@ -308,27 +430,47 @@ export default function Clientes() {
                     <p className="font-serif text-lg">{seleccionado.name}</p>
                     <p className="text-xs" style={{ color: "#5B4E5E" }}>{seleccionado.phone}</p>
                     {fechaApertura && (
-                      <p className="text-xs mt-0.5" style={{ color: "#5B4E5E" }}>
-                        Pedido abierto desde el {new Date(fechaApertura).toLocaleDateString("es-BO")}
-                      </p>
-                    )}
-                    {saldo >= 150 && (
-                      <p className="text-xs mt-1 flex items-center gap-1" style={{ color: "#7A2540" }}>
-                        <AlertTriangle size={12} /> Saldo alto — considera avisarle antes de asignar más productos
-                      </p>
+                      <div className="flex items-center gap-1.5 mt-1">
+                        <span className="w-2 h-2 rounded-full" style={{ background: colorSemaforo }} />
+                        <p className="text-xs" style={{ color: colorSemaforo }}>
+                          Apertura: {new Date(fechaApertura).toLocaleDateString("es-BO")} · día {diasApertura} de {PLAZO_DIAS} · {textoSemaforo}
+                        </p>
+                      </div>
                     )}
                   </div>
-                  <div className="flex gap-1.5">
-                    <button onClick={() => setEditando(true)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                      <Pencil size={12} /> Editar
-                    </button>
-                    <button onClick={eliminarCliente} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
-                      <Trash2 size={12} /> Eliminar
-                    </button>
+                  <div className="flex flex-col gap-1.5 items-end">
+                    <div className="flex gap-1.5">
+                      <button onClick={() => setEditando(true)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+                        <Pencil size={12} /> Editar
+                      </button>
+                      <button onClick={eliminarCliente} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
+                        <Trash2 size={12} /> Eliminar
+                      </button>
+                    </div>
+                    {fechaApertura && (semaforo === "amarillo" || semaforo === "rojo") && (
+                      <button onClick={abrirRecordatorio} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
+                        <Bell size={12} /> Enviar recordatorio
+                      </button>
+                    )}
                   </div>
                 </div>
               )}
             </div>
+
+            {mostrarRecordatorio && (
+              <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                <p className="text-xs mb-1.5" style={{ color: "#5B4E5E" }}>Mensaje (puedes editarlo antes de enviar)</p>
+                <textarea value={mensajeRecordatorio} onChange={(e) => setMensajeRecordatorio(e.target.value)} rows={4}
+                  className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+                <div className="flex gap-2">
+                  <a href={linkWhatsapp(seleccionado.phone, mensajeRecordatorio)} target="_blank" rel="noreferrer"
+                    className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
+                    <MessageCircle size={13} /> Enviar por WhatsApp
+                  </a>
+                  <button onClick={() => setMostrarRecordatorio(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
+                </div>
+              </div>
+            )}
 
             <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               <div className="flex items-center justify-between mb-2">
@@ -337,11 +479,12 @@ export default function Clientes() {
                   <Plus size={13} /> Registrar depósito
                 </button>
               </div>
+              <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Puedes abrir una cuenta con cualquier monto — Bs 300 es solo la garantía habitual, no un mínimo obligatorio.</p>
               {mostrarDeposito && (
-                <div className="flex items-end gap-2 mb-3 p-3 rounded" style={{ background: "#EDE7DE" }}>
+                <form onSubmit={(e) => { e.preventDefault(); registrarDeposito(); }} className="flex items-end gap-2 mb-3 p-3 rounded" style={{ background: "#EDE7DE" }}>
                   <div>
                     <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Monto (Bs)</p>
-                    <input type="number" min={1} value={montoDeposito} onChange={(e) => setMontoDeposito(Number(e.target.value))}
+                    <input type="number" min={1} autoFocus value={montoDeposito} onChange={(e) => setMontoDeposito(Number(e.target.value))}
                       className="w-28 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
                   </div>
                   <div>
@@ -354,24 +497,30 @@ export default function Clientes() {
                       <option value="qr">QR</option>
                     </select>
                   </div>
-                  <button onClick={registrarDeposito} disabled={montoDeposito <= 0} className="text-xs px-3 py-2 rounded-md" style={{ background: montoDeposito > 0 ? "#9C7A3C" : "#D9D0C2", color: "#F7F3EC" }}>
-                    Guardar
+                  <button type="submit" disabled={montoDeposito <= 0 || guardandoDeposito} className="text-xs px-3 py-2 rounded-md" style={{ background: montoDeposito > 0 ? "#9C7A3C" : "#D9D0C2", color: "#F7F3EC" }}>
+                    {guardandoDeposito ? "Guardando..." : "Guardar (Enter)"}
                   </button>
-                </div>
+                </form>
               )}
               {depositos.length === 0 ? (
                 <p className="text-sm" style={{ color: "#5B4E5E" }}>Este cliente todavía no tiene depósitos registrados.</p>
               ) : (
                 depositos.map((d, i) => (
-                  <div key={d.id} className="flex justify-between text-sm py-1.5" style={{ borderBottom: i < depositos.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+                  <div key={d.id} onClick={() => setDepositoSeleccionado(d.id)}
+                    className="flex justify-between text-sm py-1.5 px-1.5 cursor-pointer items-center" style={{ borderBottom: i < depositos.length - 1 ? "1px solid #D9D0C2" : "none", background: depositoSeleccionado === d.id ? "#EDE7DE" : "transparent" }}>
                     <span style={{ color: "#5B4E5E" }}>{new Date(d.paid_at).toLocaleDateString("es-BO")} · {d.method}</span>
-                    <span className="font-serif">Bs {d.amount}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-serif">Bs {d.amount}</span>
+                      <button onClick={(e) => { e.stopPropagation(); eliminarDeposito(d); }} className="p-1 rounded" style={{ color: "#7A2540" }} title="Eliminar depósito (Supr)">
+                        <Trash2 size={13} />
+                      </button>
+                    </span>
                   </div>
                 ))
               )}
               <div className="flex justify-between text-sm mt-2 pt-2" style={{ borderTop: "1px solid #D9D0C2" }}>
                 <span style={{ color: "#5B4E5E" }}>Total depositado</span>
-                <span className="font-serif" style={{ color: "#4F6F52" }}>Bs {depositado}</span>
+                <span className="font-serif" style={{ color: "#4F6F52" }}>Bs {depositado.toFixed(2)}</span>
               </div>
             </div>
 
@@ -380,18 +529,27 @@ export default function Clientes() {
             ) : (
               <div className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
                 {grupos.map((g, i) => (
-                  <div key={g.product_id} className="px-3.5 py-2.5" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+                  <div key={g.product_id} onClick={() => setProductoSeleccionado(g.product_id)}
+                    className="px-3.5 py-2.5 cursor-pointer" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none", background: productoSeleccionado === g.product_id ? "#EDE7DE" : "transparent" }}>
                     <div className="flex items-center justify-between">
                       <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
-                      <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-2">
                         <span className="font-serif text-sm">Bs {g.subtotalConDescuento.toFixed(2)}</span>
-                        <button onClick={() => quitarUnidad(g.detalle[g.detalle.length - 1].id)} className="p-1 rounded" style={{ color: "#7A2540" }} title="Quitar una unidad (de la última asignación)">
-                          <Minus size={14} />
+                        <button onClick={(e) => { e.stopPropagation(); quitarUnidad(g.detalle[g.detalle.length - 1].id); }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Quitar 1 unidad">
+                          <Minus size={12} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); aumentarUnidad(g.product_id); }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "#9C7A3C", color: "#F7F3EC" }} title="Agregar 1 unidad">
+                          <Plus size={12} />
+                        </button>
+                        <button onClick={(e) => { e.stopPropagation(); quitarProductoCompleto(g); }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }} title="Quitar producto completo (Supr)">
+                          <Trash2 size={12} />
                         </button>
                       </div>
                     </div>
                     <p className="text-xs mt-0.5" style={{ color: "#5B4E5E" }}>
-                      {g.detalle.map((d) => `${d.cantidad} unidad(es) — ${d.fecha}`).join(" · ")}
+                      {g.detalle.length === 1
+                        ? `${g.detalle[0].cantidad} unidad(es) — ${g.detalle[0].fecha}`
+                        : g.detalle.map((d) => `${d.fecha}: ${d.cantidad} un.`).join(" · ")}
                       {g.descuento > 0 && ` · descuento aplicado: Bs ${g.descuento.toFixed(2)}`}
                     </p>
                   </div>
@@ -402,19 +560,91 @@ export default function Clientes() {
             <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Subtotal sin descuento</span><span>Bs {subtotalSinDescuento.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#4F6F52" }}>Descuento por cantidad</span><span style={{ color: "#4F6F52" }}>− Bs {descuentoTotal.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm mb-1.5 pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total</span><span className="font-serif">Bs {total.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Depósitos</span><span>Bs {depositado.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#7A2540" }}>Saldo</span><span className="font-serif" style={{ color: "#7A2540" }}>Bs {saldo.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm mb-1.5 pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total seleccionado</span><span className="font-serif">Bs {total.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Total pagado/depositado</span><span>Bs {depositado.toFixed(2)}</span></div>
+              {saldoAFavor > 0 ? (
+                <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#4F6F52" }}>Saldo a favor</span><span className="font-serif" style={{ color: "#4F6F52" }}>Bs {saldoAFavor.toFixed(2)}</span></div>
+              ) : (
+                <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#7A2540" }}>Saldo pendiente</span><span className="font-serif" style={{ color: "#7A2540" }}>Bs {saldoPendiente.toFixed(2)}</span></div>
+              )}
             </div>
 
             {ordenId && (
-              <div className="flex gap-2 mb-3">
-                <button onClick={cerrarPedido} disabled={cerrando} className="flex-1 py-2.5 rounded-md text-sm" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
-                  {cerrando ? "Cerrando..." : "Cerrar pedido (pago completo)"}
+              <div className="flex gap-2 mb-3 flex-wrap">
+                <button onClick={() => setMostrarResumenCierre(true)} className="flex-1 py-2.5 rounded-md text-sm" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
+                  Cerrar pedido
                 </button>
-                <button onClick={generarPdfAbierto} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                  <FileDown size={15} /> PDF del pedido abierto
+                <button onClick={generarPdfAbierto} disabled={generandoPdf} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                  <FileDown size={15} /> {generandoPdf ? "Generando PDF..." : "PDF acumulado"}
                 </button>
+                <button onClick={() => setMostrarSelectorFecha((v) => !v)} disabled={fechasConAsignaciones.length === 0} className="py-2.5 px-3 rounded-md text-sm flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+                  <FileDown size={15} /> PDF por fecha
+                </button>
+                <button onClick={() => setMostrarRecibo(true)} className="py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Recibo térmico 80×80mm">
+                  <Printer size={15} />
+                </button>
+              </div>
+            )}
+
+            {mostrarSelectorFecha && (
+              <div className="p-3 mb-3 rounded-md flex items-center gap-2 flex-wrap" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                <p className="text-xs" style={{ color: "#5B4E5E" }}>Elige una fecha para generar el PDF solo de ese día:</p>
+                {fechasConAsignaciones.map((f) => (
+                  <button key={f} onClick={() => generarPdfPorFecha(f)} disabled={generandoPdf} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                    {f}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {mostrarResumenCierre && (
+              <div className="p-4 mb-3 rounded-md" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
+                <p className="text-sm font-medium mb-2" style={{ color: "#7A5F2D" }}>Confirmar cierre de pedido</p>
+                <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Total del pedido: Bs {total.toFixed(2)} (incluye Bs {descuentoTotal.toFixed(2)} de descuento)</div>
+                <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Total pagado hasta ahora: Bs {depositado.toFixed(2)}</div>
+                {saldoAFavor > 0 ? (
+                  <>
+                    <div className="text-xs mb-2" style={{ color: "#4F6F52" }}>Saldo a favor: Bs {saldoAFavor.toFixed(2)} — decide qué hacer con el sobrante antes de cerrar:</div>
+                    <div className="flex gap-2 mb-2">
+                      <button onClick={devolverSobrante} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#7A2540", color: "#F7F3EC" }}>Devolver el sobrante al cliente</button>
+                      <button onClick={() => setPendienteSobrante(true)} className="text-xs px-3 py-1.5 rounded-md" style={{ background: pendienteSobrante ? "#4F6F52" : "#EDE7DE", color: pendienteSobrante ? "#F7F3EC" : "#2B1E2E" }}>Dejarlo como saldo a favor</button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-xs mb-2" style={{ color: "#7A2540" }}>Saldo pendiente: Bs {saldoPendiente.toFixed(2)} — al cerrar se registra automáticamente el pago de esa diferencia.</div>
+                )}
+                <div className="flex gap-2">
+                  <button onClick={confirmarCierre} disabled={cerrando || (saldoAFavor > 0 && !pendienteSobrante)} className="text-xs px-4 py-2 rounded-md"
+                    style={{ background: (saldoAFavor > 0 && !pendienteSobrante) ? "#D9D0C2" : "#2B1E2E", color: "#F7F3EC" }}>
+                    {cerrando ? "Cerrando..." : "Confirmar y cerrar pedido"}
+                  </button>
+                  <button onClick={() => { setMostrarResumenCierre(false); setPendienteSobrante(false); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
+                </div>
+              </div>
+            )}
+
+            {mostrarRecibo && (
+              <div className="flex flex-col items-center mb-3">
+                <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 302, fontFamily: "monospace" }} className="p-2 text-xs shadow-md">
+                  <p className="text-center font-bold" style={{ fontSize: "1rem" }}>{nombreNegocio}</p>
+                  <p className="text-center">Detalle de pedido</p>
+                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                  <p>Cliente: {seleccionado.name}</p>
+                  {grupos.map((g) => (
+                    <div key={g.product_id} className="flex justify-between"><span>{g.codigo} x{g.cantidadTotal}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
+                  ))}
+                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                  <div className="flex justify-between"><span>Descuento</span><span>-Bs {descuentoTotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between font-bold"><span>Total</span><span>Bs {total.toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>Pagado</span><span>Bs {depositado.toFixed(2)}</span></div>
+                  <div className="flex justify-between font-bold"><span>{saldoAFavor > 0 ? "Saldo a favor" : "Saldo"}</span><span>Bs {(saldoAFavor > 0 ? saldoAFavor : saldoPendiente).toFixed(2)}</span></div>
+                </div>
+                <div className="flex gap-2 mt-3">
+                  <button onClick={() => window.print()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                    <Printer size={13} /> Imprimir (térmica 80×80mm)
+                  </button>
+                  <button onClick={() => setMostrarRecibo(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cerrar</button>
+                </div>
               </div>
             )}
 

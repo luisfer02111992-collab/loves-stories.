@@ -1,97 +1,204 @@
-import React, { useEffect, useState } from "react";
-import { Share2 } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Share2, Search, Plus, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { useSellerSession } from "../hooks/useSellerSession";
 import type { Customer, Product } from "../lib/types";
 
+interface Preparacion {
+  product: Product;
+  cantidades: Record<string, number>; // clienteId -> cantidad
+}
+
+// Preasignación: cada producto que se prepara (con sus cantidades por
+// cliente) se agrega a una lista temporal, en memoria del navegador. Nada
+// se escribe en Supabase ni se descuenta stock hasta pulsar
+// "Confirmar todas las asignaciones".
 export default function AsignacionMultiple() {
+  const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const [productos, setProductos] = useState<Product[]>([]);
   const [clientes, setClientes] = useState<Customer[]>([]);
-  const [codigo, setCodigo] = useState("");
+  const [busqueda, setBusqueda] = useState("");
+  const [productoId, setProductoId] = useState("");
+  const [mostrarLista, setMostrarLista] = useState(false);
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
-  const [enviando, setEnviando] = useState(false);
+  const [preparaciones, setPreparaciones] = useState<Preparacion[]>([]);
+  const [confirmando, setConfirmando] = useState(false);
 
   useEffect(() => {
-    supabase.from("products").select("*").is("deleted_at", null).order("name").then(({ data }) => {
-      setProductos((data as Product[]) ?? []);
-      if (data && data.length > 0) setCodigo((data[0] as Product).code);
-    });
+    cargarProductos();
     supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => {
       setClientes((data as Customer[]) ?? []);
-      const inicial: Record<string, number> = {};
-      (data as Customer[] ?? []).forEach((c) => (inicial[c.id] = 0));
-      setCantidades(inicial);
     });
   }, []);
 
-  const producto = productos.find((p) => p.code === codigo);
-  let totalAsignado = 0;
-  for (const key in cantidades) {
-    totalAsignado += Number(cantidades[key]) || 0;
+  async function cargarProductos() {
+    const { data } = await supabase.from("products").select("*").is("deleted_at", null).gt("stock_available", 0).order("name");
+    setProductos((data as Product[]) ?? []);
   }
-  const restante = (producto?.stock_available ?? 0) - totalAsignado;
 
-  async function confirmar() {
-    if (!producto) return;
-    setEnviando(true);
-    for (const clienteId in cantidades) {
-      const cantidad = Number(cantidades[clienteId]) || 0;
-      if (cantidad <= 0) continue;
-      const { data: existente } = await supabase
-        .from("orders")
-        .select("id")
-        .eq("customer_id", clienteId)
-        .in("status", ["open", "reopened"])
-        .maybeSingle();
-      const orderId = existente ? existente.id : (await supabase.from("orders").insert({ customer_id: clienteId }).select().single()).data!.id;
-      await supabase.rpc("assign_product_to_order", { p_order_id: orderId, p_product_id: producto.id, p_quantity: cantidad, p_origin: "manual" });
+  const producto = productos.find((p) => p.id === productoId);
+  const coincidencias = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return [];
+    const idsYaPreparados = new Set(preparaciones.map((p) => p.product.id));
+    return productos.filter((p) => !idsYaPreparados.has(p.id) && (p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))).slice(0, 8);
+  }, [busqueda, productos, preparaciones]);
+
+  let totalPreparadoAhora = 0;
+  for (const key in cantidades) totalPreparadoAhora += Number(cantidades[key]) || 0;
+  const restanteAhora = (producto?.stock_available ?? 0) - totalPreparadoAhora;
+
+  function elegirProducto(p: Product) {
+    setProductoId(p.id);
+    setBusqueda(`${p.code} · ${p.name}`);
+    setMostrarLista(false);
+    setCantidades({});
+  }
+
+  // Agrega el producto actual (con sus cantidades) a la lista temporal de
+  // preasignación. Todavía no toca Supabase.
+  function agregarALaLista() {
+    if (!producto || totalPreparadoAhora === 0 || restanteAhora < 0) return;
+    const cants: Record<string, number> = {};
+    Object.entries(cantidades).forEach(([id, c]) => { if (Number(c) > 0) cants[id] = Number(c); });
+    setPreparaciones((prev) => [...prev, { product: producto, cantidades: cants }]);
+    setBusqueda("");
+    setProductoId("");
+    setCantidades({});
+  }
+
+  function quitarPreparacion(productId: string) {
+    setPreparaciones((prev) => prev.filter((p) => p.product.id !== productId));
+  }
+
+  const totalGeneral = preparaciones.reduce((a, p) => a + Object.values(p.cantidades).reduce((x, y) => x + y, 0), 0);
+
+  // Único momento en que se escribe de verdad: valida stock de TODO lo
+  // preparado primero, y solo si todo alcanza empieza a asignar.
+  async function confirmarTodo() {
+    if (confirmando || preparaciones.length === 0) return;
+    setConfirmando(true);
+    try {
+      const ids = preparaciones.map((p) => p.product.id);
+      const { data: stockActual, error: errStock } = await supabase.from("products").select("id, code, stock_available").in("id", ids);
+      if (errStock) throw new Error(errStock.message);
+      for (const prep of preparaciones) {
+        const totalPedido = Object.values(prep.cantidades).reduce((a, b) => a + b, 0);
+        const actual = stockActual?.find((p: any) => p.id === prep.product.id);
+        if (!actual || actual.stock_available < totalPedido) {
+          throw new Error(`Ya no hay stock suficiente de ${prep.product.code} (disponible: ${actual?.stock_available ?? 0}, preparado: ${totalPedido}). No se asignó nada.`);
+        }
+      }
+
+      for (const prep of preparaciones) {
+        for (const [clienteId, cantidad] of Object.entries(prep.cantidades)) {
+          if (cantidad <= 0) continue;
+          const { data: existente } = await supabase
+            .from("orders").select("id").eq("customer_id", clienteId).in("status", ["open", "reopened"]).maybeSingle();
+          const orderId = existente ? existente.id : (await supabase.from("orders").insert({ customer_id: clienteId }).select().single()).data!.id;
+          const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
+            p_order_id: orderId, p_product_id: prep.product.id, p_quantity: cantidad, p_origin: "manual",
+            p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
+          });
+          if (errAsig) throw new Error(errAsig.message);
+        }
+      }
+
+      setPreparaciones([]);
+      await cargarProductos();
+      alert("Todas las asignaciones se confirmaron correctamente.");
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setConfirmando(false);
     }
-    setEnviando(false);
-    const reinicio: Record<string, number> = {};
-    clientes.forEach((c) => (reinicio[c.id] = 0));
-    setCantidades(reinicio);
+  }
+
+  function nombreCliente(id: string) {
+    return clientes.find((c) => c.id === id)?.name ?? "Cliente";
   }
 
   return (
     <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-2">
-        <p className="font-serif text-lg mb-1">Asignar un código a varios clientes</p>
-        <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>Reparte las unidades de un mismo producto entre todos los clientes que lo pidieron.</p>
+        <p className="font-serif text-lg mb-1">Asignar a varios clientes</p>
+        <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>Prepara uno o más productos con sus cantidades por cliente. Nada se asigna hasta confirmar todo al final.</p>
 
-        <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          <p className="text-xs mb-1.5" style={{ color: "#5B4E5E" }}>Código a repartir</p>
-          <select value={codigo} onChange={(e) => setCodigo(e.target.value)} className="w-full px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-            {productos.map((p) => <option key={p.code} value={p.code}>{p.code} · {p.name}</option>)}
-          </select>
-        </div>
+        <form onSubmit={(e) => { e.preventDefault(); agregarALaLista(); }} className="p-4 mb-3 relative" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+          <p className="text-xs mb-1.5" style={{ color: "#5B4E5E" }}>Buscar producto por código o descripción</p>
+          <div className="flex items-center gap-2 px-3 py-2 rounded mb-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+            <Search size={14} style={{ color: "#5B4E5E" }} />
+            <input
+              value={busqueda}
+              onChange={(e) => { setBusqueda(e.target.value); setMostrarLista(true); setProductoId(""); }}
+              onFocus={() => setMostrarLista(true)}
+              placeholder="Ej: 8169 o Anillo…"
+              className="flex-1 text-sm outline-none bg-transparent"
+            />
+          </div>
+          {mostrarLista && coincidencias.length > 0 && (
+            <div className="mb-2 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+              {coincidencias.map((p) => (
+                <button key={p.id} type="button" onClick={() => elegirProducto(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-black/5" style={{ borderBottom: "1px solid #D9D0C2" }}>
+                  {p.code} · {p.name} <span style={{ color: "#5B4E5E" }}>({p.stock_available} disp.)</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {producto && (
+            <>
+              <div style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} className="rounded mb-2 max-h-56 overflow-y-auto">
+                <div className="grid grid-cols-3 px-3 py-1.5 text-xs" style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
+                  <span>Cliente</span><span>Teléfono</span><span>Cantidad</span>
+                </div>
+                {clientes.map((c, i) => (
+                  <div key={c.id} className="grid grid-cols-3 px-3 py-1.5 items-center" style={{ borderBottom: i < clientes.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+                    <span className="text-xs">{c.name}</span>
+                    <span className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</span>
+                    <input type="number" min={0} value={cantidades[c.id] ?? 0} onChange={(e) => setCantidades({ ...cantidades, [c.id]: Number(e.target.value) })}
+                      className="w-16 px-2 py-1 rounded text-xs outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between text-xs mb-2" style={{ color: restanteAhora < 0 ? "#7A2540" : "#5B4E5E" }}>
+                <span>Disponible: {producto.stock_available} · Preparado: {totalPreparadoAhora}</span>
+                <span>Restante: {restanteAhora}</span>
+              </div>
+              <button type="submit" disabled={totalPreparadoAhora === 0 || restanteAhora < 0} className="w-full py-2 rounded-md text-sm flex items-center justify-center gap-1.5"
+                style={{ background: totalPreparadoAhora > 0 && restanteAhora >= 0 ? "#4F6F52" : "#D9D0C2", color: "#F7F3EC" }}>
+                <Plus size={14} /> Agregar a la lista (Enter)
+              </button>
+            </>
+          )}
+        </form>
 
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          <div className="grid grid-cols-3 px-3.5 py-2 text-xs" style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
-            <span>Cliente</span><span>Teléfono</span><span>Cantidad</span>
-          </div>
-          {clientes.map((c, i) => (
-            <div key={c.id} className="grid grid-cols-3 px-3.5 py-2.5 items-center" style={{ borderBottom: i < clientes.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-              <span className="text-sm">{c.name}</span>
-              <span className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</span>
-              <input type="number" min={0} value={cantidades[c.id] ?? 0} onChange={(e) => setCantidades({ ...cantidades, [c.id]: Number(e.target.value) })}
-                className="w-20 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+          {preparaciones.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Todavía no preparaste ningún producto.</p>}
+          {preparaciones.map((prep, i) => (
+            <div key={prep.product.id} className="px-3.5 py-2.5" style={{ borderBottom: i < preparaciones.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+              <div className="flex items-center justify-between">
+                <p className="text-sm">{prep.product.code} · {prep.product.name}</p>
+                <button onClick={() => quitarPreparacion(prep.product.id)} className="p-1 rounded" style={{ color: "#7A2540" }} title="Quitar de la lista">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+              <p className="text-xs" style={{ color: "#5B4E5E" }}>
+                {Object.entries(prep.cantidades).map(([id, c]) => `${nombreCliente(id)}: ${c}`).join(" · ")}
+              </p>
             </div>
           ))}
         </div>
       </div>
 
       <div className="p-4 h-fit" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-        <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Resumen de reparto</p>
-        <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Disponible</span><span>{producto?.stock_available ?? 0}</span></div>
-        <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Asignado ahora</span><span>{totalAsignado}</span></div>
-        <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}>
-          <span style={{ color: restante < 0 ? "#7A2540" : "#5B4E5E" }}>Restante</span>
-          <span className="font-serif" style={{ color: restante < 0 ? "#7A2540" : "#2B1E2E" }}>{restante}</span>
-        </div>
-        {restante < 0 && <p className="text-xs mt-2" style={{ color: "#7A2540" }}>Estás repartiendo más unidades de las que hay en stock.</p>}
-        <button onClick={confirmar} disabled={totalAsignado === 0 || restante < 0 || enviando}
-          className="w-full mt-3 py-2.5 rounded-md text-sm flex items-center justify-center gap-2"
-          style={{ background: totalAsignado > 0 && restante >= 0 ? "#9C7A3C" : "#D9D0C2", color: "#F7F3EC" }}>
-          <Share2 size={15} /> {enviando ? "Asignando..." : "Confirmar asignación"}
+        <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Resumen de la preasignación</p>
+        <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Productos preparados</span><span>{preparaciones.length}</span></div>
+        <div className="flex justify-between text-sm pt-1.5 mb-3" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Unidades totales</span><span className="font-serif">{totalGeneral}</span></div>
+        <button onClick={confirmarTodo} disabled={preparaciones.length === 0 || confirmando}
+          className="w-full py-2.5 rounded-md text-sm flex items-center justify-center gap-2"
+          style={{ background: preparaciones.length > 0 ? "#2B1E2E" : "#D9D0C2", color: "#F7F3EC" }}>
+          <Share2 size={15} /> {confirmando ? "Asignando..." : "Confirmar todas las asignaciones"}
         </button>
       </div>
     </div>

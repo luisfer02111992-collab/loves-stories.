@@ -3,29 +3,34 @@ import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Users, Tag, Boxes, Truck, ScanLine, Share2,
   ShoppingBag, BarChart3, Settings, Trash2, LogOut, Send, Inbox, Receipt,
+  UserCog, BadgePercent, UserCheck,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
+import { useSellerSession } from "../hooks/useSellerSession";
 import { supabase } from "../lib/supabase";
 
 const SECCIONES = [
-  { to: "/", label: "Panel", icon: LayoutDashboard, roles: ["admin", "employee"] },
+  { to: "/", label: "Asignar / Vender", icon: ScanLine, roles: ["admin", "employee"] },
+  { to: "/resumen", label: "Resumen", icon: LayoutDashboard, roles: ["admin", "employee"] },
   { to: "/clientes", label: "Clientes", icon: Users, roles: ["admin", "employee"] },
   { to: "/reportes-dia", label: "Reportes del día", icon: Send, roles: ["admin", "employee"] },
   { to: "/productos", label: "Productos", icon: Tag, roles: ["admin", "employee"] },
   { to: "/inventario", label: "Inventario", icon: Boxes, roles: ["admin", "employee"] },
   { to: "/compras", label: "Compras", icon: Truck, roles: ["admin"] },
-  { to: "/asignacion", label: "Asignación rápida", icon: ScanLine, roles: ["admin", "employee"] },
   { to: "/asignacion-multiple", label: "Asignar a varios", icon: Share2, roles: ["admin", "employee"] },
   { to: "/catalogo", label: "Catálogo", icon: ShoppingBag, roles: ["admin", "employee"] },
   { to: "/pedidos-catalogo", label: "Pedidos del catálogo", icon: Inbox, roles: ["admin", "employee"] },
   { to: "/ventas", label: "Ventas", icon: Receipt, roles: ["admin", "employee"] },
   { to: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
+  { to: "/vendedores", label: "Vendedores", icon: UserCog, roles: ["admin"] },
+  { to: "/reporte-vendedores", label: "Reporte de vendedores", icon: BadgePercent, roles: ["admin"] },
   { to: "/papelera", label: "Papelera", icon: Trash2, roles: ["admin"] },
   { to: "/configuracion", label: "Configuración", icon: Settings, roles: ["admin"] },
 ];
 
 export default function Layout() {
   const { profile, signOut } = useAuth();
+  const { vendedores, vendedorActivoId, vendedorActivoNombre, iniciarSesion, finalizarSesion } = useSellerSession();
   const rol = profile?.role ?? "employee";
   const secciones = SECCIONES.filter((s) => s.roles.includes(rol));
   const [nombre, setNombre] = useState("Loves Stories");
@@ -57,11 +62,34 @@ export default function Layout() {
 
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "#EDE7DE" }}>
-      <div className="flex items-center justify-between px-4 py-2.5" style={{ background: fondoBarra }}>
+      <div className="flex items-center justify-between px-4 py-2.5 gap-3 flex-wrap" style={{ background: fondoBarra }}>
         <p className="font-cursive text-2xl" style={{ color: primario }}>{nombre}</p>
+
+        <div className="flex items-center gap-2 text-xs" style={{ color: textoBarra }}>
+          <UserCheck size={13} />
+          {vendedorActivoId ? (
+            <>
+              <span>Vendedor actual: <strong>{vendedorActivoNombre}</strong></span>
+              <button onClick={finalizarSesion} className="px-2.5 py-1 rounded-md" style={{ background: "#7A2540", color: "#F7F3EC" }}>
+                Finalizar sesión
+              </button>
+            </>
+          ) : (
+            <select
+              onChange={(e) => e.target.value && iniciarSesion(e.target.value)}
+              value=""
+              className="px-2 py-1 rounded-md text-xs"
+              style={{ background: "#EDE7DE", color: "#2B1E2E", border: "1px solid #D9D0C2" }}
+            >
+              <option value="">Elegir vendedor actual…</option>
+              {vendedores.filter((v) => v.active).map((v) => <option key={v.id} value={v.id}>{v.name}</option>)}
+            </select>
+          )}
+        </div>
+
         <div className="flex items-center gap-3">
           <span className="text-xs" style={{ color: textoBarra }}>
-            {profile?.full_name || "Usuario"} · {rol === "admin" ? "Administrador" : "Vendedor"}
+            {profile?.full_name || "Usuario"} · {rol === "admin" ? "Administrador" : "Empleado"}
           </span>
           <button onClick={signOut} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md" style={{ background: "#7A2540", color: "#F7F3EC" }}>
             <LogOut size={13} /> Cerrar sesión
