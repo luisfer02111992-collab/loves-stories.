@@ -237,15 +237,13 @@ export default function Inventario() {
 
   const lotes = ["Todos", ...Array.from(new Set(productos.map((p) => p.batch_id).filter(Boolean)))] as string[];
   const listaPorLote = filtroLote === "Todos" ? productos : productos.filter((p) => p.batch_id === filtroLote);
-  const disponibles = listaPorLote.filter((p) => p.stock_available > 0);
-  const agotados = listaPorLote.filter((p) => p.stock_available <= 0);
-  const listaPestana = pestanaStock === "disponibles" ? disponibles : agotados;
-  const lista = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return listaPestana;
-    return listaPestana.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [listaPestana, busqueda]);
+  const q = busqueda.trim().toLowerCase();
+  const coincideBusqueda = (p: Product) => !q || p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
+  // La búsqueda se aplica ANTES de separar en pestañas, así un código
+  // agotado también aparece — solo hay que mirar la pestaña "Agotados".
+  const disponibles = listaPorLote.filter((p) => p.stock_available > 0 && coincideBusqueda(p));
+  const agotados = listaPorLote.filter((p) => p.stock_available <= 0 && coincideBusqueda(p));
+  const lista = pestanaStock === "disponibles" ? disponibles : agotados;
 
   return (
     <div>
@@ -482,6 +480,14 @@ export default function Inventario() {
         ))}
         {lista.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Ningún producto coincide con la búsqueda.</p>}
       </div>
+      {q && lista.length === 0 && ((pestanaStock === "disponibles" ? agotados : disponibles).length > 0) && (
+        <p className="text-xs mt-2" style={{ color: "#7A5F2D" }}>
+          No hay resultados en {pestanaStock === "disponibles" ? "Disponibles" : "Agotados"}, pero sí en{" "}
+          <button onClick={() => setPestanaStock(pestanaStock === "disponibles" ? "agotados" : "disponibles")} className="underline">
+            {pestanaStock === "disponibles" ? "Agotados" : "Disponibles"} ({(pestanaStock === "disponibles" ? agotados : disponibles).length})
+          </button>.
+        </p>
+      )}
     </div>
   );
 }

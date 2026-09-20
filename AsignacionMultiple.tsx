@@ -44,7 +44,7 @@ export default function AsignacionMultiple() {
   }
 
   async function confirmar() {
-    if (!producto) return;
+    if (!producto || enviando) return;
     setEnviando(true);
     for (const clienteId in cantidades) {
       const cantidad = Number(cantidades[clienteId]) || 0;
@@ -67,7 +67,7 @@ export default function AsignacionMultiple() {
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <form onSubmit={(e) => { e.preventDefault(); confirmar(); }} className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-2">
         <p className="font-serif text-lg mb-1">Asignar un código a varios clientes</p>
         <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>Reparte las unidades de un mismo producto entre todos los clientes que lo pidieron.</p>
@@ -87,7 +87,7 @@ export default function AsignacionMultiple() {
           {mostrarLista && coincidencias.length > 0 && (
             <div className="absolute left-4 right-4 mt-1 rounded-md z-10 shadow-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               {coincidencias.map((p) => (
-                <button key={p.id} onClick={() => elegirProducto(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-black/5" style={{ borderBottom: "1px solid #D9D0C2" }}>
+                <button key={p.id} type="button" onClick={() => elegirProducto(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-black/5" style={{ borderBottom: "1px solid #D9D0C2" }}>
                   {p.code} · {p.name} <span style={{ color: "#5B4E5E" }}>({p.stock_available} disp.)</span>
                 </button>
               ))}
@@ -119,12 +119,12 @@ export default function AsignacionMultiple() {
           <span className="font-serif" style={{ color: restante < 0 ? "#7A2540" : "#2B1E2E" }}>{restante}</span>
         </div>
         {restante < 0 && <p className="text-xs mt-2" style={{ color: "#7A2540" }}>Estás repartiendo más unidades de las que hay en stock.</p>}
-        <button onClick={confirmar} disabled={!producto || totalAsignado === 0 || restante < 0 || enviando}
+        <button type="submit" disabled={!producto || totalAsignado === 0 || restante < 0 || enviando}
           className="w-full mt-3 py-2.5 rounded-md text-sm flex items-center justify-center gap-2"
           style={{ background: producto && totalAsignado > 0 && restante >= 0 ? "#9C7A3C" : "#D9D0C2", color: "#F7F3EC" }}>
           <Share2 size={15} /> {enviando ? "Asignando..." : "Confirmar asignación"}
         </button>
       </div>
-    </div>
+    </form>
   );
 }

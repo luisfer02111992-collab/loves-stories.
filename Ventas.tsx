@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Calendar, Minus, Plus, Pencil, FileDown, RotateCcw, Undo2, Save } from "lucide-react";
+import { Calendar, Minus, Plus, Pencil, FileDown, RotateCcw, Undo2, Save, Printer, X } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "../lib/pricing";
-import { generarPdfPedido, generarPdfDevolucion } from "../lib/pdf";
+import { generarPdfPedido, generarPdfGrande, generarPdfDevolucion } from "../lib/pdf";
 import type { Devolucion, DevolucionItem } from "../lib/types";
 
 interface VentaCerrada {
@@ -31,6 +31,7 @@ export default function Ventas() {
   const [devoluciones, setDevoluciones] = useState<Record<string, (Devolucion & { items: DevolucionItem[] })[]>>({});
   const [pagos, setPagos] = useState<Record<string, number>>({});
   const [banner, setBanner] = useState<{ orderId: string; original: number; anterior: number; nuevo: number; pagado: number; diferencia: number } | null>(null);
+  const [reciboVenta, setReciboVenta] = useState<string | null>(null);
   const [mostrarDevolucion, setMostrarDevolucion] = useState<string | null>(null);
   const [devItemId, setDevItemId] = useState("");
   const [devCantidad, setDevCantidad] = useState(1);
@@ -270,20 +271,25 @@ export default function Ventas() {
 
   function regenerarPdf(v: VentaCerrada) {
     const t = totalesVenta(v);
-    generarPdfPedido({
+    generarPdfGrande({
       negocio: "Loves Stories",
       cliente: v.cliente,
       telefono: v.telefono,
       fecha: new Date(v.closed_at).toLocaleDateString("es-BO"),
+      titulo: "Cuenta cerrada",
       grupos: t.grupos,
       subtotalSinDescuento: t.grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0),
       descuentoTotal: t.grupos.reduce((a, g) => a + g.descuento, 0),
       total: t.bruta,
       depositado: t.cobrado,
-      saldo: 0,
-      cerrado: true,
-      pagoFinal: 0,
+      saldoPendiente: 0,
+      saldoAFavor: Math.max(0, t.cobrado - t.bruta),
+      mostrarPagos: true,
     });
+  }
+
+  function imprimirRecibo(v: VentaCerrada) {
+    setReciboVenta(v.id);
   }
 
   return (
@@ -334,6 +340,9 @@ export default function Ventas() {
                 <div className="flex gap-1.5">
                   <button onClick={() => regenerarPdf(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
                     <FileDown size={12} /> PDF
+                  </button>
+                  <button onClick={() => imprimirRecibo(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Recibo térmico 80×80mm, sin fotos">
+                    <Printer size={12} /> Imprimir
                   </button>
                   <button onClick={() => abrirDevolucion(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
                     <Undo2 size={12} /> Registrar devolución
@@ -490,6 +499,41 @@ export default function Ventas() {
         })}
         {ventas.length === 0 && <p className="text-sm" style={{ color: "#5B4E5E" }}>No hay ventas cerradas en esta fecha.</p>}
       </div>
+
+      {reciboVenta && (() => {
+        const v = ventas.find((x) => x.id === reciboVenta);
+        if (!v) return null;
+        const t = totalesVenta(v);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(43,30,46,0.85)" }}>
+            <div className="flex flex-col items-center">
+              <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 302, fontFamily: "monospace" }} className="p-2 text-xs shadow-md">
+                <p className="text-center font-bold" style={{ fontSize: "1rem" }}>Loves Stories</p>
+                <p className="text-center">Recibo — Pedido #{v.order_number}</p>
+                <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                <p>Cliente: {v.cliente}</p>
+                {t.grupos.map((g) => (
+                  <div key={g.product_id} className="flex justify-between"><span>{g.codigo} x{g.cantidadTotal}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
+                ))}
+                <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                <div className="flex justify-between font-bold"><span>Total</span><span>Bs {t.bruta.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>Cobrado</span><span>Bs {t.cobrado.toFixed(2)}</span></div>
+                {t.devolucionProducto + t.reembolsoCorreccion > 0 && (
+                  <div className="flex justify-between"><span>Devuelto</span><span>Bs {(t.devolucionProducto + t.reembolsoCorreccion).toFixed(2)}</span></div>
+                )}
+              </div>
+              <div className="flex gap-2 mt-3">
+                <button onClick={() => window.print()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                  <Printer size={13} /> Imprimir (térmica 80×80mm)
+                </button>
+                <button onClick={() => setReciboVenta(null)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                  <X size={13} /> Cerrar
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

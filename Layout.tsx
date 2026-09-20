@@ -3,22 +3,21 @@ import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Users, Tag, Boxes, Truck, ScanLine, Share2,
   ShoppingBag, BarChart3, Settings, Trash2, LogOut, Send, Inbox, Receipt,
-  ShoppingCart, UserCog, BadgePercent, UserCheck,
+  UserCog, BadgePercent, UserCheck,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { supabase } from "../lib/supabase";
 
 const SECCIONES = [
-  { to: "/", label: "Panel", icon: LayoutDashboard, roles: ["admin", "employee"] },
+  { to: "/", label: "Asignar / Vender", icon: ScanLine, roles: ["admin", "employee"] },
+  { to: "/resumen", label: "Resumen", icon: LayoutDashboard, roles: ["admin", "employee"] },
   { to: "/clientes", label: "Clientes", icon: Users, roles: ["admin", "employee"] },
   { to: "/reportes-dia", label: "Reportes del día", icon: Send, roles: ["admin", "employee"] },
   { to: "/productos", label: "Productos", icon: Tag, roles: ["admin", "employee"] },
   { to: "/inventario", label: "Inventario", icon: Boxes, roles: ["admin", "employee"] },
   { to: "/compras", label: "Compras", icon: Truck, roles: ["admin"] },
-  { to: "/asignacion", label: "Asignación rápida", icon: ScanLine, roles: ["admin", "employee"] },
   { to: "/asignacion-multiple", label: "Asignar a varios", icon: Share2, roles: ["admin", "employee"] },
-  { to: "/venta-directa", label: "Venta directa", icon: ShoppingCart, roles: ["admin", "employee"] },
   { to: "/catalogo", label: "Catálogo", icon: ShoppingBag, roles: ["admin", "employee"] },
   { to: "/pedidos-catalogo", label: "Pedidos del catálogo", icon: Inbox, roles: ["admin", "employee"] },
   { to: "/ventas", label: "Ventas", icon: Receipt, roles: ["admin", "employee"] },

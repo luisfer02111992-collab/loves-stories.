@@ -5,12 +5,12 @@ import { SellerSessionProvider } from "./hooks/useSellerSession";
 import Layout from "./components/Layout";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
+import InicioVentas from "./pages/InicioVentas";
 import Clientes from "./pages/Clientes";
 import ReportesDelDia from "./pages/ReportesDelDia";
 import Productos from "./pages/Productos";
 import Inventario from "./pages/Inventario";
 import Compras from "./pages/Compras";
-import Asignacion from "./pages/Asignacion";
 import AsignacionMultiple from "./pages/AsignacionMultiple";
 import Catalogo from "./pages/Catalogo";
 import CatalogoPublico from "./pages/CatalogoPublico";
@@ -20,7 +20,6 @@ import Configuracion from "./pages/Configuracion";
 import PedidosCatalogo from "./pages/PedidosCatalogo";
 import Ventas from "./pages/Ventas";
 import ResetPassword from "./pages/ResetPassword";
-import VentaDirecta from "./pages/VentaDirecta";
 import Vendedores from "./pages/Vendedores";
 import ReporteVendedores from "./pages/ReporteVendedores";
 
@@ -79,7 +78,8 @@ function AppRoutes() {
           </Privado>
         }
       >
-        <Route index element={<Dashboard />} />
+        <Route index element={<InicioVentas />} />
+        <Route path="resumen" element={<Dashboard />} />
         <Route path="clientes" element={<Clientes />} />
         <Route path="reportes-dia" element={<ReportesDelDia />} />
         <Route path="productos" element={<Productos />} />
@@ -92,12 +92,10 @@ function AppRoutes() {
             </SoloAdmin>
           }
         />
-        <Route path="asignacion" element={<Asignacion />} />
         <Route path="asignacion-multiple" element={<AsignacionMultiple />} />
         <Route path="catalogo" element={<Catalogo />} />
         <Route path="pedidos-catalogo" element={<PedidosCatalogo />} />
         <Route path="ventas" element={<Ventas />} />
-        <Route path="venta-directa" element={<VentaDirecta />} />
         <Route
           path="vendedores"
           element={
