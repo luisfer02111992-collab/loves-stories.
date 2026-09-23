@@ -20,6 +20,8 @@ export default function CatalogoPublico() {
   const [nombre, setNombre] = useState("");
   const [telefono, setTelefono] = useState("");
   const [enviado, setEnviado] = useState<string | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [guardando, setGuardando] = useState(false);
   const sessionId = useMemo(() => idDeSesion(), []);
 
   useEffect(() => {
@@ -49,25 +51,44 @@ export default function CatalogoPublico() {
     }
   }
 
+  const itemsFiltrados = useMemo(() => {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
+  }, [items, busqueda]);
+
+  async function agregarDesdeBusqueda() {
+    const q = busqueda.trim().toLowerCase();
+    if (!q) return;
+    const exacto = items.find((p) => p.code.toLowerCase() === q);
+    const elegido = exacto ?? itemsFiltrados[0];
+    if (!elegido) return;
+    await fijarCantidad(elegido, (cant[elegido.id] ?? 0) + 1);
+    setBusqueda("");
+  }
+
   const seleccion = items.filter((p) => (cant[p.id] ?? 0) > 0);
   const totalUnidades = seleccion.reduce((a, p) => a + cant[p.id], 0);
   const totalBs = seleccion.reduce((a, p) => a + cant[p.id] * p.price, 0);
 
   async function enviarPedido(e: React.FormEvent) {
     e.preventDefault();
-    if (!nombre || !telefono || seleccion.length === 0) return;
-    const codigo = `CAT-${Math.floor(10000 + Math.random() * 89999)}`;
-    const { data: submission } = await supabase
-      .from("catalog_submissions")
-      .insert({ code: codigo, customer_name: nombre, customer_phone: telefono, session_id: sessionId })
-      .select()
-      .single();
-    if (submission) {
-      await supabase.from("catalog_submission_items").insert(
-        seleccion.map((p) => ({ submission_id: submission.id, catalog_product_id: p.id, quantity: cant[p.id] }))
-      );
+    if (!nombre.trim() || !telefono.trim() || seleccion.length === 0 || guardando) return;
+    setGuardando(true);
+    try {
+      const codigo = `CAT-${Date.now().toString().slice(-8)}`;
+      const payload = seleccion.map((p) => ({ catalog_product_id: p.id, quantity: cant[p.id] }));
+      const { data, error } = await supabase.rpc("submit_catalog_order", {
+        p_code: codigo, p_customer_name: nombre.trim(), p_customer_phone: telefono.trim(),
+        p_session_id: sessionId, p_items: payload,
+      });
+      if (error) throw new Error(error.message);
+      setEnviado(String(data ?? codigo));
+    } catch (err: any) {
+      alert(`No se pudo registrar el pedido: ${err.message}`);
+    } finally {
+      setGuardando(false);
     }
-    setEnviado(codigo);
   }
 
   function linkWhatsapp(codigo: string) {
@@ -95,8 +116,13 @@ export default function CatalogoPublico() {
     <div className="min-h-screen p-5" style={{ background: "#EDE7DE" }}>
       <p className="font-cursive text-3xl text-center mb-4" style={{ color: "#9C7A3C" }}>{nombreNegocio}</p>
       <div className="grid md:grid-cols-3 gap-4 max-w-4xl mx-auto">
-        <div className="md:col-span-2 grid sm:grid-cols-2 gap-3">
-          {items.map((p) => {
+        <div className="md:col-span-2">
+          <div className="flex gap-2 mb-3">
+            <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); agregarDesdeBusqueda(); } }} placeholder="Buscar por código o descripción — Enter agrega" className="flex-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+            <button type="button" onClick={agregarDesdeBusqueda} className="px-3 rounded text-sm" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Agregar</button>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+          {itemsFiltrados.map((p) => {
             const c = cant[p.id] ?? 0;
             return (
               <div key={p.id} className="p-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
@@ -121,7 +147,8 @@ export default function CatalogoPublico() {
               </div>
             );
           })}
-          {items.length === 0 && <p className="text-sm" style={{ color: "#5B4E5E" }}>Todavía no hay productos publicados.</p>}
+          {itemsFiltrados.length === 0 && <p className="text-sm" style={{ color: "#5B4E5E" }}>No se encontraron productos.</p>}
+          </div>
         </div>
 
         <form onSubmit={enviarPedido} className="p-4 h-fit" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
@@ -137,10 +164,10 @@ export default function CatalogoPublico() {
           <input value={telefono} onChange={(e) => setTelefono(e.target.value)} placeholder="Tu teléfono" required
             className="w-full mb-3 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
 
-          <button type="submit" disabled={seleccion.length === 0}
+          <button type="submit" disabled={seleccion.length === 0 || guardando}
             className="w-full py-2.5 rounded-md text-sm flex items-center justify-center gap-2"
             style={{ background: seleccion.length ? "#4F6F52" : "#D9D0C2", color: "#F7F3EC" }}>
-            <MessageCircle size={15} /> Enviar mi pedido por WhatsApp
+            <MessageCircle size={15} /> {guardando ? "Registrando pedido..." : "Registrar pedido y continuar a WhatsApp"}
           </button>
         </form>
       </div>

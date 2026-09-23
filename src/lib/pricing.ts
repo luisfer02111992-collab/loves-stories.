@@ -78,13 +78,29 @@ export function agruparPorProducto(reglas: PricingRule[], lineas: LineaPedido[])
   }
   for (const g of grupos.values()) {
     const base = g.subtotalSinDescuento / g.cantidadTotal;
-    g.precioUnitarioFinal = precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
+    const porNombre = precioNegocioPorCantidad(null, g.nombre, g.cantidadTotal, base);
+    g.precioUnitarioFinal = porNombre < base ? porNombre : precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
     g.subtotalConDescuento = g.precioUnitarioFinal * g.cantidadTotal;
     g.descuento = g.subtotalSinDescuento - g.subtotalConDescuento;
     // Se conservan las líneas reales y sus IDs. La UI puede resumir fechas,
     // pero las operaciones +/-/eliminar deben apuntar a filas reales de order_items.
   }
   return Array.from(grupos.values());
+}
+
+export function descuentoNegocioPorCantidad(categoryName: string | null | undefined, productName: string | null | undefined, cantidad: number, description?: string | null): number {
+  const texto = `${categoryName ?? ""} ${productName ?? ""} ${description ?? ""}`
+    .toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  // Usamos raíces para cubrir singular/plural y fichas antiguas: ARETE/ARETES, ANILLO/ANILLOS, etc.
+  const grupoA = /(aret|dije|pulser|\bset\b|collar)/.test(texto);
+  const grupoB = /(anill|caden)/.test(texto);
+  if (grupoA) return cantidad >= 6 ? 2 : cantidad >= 3 ? 1 : 0;
+  if (grupoB) return cantidad >= 12 ? 2 : cantidad >= 6 ? 1 : 0;
+  return 0;
+}
+
+export function precioNegocioPorCantidad(categoryName: string | null | undefined, productName: string | null | undefined, cantidad: number, base: number, description?: string | null): number {
+  return Math.max(0, base - descuentoNegocioPorCantidad(categoryName, productName, cantidad, description));
 }
 export function precioUnitario(
   reglas: PricingRule[],

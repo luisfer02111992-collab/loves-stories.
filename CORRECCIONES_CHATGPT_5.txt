@@ -1,0 +1,3 @@
+CORRECCIÓN 5 — SOLO DOS PUNTOS
+1. Descuentos: detección robusta singular/plural y descripción; misma regla en Asignar, Asignar a varios y cálculo del pedido.
+2. Catálogo: al confirmar el pedido se crea inmediatamente como pending y se descuenta catalog_products.stock_available antes de WhatsApp. Aceptar no descuenta catálogo por segunda vez; rechazar devuelve disponibilidad.
