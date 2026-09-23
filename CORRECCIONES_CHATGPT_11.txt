@@ -1,0 +1,6 @@
+CORRECCIÓN 11
+- PDF grande: cabecera LOVE'S STORIES más elegante y en el dorado principal del software.
+- Catálogo público: sigue siendo una ruta pública directa, sin login ni instalación; CTA simplificada a cerrar pedido y enviar por WhatsApp, controles +/-.
+- Papelera eliminada del menú y de las rutas visibles. Se conserva el borrado lógico interno para proteger historial.
+- Impresión térmica: ya no imprime la página completa. Abre una ventana exclusiva de ticket 72 mm y desde allí llama al diálogo de impresión; se agregó prueba térmica real en Configuración.
+- No requiere SQL nuevo.

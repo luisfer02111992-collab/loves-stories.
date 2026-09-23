@@ -34,3 +34,9 @@ body {
     margin: 2mm;
   }
 }
+
+/* La impresión térmica real se abre en una ventana limpia desde lib/print.ts.
+   Este fallback evita que una regla global deje la vista previa completamente en blanco. */
+@media print {
+  #recibo-termico { display: block !important; visibility: visible !important; color: #000 !important; background: #fff !important; }
+}

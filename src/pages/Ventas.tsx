@@ -6,6 +6,7 @@ import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "
 import { generarPdfPedido, generarPdfGrande, generarPdfDevolucion } from "../lib/pdf";
 import type { Devolucion, DevolucionItem } from "../lib/types";
 import ExcelJS from "exceljs";
+import { imprimirTicket } from "../lib/print";
 
 interface VentaCerrada {
   id: string;
@@ -560,7 +561,7 @@ export default function Ventas() {
                 )}
               </div>
               <div className="flex gap-2 mt-3">
-                <button onClick={() => window.print()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                <button onClick={() => imprimirTicket()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                   <Printer size={13} /> Imprimir (térmica 80×80mm)
                 </button>
                 <button onClick={() => setReciboVenta(null)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { Pencil, MessageCircle, Palette, ShieldCheck, Mail, KeyRound } from "lucide-react";
 import { supabase, supabaseSignUpClient } from "../lib/supabase";
 import type { Profile } from "../lib/types";
+import { imprimirPruebaTermica } from "../lib/print";
 
 const PRESETS = [
   { key: "clasico", label: "Clásico dorado", primario: "#9C7A3C", acento: "#4F6F52" },
@@ -124,7 +125,7 @@ export default function Configuracion() {
     localStorage.setItem("loves_thermal_printer",impresoraTermica); alert("Preferencia guardada. Al imprimir, selecciona esa impresora USB en el cuadro de impresión de Windows/Chrome.");
   }
 
-  function probarImpresora(){ window.print(); }
+  function probarImpresora(){ imprimirPruebaTermica(); }
 
   async function conectarWhatsapp() {
     await supabase.from("app_settings").update({ whatsapp_number: whatsapp }).eq("id", 1);

@@ -2,7 +2,7 @@ import React, { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Users, Tag, Boxes, Truck, ScanLine, Share2,
-  ShoppingBag, BarChart3, Settings, Trash2, LogOut, Send, Inbox, Receipt,
+  ShoppingBag, BarChart3, Settings, LogOut, Send, Inbox, Receipt,
   UserCog, BadgePercent, UserCheck, History, Download, Calculator,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
@@ -26,7 +26,6 @@ const SECCIONES = [
   { to: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
   { to: "/vendedores", label: "Vendedores", icon: UserCog, roles: ["admin"] },
   { to: "/reporte-vendedores", label: "Reporte de vendedores", icon: BadgePercent, roles: ["admin"] },
-  { to: "/papelera", label: "Papelera", icon: Trash2, roles: ["admin"] },
   { to: "/configuracion", label: "Configuración", icon: Settings, roles: ["admin"] },
 ];
 

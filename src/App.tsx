@@ -15,7 +15,6 @@ import AsignacionMultiple from "./pages/AsignacionMultiple";
 import Catalogo from "./pages/Catalogo";
 import CatalogoPublico from "./pages/CatalogoPublico";
 import Reportes from "./pages/Reportes";
-import Papelera from "./pages/Papelera";
 import Configuracion from "./pages/Configuracion";
 import PedidosCatalogo from "./pages/PedidosCatalogo";
 import Ventas from "./pages/Ventas";
@@ -121,14 +120,6 @@ function AppRoutes() {
           element={
             <SoloAdmin>
               <Reportes />
-            </SoloAdmin>
-          }
-        />
-        <Route
-          path="papelera"
-          element={
-            <SoloAdmin>
-              <Papelera />
             </SoloAdmin>
           }
         />

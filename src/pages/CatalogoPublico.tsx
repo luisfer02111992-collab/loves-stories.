@@ -103,7 +103,7 @@ export default function CatalogoPublico() {
       <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#2B1E2E" }}>
         <div className="max-w-sm w-full rounded-md p-6 text-center" style={{ background: "#F7F3EC" }}>
           <p className="font-cursive text-3xl mb-2" style={{ color: "#9C7A3C" }}>{nombreNegocio}</p>
-          <p className="text-sm mb-4">Tu pedido {enviado} quedó registrado. Confirma el envío por WhatsApp para avisarnos.</p>
+          <p className="text-sm mb-4">Tu pedido {enviado} quedó registrado. Envíanoslo por WhatsApp para finalizar.</p>
           <a href={linkWhatsapp(enviado)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
             <MessageCircle size={15} /> Enviar por WhatsApp
           </a>
@@ -132,6 +132,7 @@ export default function CatalogoPublico() {
                 <p className="text-sm">{p.name}</p>
                 <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>{p.code} · Bs {p.price} · {p.stock_available} disp.</p>
                 <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => fijarCantidad(p, Math.max(0, c - 1))} className="w-9 h-9 rounded text-lg" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>−</button>
                   <input
                     type="number"
                     min={0}
@@ -143,6 +144,7 @@ export default function CatalogoPublico() {
                     className="w-full px-2 py-1.5 rounded text-sm text-center outline-none"
                     style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
                   />
+                  <button type="button" onClick={() => fijarCantidad(p, c + 1)} className="w-9 h-9 rounded text-lg" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>+</button>
                 </div>
               </div>
             );
@@ -167,7 +169,7 @@ export default function CatalogoPublico() {
           <button type="submit" disabled={seleccion.length === 0 || guardando}
             className="w-full py-2.5 rounded-md text-sm flex items-center justify-center gap-2"
             style={{ background: seleccion.length ? "#4F6F52" : "#D9D0C2", color: "#F7F3EC" }}>
-            <MessageCircle size={15} /> {guardando ? "Registrando pedido..." : "Registrar pedido y continuar a WhatsApp"}
+            <MessageCircle size={15} /> {guardando ? "Registrando pedido..." : "Cerrar pedido y enviar por WhatsApp"}
           </button>
         </form>
       </div>
