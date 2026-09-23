@@ -1,0 +1,8 @@
+CORRECCIÓN 10
+- Reportes rediseñado con presentación profesional y colores configurables.
+- Resumen: ventas totales, ganancia, margen, venta promedio, número de ventas, unidades, costo y cobrado.
+- Gráficos de ventas por fecha y por categoría.
+- Nueva vista "Ventas por cliente" con teléfono, número de ventas, unidades, acumulado, costo, ganancia y margen.
+- Configuración permite elegir color principal y secundario específicos para Reportes.
+- Conserva selector de tipo de gráfico: barras, líneas, área y circular.
+- SQL 10 solo añade dos preferencias de color a app_settings.

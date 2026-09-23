@@ -30,6 +30,8 @@ export default function Configuracion() {
   const [estiloGrafico, setEstiloGrafico] = useState("bar");
   const [mensajeAtraso, setMensajeAtraso] = useState("");
   const [impresoraTermica, setImpresoraTermica] = useState("");
+  const [colorReporte1, setColorReporte1] = useState("#405B9B");
+  const [colorReporte2, setColorReporte2] = useState("#8AA05A");
 
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoCorreo, setNuevoCorreo] = useState("");
@@ -70,6 +72,8 @@ export default function Configuracion() {
       localStorage.setItem("loves_chart_style", estilo);
       setMensajeAtraso(settings.overdue_whatsapp_message ?? "");
       setImpresoraTermica(settings.thermal_printer_name ?? "");
+      setColorReporte1(settings.report_primary_color ?? "#405B9B");
+      setColorReporte2(settings.report_secondary_color ?? "#8AA05A");
     }
     const { data: perfiles } = await supabase.from("profiles").select("*").order("created_at");
     setUsuarios((perfiles as Profile[]) ?? []);
@@ -107,7 +111,7 @@ export default function Configuracion() {
   }
 
   async function guardarPreferenciasReportes() {
-    const { error } = await supabase.from("app_settings").update({ chart_style: estiloGrafico, overdue_whatsapp_message: mensajeAtraso, updated_at: new Date().toISOString() }).eq("id",1);
+    const { error } = await supabase.from("app_settings").update({ chart_style: estiloGrafico, report_primary_color: colorReporte1, report_secondary_color: colorReporte2, overdue_whatsapp_message: mensajeAtraso, updated_at: new Date().toISOString() }).eq("id",1);
     if (error) { alert(`No se pudo guardar: ${error.message}`); return; }
     localStorage.setItem("loves_chart_style", estiloGrafico);
     window.dispatchEvent(new Event("loves-chart-style-changed"));
@@ -309,6 +313,12 @@ export default function Configuracion() {
           <select value={estiloGrafico} onChange={(e)=>setEstiloGrafico(e.target.value)} className="px-3 py-2 rounded text-sm mb-3" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
             <option value="bar">Columnas / barras</option><option value="line">Líneas</option><option value="area">Área</option><option value="pie">Circular / pastel</option>
           </select>
+          <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Colores de los reportes</p>
+          <div className="flex gap-4 mb-4 flex-wrap">
+            <label className="text-xs flex items-center gap-2">Color principal <input type="color" value={colorReporte1} onChange={e=>setColorReporte1(e.target.value)} className="w-12 h-9 rounded" /></label>
+            <label className="text-xs flex items-center gap-2">Color secundario <input type="color" value={colorReporte2} onChange={e=>setColorReporte2(e.target.value)} className="w-12 h-9 rounded" /></label>
+            <div className="flex items-center gap-1"><span className="w-10 h-7 rounded" style={{background:colorReporte1}}/><span className="w-10 h-7 rounded" style={{background:colorReporte2}}/></div>
+          </div>
           <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Mensaje de WhatsApp para clientes atrasados</p>
           <textarea value={mensajeAtraso} onChange={(e)=>setMensajeAtraso(e.target.value)} rows={4} className="w-full px-3 py-2 rounded text-sm mb-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
           <button onClick={guardarPreferenciasReportes} className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar preferencias</button>

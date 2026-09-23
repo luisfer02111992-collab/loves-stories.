@@ -1,189 +1,43 @@
-import React, { useEffect, useState } from "react";
-import { Boxes, PackageX } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Boxes, PackageX, Users, BarChart3 } from "lucide-react";
 import { BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import StatCard from "../components/StatCard";
 import type { Product } from "../lib/types";
 
-function desde(periodo: string) {
-  const d = new Date();
-  if (periodo === "dia") d.setHours(0, 0, 0, 0);
-  if (periodo === "mes") d.setDate(1);
-  if (periodo === "anio") { d.setMonth(0); d.setDate(1); }
-  return d.toISOString();
-}
+function desde(periodo: string) { const d=new Date(); if(periodo==="dia") d.setHours(0,0,0,0); if(periodo==="mes") d.setDate(1); if(periodo==="anio"){d.setMonth(0);d.setDate(1);} return d.toISOString(); }
+const bs=(n:number)=>`Bs ${Number(n||0).toLocaleString("es-BO",{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 
-export default function Reportes() {
-  const [periodo, setPeriodo] = useState("dia");
-  const [ventas, setVentas] = useState(0);
-  const [devolucionProducto, setDevolucionProducto] = useState(0);
-  const [cobrado, setCobrado] = useState(0);
-  const [costo, setCosto] = useState(0);
-  const [costoBuenEstado, setCostoBuenEstado] = useState(0);
-  const [costoMerma, setCostoMerma] = useState(0);
-  const [unidades, setUnidades] = useState(0);
-  const [porCategoria, setPorCategoria] = useState<{ cat: string; ventas: number }[]>([]);
-  const [productos, setProductos] = useState<Product[]>([]);
-  const [estiloGrafico, setEstiloGrafico] = useState("bar");
-  const [stockMuerto, setStockMuerto] = useState<{ code: string; name: string; stock_available: number; ultima: string | null }[]>([]);
+type ClienteResumen={id:string;nombre:string;telefono:string;ventas:number;unidades:number;acumulado:number;costo:number;ganancia:number;margen:number};
 
-  useEffect(() => {
-    cargarPeriodo();
-  }, [periodo]);
-
-  useEffect(() => {
-    supabase.from("products").select("*").is("deleted_at", null).then(({ data }) => setProductos((data as Product[]) ?? []));
-    cargarStockMuerto();
-    const local = localStorage.getItem("loves_chart_style"); if (local) setEstiloGrafico(local);
-    supabase.from("app_settings").select("chart_style").eq("id",1).single().then(({data})=>{ const e=data?.chart_style ?? local ?? "bar"; setEstiloGrafico(e); localStorage.setItem("loves_chart_style",e); });
-    const sync=()=>setEstiloGrafico(localStorage.getItem("loves_chart_style") ?? "bar"); window.addEventListener("loves-chart-style-changed",sync); return ()=>window.removeEventListener("loves-chart-style-changed",sync);
-  }, []);
-
-  async function cargarPeriodo() {
-    const inicio = desde(periodo);
-    const { data } = await supabase
-      .from("orders")
-      .select("id, closed_at, total_cerrado, order_items(quantity, unit_price, products(cost, categories(name)))")
-      .eq("status", "closed")
-      .gte("closed_at", inicio);
-
-    let bruta = 0, c = 0, u = 0;
-    const cat: Record<string, number> = {};
-    const idsOrdenes: string[] = [];
-    (data ?? []).forEach((o: any) => {
-      bruta += o.total_cerrado ?? 0;
-      idsOrdenes.push(o.id);
-      (o.order_items ?? []).forEach((it: any) => {
-        c += it.quantity * (it.products?.cost ?? 0);
-        u += it.quantity;
-        const nombreCat = it.products?.categories?.name ?? "Otros";
-        cat[nombreCat] = (cat[nombreCat] ?? 0) + it.quantity * it.unit_price;
-      });
-    });
-
-    let devolucionProducto = 0;
-    let costoBuenEstado = 0, costoMerma = 0;
-    if (idsOrdenes.length > 0) {
-      const { data: devs } = await supabase.from("returns").select("total_amount, type, order_id").eq("status", "activa").in("order_id", idsOrdenes);
-      (devs ?? []).forEach((d: any) => {
-        if (d.type === "producto") devolucionProducto += d.total_amount;
-      });
-
-      // Costo de las unidades devueltas: si volvieron al inventario (restock),
-      // ese costo se resta de "mercadería vendida" (ya no se considera vendido,
-      // volvió al stock). Si NO volvieron (dañadas), el costo se mantiene como
-      // vendido pero se muestra aparte como pérdida/merma — sin restarlo dos veces.
-      const { data: retItems } = await supabase
-        .from("return_items")
-        .select("quantity, restock, products(cost), returns!inner(order_id, status, type)")
-        .eq("returns.status", "activa")
-        .eq("returns.type", "producto")
-        .in("returns.order_id", idsOrdenes);
-      (retItems ?? []).forEach((ri: any) => {
-        const costoUnidad = (ri.quantity ?? 0) * (ri.products?.cost ?? 0);
-        if (ri.restock) costoBuenEstado += costoUnidad;
-        else costoMerma += costoUnidad;
-      });
-    }
-
-    let cobrado = 0;
-    if (idsOrdenes.length > 0) {
-      const { data: pagosData } = await supabase.from("payments").select("amount, order_id").in("order_id", idsOrdenes);
-      cobrado = (pagosData ?? []).reduce((a: number, p: any) => a + p.amount, 0);
-    }
-
-    setVentas(bruta);
-    setDevolucionProducto(devolucionProducto);
-    setCobrado(cobrado);
-    setCosto(c);
-    setCostoBuenEstado(costoBuenEstado);
-    setCostoMerma(costoMerma);
-    setUnidades(u);
-    setPorCategoria(Object.entries(cat).map(([cat, ventas]) => ({ cat, ventas })));
-  }
-
-  async function cargarStockMuerto() {
-    const limite = new Date();
-    limite.setDate(limite.getDate() - 45);
-    const { data } = await supabase.from("products").select("code, name, stock_available, updated_at").is("deleted_at", null).lt("updated_at", limite.toISOString()).gt("stock_available", 0).limit(6);
-    setStockMuerto((data ?? []).map((p: any) => ({ ...p, ultima: p.updated_at })));
-  }
-
-  // Venta neta solo resta devoluciones REALES de producto. El reembolso por
-  // corrección no se vuelve a restar aquí: "ventas" (bruta) ya viene de
-  // total_cerrado, que quedó en el valor correcto tras cualquier corrección.
-  const ventaNeta = ventas - devolucionProducto;
-  const devueltoTotal = devolucionProducto;
-  const cobroNeto = cobrado - devueltoTotal;
-  // Costo de mercadería vendida ajustado: al producto devuelto en buen estado
-  // se le resta su costo (volvió al inventario, ya no se considera vendido).
-  // El costo de un producto devuelto dañado/no vendible se queda contado aquí
-  // (de verdad se perdió) y se muestra aparte, sin restarlo dos veces.
-  const costoVendidoAjustado = costo - costoBuenEstado;
-  const ganancia = ventaNeta - costoVendidoAjustado;
-  const valorCosto = productos.reduce((a, p) => a + p.cost * p.stock_available, 0);
-  const valorVenta = productos.reduce((a, p) => a + p.price * p.stock_available, 0);
-  const gananciaPotencial = valorVenta - valorCosto;
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <p className="font-serif text-lg">Reportes</p>
-        <div className="flex gap-1">
-          {[{ key: "dia", label: "Día" }, { key: "mes", label: "Mes" }, { key: "anio", label: "Año" }].map((o) => (
-            <button key={o.key} onClick={() => setPeriodo(o.key)} className="text-xs px-3 py-1.5 rounded-md"
-              style={{ background: periodo === o.key ? "#9C7A3C" : "#F7F3EC", color: periodo === o.key ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
-              {o.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
-        <StatCard label="Venta bruta" value={`Bs ${ventas.toLocaleString("es-BO")}`} />
-        <StatCard label="Devolución de producto" value={`Bs ${devolucionProducto.toLocaleString("es-BO")}`} accent="#7A2540" />
-        <StatCard label="Venta neta" value={`Bs ${ventaNeta.toLocaleString("es-BO")}`} accent="#4F6F52" />
-      </div>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-        <StatCard label="Cobrado" value={`Bs ${cobrado.toLocaleString("es-BO")}`} />
-        <StatCard label="Dinero devuelto" value={`Bs ${devueltoTotal.toLocaleString("es-BO")}`} accent="#7A2540" />
-        <StatCard label="Cobro neto" value={`Bs ${cobroNeto.toLocaleString("es-BO")}`} accent="#4F6F52" />
-        <StatCard label="Unidades vendidas" value={unidades} />
-      </div>
-      <div className="grid grid-cols-3 gap-3 mb-4">
-        <StatCard label="Costo de mercadería vendida" value={`Bs ${costoVendidoAjustado.toLocaleString("es-BO")}`} />
-        <StatCard label="Pérdida por merma (devoluciones)" value={`Bs ${costoMerma.toLocaleString("es-BO")}`} accent="#7A2540" />
-        <StatCard label="Ganancia neta" value={`Bs ${ganancia.toLocaleString("es-BO")}`} accent="#4F6F52" />
-      </div>
-
-      <div className="p-4 mb-4" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-        <p className="font-serif text-base mb-1 flex items-center gap-2"><Boxes size={16} style={{ color: "#5B4E5E" }} /> Valor del inventario actual</p>
-        <div className="grid grid-cols-3 gap-3 mt-2">
-          <StatCard label="A costo" value={`Bs ${valorCosto.toLocaleString("es-BO")}`} />
-          <StatCard label="A precio de venta" value={`Bs ${valorVenta.toLocaleString("es-BO")}`} accent="#9C7A3C" />
-          <StatCard label="Ganancia potencial" value={`Bs ${gananciaPotencial.toLocaleString("es-BO")}`} accent="#4F6F52" />
-        </div>
-      </div>
-
-      <div className="p-4 mb-4" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-        <p className="font-serif text-base mb-3">Ventas por categoría</p>
-        <div style={{ width: "100%", height: 220 }}>
-          <ResponsiveContainer>
-            {estiloGrafico === "line" ? <LineChart data={porCategoria}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="cat"/><YAxis/><Tooltip/><Line type="monotone" dataKey="ventas" /></LineChart> : estiloGrafico === "area" ? <AreaChart data={porCategoria}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="cat"/><YAxis/><Tooltip/><Area type="monotone" dataKey="ventas" /></AreaChart> : estiloGrafico === "pie" ? <PieChart><Pie data={porCategoria} dataKey="ventas" nameKey="cat" cx="50%" cy="45%" outerRadius={75} label><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/></Pie><Tooltip/><Legend/></PieChart> : <BarChart data={porCategoria}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="cat"/><YAxis/><Tooltip/><Bar dataKey="ventas" /></BarChart>}
-          </ResponsiveContainer>
-        </div>
-      </div>
-
-      <div className="p-4" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-        <p className="font-serif text-base mb-1 flex items-center gap-2"><PackageX size={16} style={{ color: "#5B4E5E" }} /> Productos sin movimiento</p>
-        {stockMuerto.map((p, i) => (
-          <div key={p.code} className="flex justify-between text-sm py-1.5" style={{ borderBottom: i < stockMuerto.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-            <span>{p.code} · {p.name}</span>
-            <span style={{ color: "#5B4E5E" }}>{p.stock_available} unid.</span>
-          </div>
-        ))}
-        {stockMuerto.length === 0 && <p className="text-sm" style={{ color: "#5B4E5E" }}>No hay productos estancados por ahora.</p>}
-      </div>
-    </div>
-  );
+export default function Reportes(){
+ const [periodo,setPeriodo]=useState("mes"),[vista,setVista]=useState<"general"|"clientes">("general");
+ const [ventas,setVentas]=useState(0),[devolucionProducto,setDevolucionProducto]=useState(0),[cobrado,setCobrado]=useState(0),[costo,setCosto]=useState(0),[costoBuenEstado,setCostoBuenEstado]=useState(0),[costoMerma,setCostoMerma]=useState(0),[unidades,setUnidades]=useState(0);
+ const [porCategoria,setPorCategoria]=useState<{cat:string;ventas:number}[]>([]),[porFecha,setPorFecha]=useState<{fecha:string;ventas:number;ganancia:number}[]>([]),[clientes,setClientes]=useState<ClienteResumen[]>([]),[productos,setProductos]=useState<Product[]>([]);
+ const [estiloGrafico,setEstiloGrafico]=useState("bar"),[color1,setColor1]=useState("#405B9B"),[color2,setColor2]=useState("#8AA05A"),[stockMuerto,setStockMuerto]=useState<any[]>([]);
+ useEffect(()=>{cargarPeriodo()},[periodo]);
+ useEffect(()=>{supabase.from("products").select("*").is("deleted_at",null).then(({data})=>setProductos((data as Product[])??[])); cargarStockMuerto(); cargarPreferencias(); const sync=()=>cargarPreferencias(); window.addEventListener("loves-chart-style-changed",sync); return()=>window.removeEventListener("loves-chart-style-changed",sync)},[]);
+ async function cargarPreferencias(){const local=localStorage.getItem("loves_chart_style")??"bar"; const {data}=await supabase.from("app_settings").select("chart_style,report_primary_color,report_secondary_color").eq("id",1).single(); setEstiloGrafico(data?.chart_style??local); setColor1(data?.report_primary_color??"#405B9B"); setColor2(data?.report_secondary_color??"#8AA05A");}
+ async function cargarPeriodo(){
+  const inicio=desde(periodo); const {data}=await supabase.from("orders").select("id,customer_id,closed_at,total_cerrado,customers(name,phone),order_items(quantity,unit_price,products(cost,categories(name)))").eq("status","closed").gte("closed_at",inicio).order("closed_at");
+  let bruta=0,c=0,u=0; const cat:Record<string,number>={}, fechas:Record<string,{ventas:number;ganancia:number}>={}, cli:Record<string,ClienteResumen>={}; const ids:string[]=[];
+  (data??[]).forEach((o:any)=>{const total=Number(o.total_cerrado??0); bruta+=total; ids.push(o.id); let costoOrden=0,unOrden=0; (o.order_items??[]).forEach((it:any)=>{const ci=Number(it.quantity||0)*Number(it.products?.cost??0); costoOrden+=ci;c+=ci;u+=Number(it.quantity||0);unOrden+=Number(it.quantity||0);const nc=it.products?.categories?.name??"Otros";cat[nc]=(cat[nc]??0)+Number(it.quantity||0)*Number(it.unit_price||0)}); const f=new Date(o.closed_at).toLocaleDateString("es-BO",periodo==="anio"?{month:"short"}:{day:"2-digit",month:"short"}); if(!fechas[f])fechas[f]={ventas:0,ganancia:0};fechas[f].ventas+=total;fechas[f].ganancia+=total-costoOrden; const id=o.customer_id; if(!cli[id])cli[id]={id,nombre:o.customers?.name??"Sin cliente",telefono:o.customers?.phone??"",ventas:0,unidades:0,acumulado:0,costo:0,ganancia:0,margen:0}; cli[id].ventas++;cli[id].unidades+=unOrden;cli[id].acumulado+=total;cli[id].costo+=costoOrden;cli[id].ganancia+=total-costoOrden; });
+  Object.values(cli).forEach(x=>x.margen=x.acumulado?x.ganancia/x.acumulado*100:0);
+  let dev=0,buen=0,merma=0,cob=0; if(ids.length){const [{data:ds},{data:ri},{data:ps}]=await Promise.all([supabase.from("returns").select("total_amount,type").eq("status","activa").in("order_id",ids),supabase.from("return_items").select("quantity,restock,products(cost),returns!inner(order_id,status,type)").eq("returns.status","activa").eq("returns.type","producto").in("returns.order_id",ids),supabase.from("payments").select("amount").in("order_id",ids)]); (ds??[]).forEach((d:any)=>{if(d.type==="producto")dev+=Number(d.total_amount||0)});(ri??[]).forEach((r:any)=>{const x=Number(r.quantity||0)*Number(r.products?.cost??0);r.restock?buen+=x:merma+=x});cob=(ps??[]).reduce((a:number,p:any)=>a+Number(p.amount||0),0)}
+  setVentas(bruta);setCosto(c);setUnidades(u);setDevolucionProducto(dev);setCostoBuenEstado(buen);setCostoMerma(merma);setCobrado(cob);setPorCategoria(Object.entries(cat).map(([cat,ventas])=>({cat,ventas})));setPorFecha(Object.entries(fechas).map(([fecha,v])=>({fecha,...v})));setClientes(Object.values(cli).sort((a,b)=>b.acumulado-a.acumulado));
+ }
+ async function cargarStockMuerto(){const d=new Date();d.setDate(d.getDate()-45);const {data}=await supabase.from("products").select("code,name,stock_available,updated_at").is("deleted_at",null).lt("updated_at",d.toISOString()).gt("stock_available",0).limit(8);setStockMuerto(data??[])}
+ const ventaNeta=ventas-devolucionProducto,costoVendido=costo-costoBuenEstado,ganancia=ventaNeta-costoVendido,margen=ventaNeta?ganancia/ventaNeta*100:0,ventaPromedio=clientes.reduce((a,x)=>a+x.ventas,0)?ventas/clientes.reduce((a,x)=>a+x.ventas,0):0;
+ const valorCosto=productos.reduce((a,p)=>a+p.cost*p.stock_available,0),valorVenta=productos.reduce((a,p)=>a+p.price*p.stock_available,0);
+ const chart=(data:any[],key="ventas",nameKey="fecha")=><ResponsiveContainer width="100%" height="100%">{estiloGrafico==="line"?<LineChart data={data}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey={nameKey}/><YAxis/><Tooltip formatter={(v:any)=>bs(Number(v))}/><Line type="monotone" dataKey={key} stroke={color1} strokeWidth={3}/></LineChart>:estiloGrafico==="area"?<AreaChart data={data}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey={nameKey}/><YAxis/><Tooltip formatter={(v:any)=>bs(Number(v))}/><Area type="monotone" dataKey={key} stroke={color1} fill={color1} fillOpacity={.3}/></AreaChart>:estiloGrafico==="pie"?<PieChart><Pie data={data} dataKey={key} nameKey={nameKey} cx="50%" cy="45%" outerRadius={85} label>{data.map((_,i)=><Cell key={i} fill={i%2?color2:color1}/>)}</Pie><Tooltip formatter={(v:any)=>bs(Number(v))}/><Legend/></PieChart>:<BarChart data={data}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey={nameKey}/><YAxis/><Tooltip formatter={(v:any)=>bs(Number(v))}/><Bar dataKey={key} fill={color1} radius={[4,4,0,0]}/></BarChart>}</ResponsiveContainer>;
+ return <div>
+  <div className="flex flex-wrap items-center justify-between gap-2 mb-4"><div className="flex gap-2"><button onClick={()=>setVista("general")} className="px-3 py-2 rounded-md text-sm flex gap-2 items-center" style={{background:vista==="general"?color1:"#F7F3EC",color:vista==="general"?"white":"#2B1E2E",border:"1px solid #D9D0C2"}}><BarChart3 size={15}/>Reporte de ventas</button><button onClick={()=>setVista("clientes")} className="px-3 py-2 rounded-md text-sm flex gap-2 items-center" style={{background:vista==="clientes"?color1:"#F7F3EC",color:vista==="clientes"?"white":"#2B1E2E",border:"1px solid #D9D0C2"}}><Users size={15}/>Ventas por cliente</button></div><div className="flex gap-1">{[{key:"dia",label:"Día"},{key:"mes",label:"Mes"},{key:"anio",label:"Año"}].map(o=><button key={o.key} onClick={()=>setPeriodo(o.key)} className="text-xs px-3 py-1.5 rounded-md" style={{background:periodo===o.key?color2:"#F7F3EC",color:periodo===o.key?"white":"#5B4E5E",border:"1px solid #D9D0C2"}}>{o.label}</button>)}</div></div>
+  {vista==="general"?<>
+   <div className="rounded-lg p-5 mb-4" style={{background:"#fff",border:`1px solid ${color1}33`,boxShadow:"0 2px 10px #0000000d"}}><h2 className="font-serif text-xl mb-4" style={{color:color1}}>Resumen de ventas</h2><div className="grid grid-cols-2 lg:grid-cols-4 gap-4"><StatCard label="Ventas totales" value={bs(ventaNeta)} accent={color1}/><StatCard label="Ganancia" value={bs(ganancia)} accent={color2}/><StatCard label="Margen de utilidad" value={`${margen.toFixed(2)}%`} accent={color1}/><StatCard label="Venta promedio" value={bs(ventaPromedio)} accent={color2}/><StatCard label="Número de ventas" value={clientes.reduce((a,x)=>a+x.ventas,0)}/><StatCard label="Unidades vendidas" value={unidades}/><StatCard label="Costo mercadería" value={bs(costoVendido)}/><StatCard label="Cobrado" value={bs(cobrado)}/></div></div>
+   <div className="grid lg:grid-cols-2 gap-4 mb-4"><section className="bg-white rounded-lg p-4" style={{border:"1px solid #D9D0C2"}}><h3 className="font-serif text-lg mb-3" style={{color:color1}}>Ventas por fecha</h3><div className="h-72">{chart(porFecha,"ventas","fecha")}</div></section><section className="bg-white rounded-lg p-4" style={{border:"1px solid #D9D0C2"}}><h3 className="font-serif text-lg mb-3" style={{color:color1}}>Ventas por categoría</h3><div className="h-72">{chart(porCategoria,"ventas","cat")}</div></section></div>
+   <div className="grid lg:grid-cols-2 gap-4"><section className="rounded-lg p-4" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}><p className="font-serif text-base mb-3 flex gap-2"><Boxes size={16}/>Valor del inventario actual</p><div className="grid grid-cols-3 gap-2"><StatCard label="A costo" value={bs(valorCosto)}/><StatCard label="A precio de venta" value={bs(valorVenta)} accent={color1}/><StatCard label="Ganancia potencial" value={bs(valorVenta-valorCosto)} accent={color2}/></div></section><section className="rounded-lg p-4" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}><p className="font-serif text-base mb-2 flex gap-2"><PackageX size={16}/>Productos sin movimiento</p>{stockMuerto.map((p:any,i)=><div key={p.code} className="flex justify-between text-sm py-1.5" style={{borderBottom:i<stockMuerto.length-1?"1px solid #D9D0C2":"none"}}><span>{p.code} · {p.name}</span><span>{p.stock_available} unid.</span></div>)}</section></div>
+  </>:<>
+   <div className="rounded-lg overflow-hidden bg-white" style={{border:"1px solid #D9D0C2",boxShadow:"0 2px 10px #0000000d"}}><div className="p-5" style={{borderBottom:`3px solid ${color1}`}}><h2 className="font-serif text-xl" style={{color:color1}}>Reporte de ventas por cliente</h2><p className="text-xs mt-1" style={{color:"#5B4E5E"}}>Clientes ordenados por ventas acumuladas del período seleccionado.</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr style={{background:color1,color:"white"}}>{["Cliente","Teléfono","Nº ventas","Unidades","Acumulado ventas","Costo acumulado","Ganancia","Margen"].map(x=><th key={x} className="text-left px-4 py-3 whitespace-nowrap">{x}</th>)}</tr></thead><tbody>{clientes.map((c,i)=><tr key={c.id} style={{background:i%2?`${color2}12`:"white",borderBottom:"1px solid #E8E1D8"}}><td className="px-4 py-3 font-medium">{c.nombre}</td><td className="px-4 py-3">{c.telefono}</td><td className="px-4 py-3">{c.ventas}</td><td className="px-4 py-3">{c.unidades}</td><td className="px-4 py-3 font-semibold">{bs(c.acumulado)}</td><td className="px-4 py-3">{bs(c.costo)}</td><td className="px-4 py-3 font-semibold" style={{color:color2}}>{bs(c.ganancia)}</td><td className="px-4 py-3">{c.margen.toFixed(2)}%</td></tr>)}</tbody></table></div></div>
+  </>}
+ </div>
 }
