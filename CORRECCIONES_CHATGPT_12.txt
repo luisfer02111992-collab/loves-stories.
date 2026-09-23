@@ -1,0 +1,13 @@
+CORRECCIÓN 12 — IMPRESIÓN TÉRMICA MHT-80 / 72 MM
+
+- Ajuste automático al papel de 72 mm.
+- @page sin margen del navegador; contenido útil de 68 mm con 2 mm laterales.
+- Ya no debe ser necesario reducir manualmente la escala/área de impresión.
+- Texto forzado a negro sólido, sin transparencias, sombras ni grises.
+- Tipografía Arial más gruesa para mejorar nitidez en impresoras térmicas.
+- Totales y textos importantes con peso alto.
+- Separadores negros más visibles.
+- La prueba de impresora usa exactamente el mismo formato que los tickets reales.
+
+No requiere SQL nuevo.
+Nota: la intensidad física/temperatura de impresión depende también del driver de Windows y de la configuración de densidad de la impresora. El sistema ahora envía texto negro sólido; si aun así todo el ticket sale pálido, revisar Preferencias de impresión > Density/Darkness del controlador MHT-80.
