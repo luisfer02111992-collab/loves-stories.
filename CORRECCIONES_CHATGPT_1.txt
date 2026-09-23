@@ -1,0 +1,12 @@
+LOVES STORIES — CORRECCIONES CHATGPT 1
+
+Incluye:
+- Productos: Enter guarda la edición, con protección contra doble guardado.
+- Preasignación: Enter explícito para agregar y selección automática de la fila; Supr/Delete elimina la fila temporal seleccionada.
+- Pedido abierto: disminuir y eliminar operan sobre IDs reales de order_items, evitando el fallo causado por combinar filas internas.
+- Precio histórico: las asignaciones conservan unit_price; se agregó edición manual del precio del producto dentro del pedido abierto, sin cambiar products.price ni ventas cerradas.
+- Ciclos financieros: payments.applied_amount separa dinero ya consumido de saldo disponible. Al cerrar no se inventan pagos; se consume solo dinero real y el sobrante queda como crédito.
+- Devolución de saldo a favor: consume crédito mediante RPC y auditoría, sin insertar pagos negativos ficticios.
+
+IMPORTANTE:
+Ejecutar primero supabase_migration_CORRECCIONES_CHATGPT_1.sql en Supabase. Después publicar el frontend.

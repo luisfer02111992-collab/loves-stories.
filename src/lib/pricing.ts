@@ -81,16 +81,8 @@ export function agruparPorProducto(reglas: PricingRule[], lineas: LineaPedido[])
     g.precioUnitarioFinal = precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
     g.subtotalConDescuento = g.precioUnitarioFinal * g.cantidadTotal;
     g.descuento = g.subtotalSinDescuento - g.subtotalConDescuento;
-    // Si varias asignaciones cayeron el mismo día (y mismo vendedor), se
-    // muestran como una sola fecha con la cantidad sumada, no repetida.
-    const combinado = new Map<string, { id: string; cantidad: number; fecha: string; vendedorNombre?: string | null }>();
-    for (const d of g.detalle) {
-      const clave = `${d.fecha}__${d.vendedorNombre ?? ""}`;
-      const existente = combinado.get(clave);
-      if (existente) existente.cantidad += d.cantidad;
-      else combinado.set(clave, { ...d });
-    }
-    g.detalle = Array.from(combinado.values());
+    // Se conservan las líneas reales y sus IDs. La UI puede resumir fechas,
+    // pero las operaciones +/-/eliminar deben apuntar a filas reales de order_items.
   }
   return Array.from(grupos.values());
 }
