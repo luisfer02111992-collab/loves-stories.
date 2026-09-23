@@ -1,0 +1,9 @@
+CORRECCIÓN 16 — TICKET TÉRMICO 80 MM
+- Mantiene el mecanismo de impresión de la Corrección 15.
+- Descuento SIEMPRE visible; si no existe, muestra Bs 0.00.
+- Ticket de venta cerrada: fecha y hora reales de cierre, cliente/teléfono, responsable y rol.
+- Guarda closed_by al cerrar nuevas cuentas para identificar al administrador/vendedor real.
+- Detalle compacto: cantidad, código, producto, importe, precio unitario y descuento.
+- Totales: número de artículos, subtotal, descuento y total.
+- Loves Stories cursiva arriba/abajo y teléfono del negocio desde Configuración.
+- Los cierres antiguos, anteriores a esta migración, pueden mostrar “No registrado” como responsable.

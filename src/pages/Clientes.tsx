@@ -21,7 +21,7 @@ const PLAZO_DIAS = 5;
 
 export default function Clientes() {
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
-  const { userId } = useAuth();
+  const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
   const [depositoSeleccionado, setDepositoSeleccionado] = useState<string | null>(null);
   const [guardandoDeposito, setGuardandoDeposito] = useState(false);
@@ -700,15 +700,26 @@ export default function Clientes() {
                   {telefonoNegocio && <p className="text-center">CEL: {telefonoNegocio}</p>}
                   <p className="text-center">Detalle de pedido</p>
                   <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                  <p>Fecha: {new Date().toLocaleDateString("es-BO")}</p>
+                  <p>Hora: {new Date().toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</p>
+                  <p>Responsable: {profile?.full_name || "No registrado"}</p>
+                  <p>Rol: {profile?.role === "admin" ? "Administrador" : "Vendedor"}</p>
                   <p>Cliente: {seleccionado.name}</p>
+                  {seleccionado.phone && <p>Teléfono: {seleccionado.phone}</p>}
+                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                  <div className="flex justify-between font-bold"><span>CANT.  CÓDIGO  PRODUCTO</span><span>IMPORTE</span></div>
+                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
                   {grupos.map((g) => (
-                    <div key={g.product_id} className="flex justify-between"><span>{g.codigo} x{g.cantidadTotal}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
+                    <div key={g.product_id}>
+                      <div className="flex justify-between"><span>{g.cantidadTotal}  {g.codigo}  {g.nombre}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
+                      <div className="flex justify-between"><span>Precio unit.: Bs {g.precioUnitarioFinal.toFixed(2)}</span><span>Desc.: Bs {g.descuento.toFixed(2)}</span></div>
+                    </div>
                   ))}
                   <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  <div className="flex justify-between"><span>Descuento</span><span>-Bs {descuentoTotal.toFixed(2)}</span></div>
-                  <div className="flex justify-between font-bold"><span>Total</span><span>Bs {total.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>Pagado</span><span>Bs {depositado.toFixed(2)}</span></div>
-                  <div className="flex justify-between font-bold"><span>{saldoAFavor > 0 ? "Saldo a favor" : "Saldo"}</span><span>Bs {(saldoAFavor > 0 ? saldoAFavor : saldoPendiente).toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>N.º DE ARTÍCULOS</span><span>{grupos.reduce((a, g) => a + g.cantidadTotal, 0)}</span></div>
+                  <div className="flex justify-between"><span>SUBTOTAL</span><span>Bs {subtotalSinDescuento.toFixed(2)}</span></div>
+                  <div className="flex justify-between"><span>DESCUENTO</span><span>Bs {descuentoTotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between font-bold"><span>TOTAL</span><span>Bs {total.toFixed(2)}</span></div>
                   <p className="text-center" style={{ marginTop: 8 }}>GRACIAS POR SU COMPRA</p>
                   <p className="text-center font-bold" style={{ fontSize: "1rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
                 </div>

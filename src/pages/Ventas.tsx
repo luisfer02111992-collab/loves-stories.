@@ -15,6 +15,8 @@ interface VentaCerrada {
   telefono: string;
   closed_at: string;
   total_cerrado: number | null;
+  cerradoPor: string;
+  rolCierre: string;
   items: (LineaPedido & { descripcion?: string; costo?: number })[];
 }
 
@@ -79,7 +81,7 @@ export default function Ventas() {
     const hasta = new Date(fecha + "T23:59:59");
     const { data } = await supabase
       .from("orders")
-      .select("id, order_number, closed_at, total_cerrado, customers(name, phone), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, products(code, name, description, category_id, cost))")
+      .select("id, order_number, closed_at, total_cerrado, closed_by, customers(name, phone), closed_profile:profiles!orders_closed_by_fkey(full_name, role), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, products(code, name, description, category_id, cost))")
       .eq("status", "closed")
       .gte("closed_at", desde.toISOString())
       .lte("closed_at", hasta.toISOString())
@@ -92,6 +94,8 @@ export default function Ventas() {
       telefono: o.customers?.phone ?? "",
       closed_at: o.closed_at,
       total_cerrado: o.total_cerrado,
+      cerradoPor: o.closed_profile?.full_name ?? "No registrado",
+      rolCierre: o.closed_profile?.role === "admin" ? "Administrador" : o.closed_profile?.role === "employee" ? "Vendedor" : "No registrado",
       items: (o.order_items ?? []).map((it: any) => ({
         id: it.id,
         product_id: it.product_id,
@@ -556,16 +560,26 @@ export default function Ventas() {
                 {telefonoNegocio && <p className="text-center">CEL: {telefonoNegocio}</p>}
                 <p className="text-center">Recibo — Pedido #{v.order_number}</p>
                 <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                <p>Fecha cierre: {new Date(v.closed_at).toLocaleDateString("es-BO")}</p>
+                <p>Hora cierre: {new Date(v.closed_at).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</p>
+                <p>Cerrado por: {v.cerradoPor}</p>
+                <p>Rol: {v.rolCierre}</p>
                 <p>Cliente: {v.cliente}</p>
+                {v.telefono && <p>Teléfono: {v.telefono}</p>}
+                <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
+                <div className="flex justify-between font-bold"><span>CANT.  CÓDIGO  PRODUCTO</span><span>IMPORTE</span></div>
+                <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
                 {t.grupos.map((g) => (
-                  <div key={g.product_id} className="flex justify-between"><span>{g.codigo} x{g.cantidadTotal}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
+                  <div key={g.product_id}>
+                    <div className="flex justify-between"><span>{g.cantidadTotal}  {g.codigo}  {g.nombre}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
+                    <div className="flex justify-between"><span>Precio unit.: Bs {g.precioUnitarioFinal.toFixed(2)}</span><span>Desc.: Bs {g.descuento.toFixed(2)}</span></div>
+                  </div>
                 ))}
                 <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                <div className="flex justify-between font-bold"><span>Total</span><span>Bs {t.bruta.toFixed(2)}</span></div>
-                <div className="flex justify-between"><span>Cobrado</span><span>Bs {t.cobrado.toFixed(2)}</span></div>
-                {t.devolucionProducto > 0 && (
-                  <div className="flex justify-between"><span>Devuelto</span><span>Bs {t.devolucionProducto.toFixed(2)}</span></div>
-                )}
+                <div className="flex justify-between"><span>N.º DE ARTÍCULOS</span><span>{t.grupos.reduce((a, g) => a + g.cantidadTotal, 0)}</span></div>
+                <div className="flex justify-between"><span>SUBTOTAL</span><span>Bs {t.grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0).toFixed(2)}</span></div>
+                <div className="flex justify-between"><span>DESCUENTO</span><span>Bs {t.grupos.reduce((a, g) => a + g.descuento, 0).toFixed(2)}</span></div>
+                <div className="flex justify-between font-bold"><span>TOTAL</span><span>Bs {t.bruta.toFixed(2)}</span></div>
                 <p className="text-center" style={{ marginTop: 8 }}>GRACIAS POR SU COMPRA</p>
                 <p className="text-center font-bold" style={{ fontSize: "1rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
               </div>
