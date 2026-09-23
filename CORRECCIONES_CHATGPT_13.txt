@@ -1,0 +1,10 @@
+CORRECCIÓN 13 — IMPRESIÓN TÉRMICA
+
+- Se eliminó la impresión automática al abrir el ticket.
+- Nueva vista previa con botones Imprimir y Cancelar.
+- Cancelar cierra la vista previa sin enviar nada a la impresora.
+- Al pulsar Imprimir se calcula el alto real del contenido y se crea una página de 72 mm con ese alto.
+- Se evita usar el alto enorme 72 x 3276 mm del driver para tickets cortos.
+- Límite de seguridad de 500 mm por página para impedir avances de papel kilométricos por errores de layout.
+- Se mantiene texto negro y grueso para impresión térmica nítida.
+- No requiere SQL.
