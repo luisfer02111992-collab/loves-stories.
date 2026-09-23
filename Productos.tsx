@@ -16,6 +16,7 @@ export default function Productos() {
   const [mostrarNuevo, setMostrarNuevo] = useState(false);
   const [nuevo, setNuevo] = useState({ code: "", name: "", category_id: "", cost: 0, price: 0, stock_physical: 0, image_url: "" });
   const [subiendo, setSubiendo] = useState(false);
+  const [guardando, setGuardando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const buscadorRef = useRef<HTMLInputElement>(null);
 
@@ -76,7 +77,8 @@ export default function Productos() {
   }, [lista, seleccionadoId]);
 
   async function guardar() {
-    if (!seleccionado) return;
+    if (!seleccionado || guardando) return;
+    setGuardando(true);
     const cambioPrecio = form.price !== undefined && form.price !== seleccionado.price;
     await supabase
       .from("products")
@@ -96,7 +98,8 @@ export default function Productos() {
       await supabase.from("price_history").update({ valid_to: new Date().toISOString() }).eq("product_id", seleccionado.id).is("valid_to", null);
       await supabase.from("price_history").insert({ product_id: seleccionado.id, price: form.price });
     }
-    cargar(true);
+    await cargar(true);
+    setGuardando(false);
   }
 
   function cancelar() {
@@ -229,13 +232,13 @@ export default function Productos() {
       <div className="md:col-span-2">
         {seleccionado && (
           <>
-            <div className="p-4" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+            <form onSubmit={(e) => { e.preventDefault(); guardar(); }} className="p-4" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}> 
               <div className="flex items-center justify-between mb-3">
                 <p className="font-serif text-lg flex items-center gap-2"><Pencil size={15} /> Editar producto</p>
                 <div className="flex gap-1.5">
-                  <button onClick={guardar} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar</button>
-                  <button onClick={cancelar} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
-                  <button onClick={eliminarProducto} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#F4E3E6", color: "#7A2540" }}>
+                  <button type="submit" disabled={guardando} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>{guardando ? "Guardando..." : "Guardar (Enter)"}</button>
+                  <button type="button" onClick={cancelar} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
+                  <button type="button" onClick={eliminarProducto} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#F4E3E6", color: "#7A2540" }}>
                     <Trash2 size={13} /> Eliminar
                   </button>
                 </div>
@@ -291,7 +294,7 @@ export default function Productos() {
                   <span className="font-serif" style={{ color: "#4F6F52" }}>Bs {(form.price ?? 0) - (form.cost ?? 0)}</span>
                 </div>
               )}
-            </div>
+            </form>
 
             {verPrecios && historial.length > 0 && (
               <div className="p-4 mt-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
@@ -321,3 +324,4 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
+

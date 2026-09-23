@@ -9,7 +9,9 @@ import type { Customer } from "../lib/types";
 
 interface DepositoDetalle {
   id: string;
-  amount: number;
+  amount: number; // saldo todavía disponible de este depósito
+  original_amount?: number;
+  applied_amount?: number;
   method: string;
   paid_at: string;
 }
@@ -49,6 +51,9 @@ export default function Clientes() {
   const [pendienteSobrante, setPendienteSobrante] = useState(false);
   const [generandoPdf, setGenerandoPdf] = useState(false);
   const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
+  const [editandoPrecio, setEditandoPrecio] = useState<string | null>(null);
+  const [precioManual, setPrecioManual] = useState(0);
+  const [guardandoPrecio, setGuardandoPrecio] = useState(false);
 
   useEffect(() => {
     cargarClientes();
@@ -130,20 +135,34 @@ export default function Clientes() {
       setItems(detalle);
     }
 
-    // "Banco del cliente": dinero real depositado (se excluyen los pagos que
-    // el propio sistema genera al cerrar o devolver sobrantes) menos lo ya
-    // consumido en pedidos anteriores de este cliente que ya están cerrados.
-    // Es la misma fórmula que usa close_order en Supabase, para que la
-    // pantalla muestre exactamente lo mismo que va a pasar al cerrar.
-    const { data: pagos } = await supabase.from("payments").select("id, amount, method, paid_at").eq("customer_id", customerId).order("paid_at", { ascending: false });
-    setDepositos((pagos as DepositoDetalle[]) ?? []);
-    const pagadoReal = (pagos ?? []).filter((p: any) => p.method !== "cierre_pedido" && p.method !== "devolucion_sobrante").reduce((a: number, p: any) => a + p.amount, 0);
-    const { data: cerrados } = await supabase.from("orders").select("total_cerrado").eq("customer_id", customerId).eq("status", "closed");
-    const consumidoPrevio = (cerrados ?? []).reduce((a: number, o: any) => a + (o.total_cerrado ?? 0), 0);
-    setDisponible(pagadoReal - consumidoPrevio);
+    // Dinero realmente disponible: cada depósito conserva cuánto ya fue
+    // aplicado a ciclos cerrados. Así un depósito usado NO reaparece en el
+    // siguiente pedido y un sobrante real sí continúa como saldo a favor.
+    const { data: pagos } = await supabase
+      .from("payments")
+      .select("id, amount, applied_amount, method, paid_at")
+      .eq("customer_id", customerId)
+      .order("paid_at", { ascending: false });
+    const disponibles: DepositoDetalle[] = (pagos ?? [])
+      .filter((p: any) => p.method !== "cierre_pedido" && p.method !== "devolucion_sobrante")
+      .map((p: any) => ({
+        id: p.id, method: p.method, paid_at: p.paid_at,
+        original_amount: Number(p.amount ?? 0),
+        applied_amount: Number(p.applied_amount ?? 0),
+        amount: Math.max(0, Number(p.amount ?? 0) - Number(p.applied_amount ?? 0)),
+      }))
+      .filter((p) => p.amount > 0.0001);
+    setDepositos(disponibles);
+    setDisponible(disponibles.reduce((a, p) => a + p.amount, 0));
   }
 
   const grupos: GrupoProducto[] = useMemo(() => agruparPorProducto(reglas, items), [items, reglas]);
+
+  function resumenFechas(g: GrupoProducto) {
+    const porFecha = new Map<string, number>();
+    for (const d of g.detalle) porFecha.set(d.fecha, (porFecha.get(d.fecha) ?? 0) + d.cantidad);
+    return Array.from(porFecha.entries()).map(([fecha, cantidad]) => `${fecha}: ${cantidad} un.`).join(" · ");
+  }
 
   // Supr/Delete: quita el producto o el depósito seleccionado (con la misma
   // confirmación que el botón correspondiente), sin interferir con lo que
@@ -186,9 +205,22 @@ export default function Clientes() {
   const semaforo = diasApertura >= PLAZO_DIAS ? "rojo" : diasApertura >= PLAZO_DIAS - 1 ? "amarillo" : "verde";  const colorSemaforo = { verde: "#4F6F52", amarillo: "#B7791F", rojo: "#7A2540" }[semaforo];
   const textoSemaforo = { verde: "Plazo vigente", amarillo: "Se acerca al vencimiento", rojo: "Plazo vencido (aviso, no bloquea)" }[semaforo];
 
+  async function guardarPrecioManual(productId: string) {
+    if (!ordenId || guardandoPrecio || precioManual < 0) return;
+    setGuardandoPrecio(true);
+    const { error } = await supabase.rpc("update_open_order_product_price", {
+      p_order_id: ordenId, p_product_id: productId, p_unit_price: precioManual,
+    });
+    setGuardandoPrecio(false);
+    if (error) { alert(error.message); return; }
+    setEditandoPrecio(null);
+    if (seleccionado) await cargarPedido(seleccionado.id);
+  }
+
   async function quitarUnidad(itemId: string) {
-    await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
-    if (seleccionado) cargarPedido(seleccionado.id);
+    const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
+    if (error) { alert(`No se pudo disminuir: ${error.message}`); return; }
+    if (seleccionado) await cargarPedido(seleccionado.id);
   }
 
   async function aumentarUnidad(productId: string) {
@@ -203,10 +235,11 @@ export default function Clientes() {
   async function quitarProductoCompleto(g: GrupoProducto) {
     if (!confirm(`¿Quitar "${g.nombre}" completo (${g.cantidadTotal} unidades) de este pedido? Se devuelve todo al inventario.`)) return;
     for (const d of g.detalle) {
-      await supabase.rpc("remove_order_item_unit", { p_order_item_id: d.id, p_quantity: d.cantidad });
+      const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: d.id, p_quantity: d.cantidad });
+      if (error) { alert(`No se pudo eliminar el producto: ${error.message}`); return; }
     }
     setProductoSeleccionado(null);
-    if (seleccionado) cargarPedido(seleccionado.id);
+    if (seleccionado) await cargarPedido(seleccionado.id);
   }
 
   // Eliminar un depósito registrado por error: pide confirmación, deja
@@ -214,6 +247,10 @@ export default function Clientes() {
   // silencio), y recalcula solo automáticamente porque saldo/disponible
   // se recalculan a partir de la lista de depósitos.
   async function eliminarDeposito(d: DepositoDetalle) {
+    if ((d.applied_amount ?? 0) > 0) {
+      alert("Este depósito ya fue utilizado total o parcialmente en un pedido cerrado y no puede eliminarse desde el pedido abierto. Su historial debe conservarse.");
+      return;
+    }
     const motivo = prompt(`¿Eliminar el depósito de Bs ${d.amount} (${d.method}, ${new Date(d.paid_at).toLocaleDateString("es-BO")})? Escribe el motivo para continuar:`);
     if (!motivo) return;
     await supabase.from("audit_log").insert({
@@ -229,6 +266,15 @@ export default function Clientes() {
   async function confirmarCierre() {
     if (!ordenId || !seleccionado || cerrando) return;
     setCerrando(true);
+    // Seguridad financiera: el total que cerrará Supabase debe coincidir con
+    // el total que ve el usuario. Si no coincide, no consumimos depósitos.
+    const { data: totalServidor, error: errorTotal } = await supabase.rpc("calcular_total_pedido", { p_order_id: ordenId });
+    if (errorTotal) { alert(errorTotal.message); setCerrando(false); return; }
+    if (Math.abs(Number(totalServidor ?? 0) - total) > 0.01) {
+      alert(`No se cerró el pedido porque el total del servidor (Bs ${Number(totalServidor ?? 0).toFixed(2)}) no coincide con el total mostrado (Bs ${total.toFixed(2)}). Actualiza la página y vuelve a revisar.`);
+      setCerrando(false);
+      return;
+    }
     const { error } = await supabase.rpc("close_order", { p_order_id: ordenId });
     if (error) {
       alert(error.message);
@@ -254,7 +300,9 @@ export default function Clientes() {
   // Sobrante al cerrar: si queda saldo a favor, preguntar qué hacer (nunca decidir solo).
   async function devolverSobrante() {
     if (!seleccionado || saldoAFavor <= 0) return;
-    await supabase.from("payments").insert({ customer_id: seleccionado.id, order_id: ordenId, amount: -saldoAFavor, method: "devolucion_sobrante" });
+    if (!confirm(`¿Confirmas que devolviste Bs ${saldoAFavor.toFixed(2)} al cliente?`)) return;
+    const { error } = await supabase.rpc("refund_customer_credit", { p_customer_id: seleccionado.id, p_amount: saldoAFavor });
+    if (error) { alert(error.message); return; }
     setPendienteSobrante(false);
     await cargarPedido(seleccionado.id);
   }
@@ -519,7 +567,7 @@ export default function Clientes() {
                 ))
               )}
               <div className="flex justify-between text-sm mt-2 pt-2" style={{ borderTop: "1px solid #D9D0C2" }}>
-                <span style={{ color: "#5B4E5E" }}>Total depositado</span>
+                <span style={{ color: "#5B4E5E" }}>Disponible para este pedido</span>
                 <span className="font-serif" style={{ color: "#4F6F52" }}>Bs {depositado.toFixed(2)}</span>
               </div>
             </div>
@@ -534,7 +582,18 @@ export default function Clientes() {
                     <div className="flex items-center justify-between">
                       <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
                       <div className="flex items-center gap-2">
-                        <span className="font-serif text-sm">Bs {g.subtotalConDescuento.toFixed(2)}</span>
+                        {editandoPrecio === g.product_id ? (
+                          <form onSubmit={(e) => { e.preventDefault(); guardarPrecioManual(g.product_id); }} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
+                            <input autoFocus type="number" min={0} step="0.01" value={precioManual} onChange={(e) => setPrecioManual(Number(e.target.value))}
+                              className="w-20 px-1.5 py-1 rounded text-xs outline-none" style={{ background: "#fff", border: "1px solid #D9D0C2" }} />
+                            <button type="submit" disabled={guardandoPrecio} className="text-xs px-2 py-1 rounded" style={{ background: "#4F6F52", color: "#F7F3EC" }}>{guardandoPrecio ? "..." : "Guardar"}</button>
+                          </form>
+                        ) : (
+                          <button onClick={(e) => { e.stopPropagation(); setEditandoPrecio(g.product_id); setPrecioManual(Number((g.subtotalSinDescuento / g.cantidadTotal).toFixed(2))); }}
+                            className="font-serif text-sm flex items-center gap-1" title="Editar precio unitario de este producto">
+                            Bs {g.subtotalConDescuento.toFixed(2)} <Pencil size={11} />
+                          </button>
+                        )}
                         <button onClick={(e) => { e.stopPropagation(); quitarUnidad(g.detalle[g.detalle.length - 1].id); }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Quitar 1 unidad">
                           <Minus size={12} />
                         </button>
@@ -549,7 +608,7 @@ export default function Clientes() {
                     <p className="text-xs mt-0.5" style={{ color: "#5B4E5E" }}>
                       {g.detalle.length === 1
                         ? `${g.detalle[0].cantidad} unidad(es) — ${g.detalle[0].fecha}`
-                        : g.detalle.map((d) => `${d.fecha}: ${d.cantidad} un.`).join(" · ")}
+                        : resumenFechas(g)}
                       {g.descuento > 0 && ` · descuento aplicado: Bs ${g.descuento.toFixed(2)}`}
                     </p>
                   </div>
@@ -561,7 +620,7 @@ export default function Clientes() {
               <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Subtotal sin descuento</span><span>Bs {subtotalSinDescuento.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#4F6F52" }}>Descuento por cantidad</span><span style={{ color: "#4F6F52" }}>− Bs {descuentoTotal.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm mb-1.5 pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total seleccionado</span><span className="font-serif">Bs {total.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Total pagado/depositado</span><span>Bs {depositado.toFixed(2)}</span></div>
+              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Dinero disponible</span><span>Bs {depositado.toFixed(2)}</span></div>
               {saldoAFavor > 0 ? (
                 <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#4F6F52" }}>Saldo a favor</span><span className="font-serif" style={{ color: "#4F6F52" }}>Bs {saldoAFavor.toFixed(2)}</span></div>
               ) : (
@@ -601,7 +660,7 @@ export default function Clientes() {
               <div className="p-4 mb-3 rounded-md" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
                 <p className="text-sm font-medium mb-2" style={{ color: "#7A5F2D" }}>Confirmar cierre de pedido</p>
                 <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Total del pedido: Bs {total.toFixed(2)} (incluye Bs {descuentoTotal.toFixed(2)} de descuento)</div>
-                <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Total pagado hasta ahora: Bs {depositado.toFixed(2)}</div>
+                <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Dinero disponible para este pedido: Bs {depositado.toFixed(2)}</div>
                 {saldoAFavor > 0 ? (
                   <>
                     <div className="text-xs mb-2" style={{ color: "#4F6F52" }}>Saldo a favor: Bs {saldoAFavor.toFixed(2)} — decide qué hacer con el sobrante antes de cerrar:</div>
@@ -611,7 +670,7 @@ export default function Clientes() {
                     </div>
                   </>
                 ) : (
-                  <div className="text-xs mb-2" style={{ color: "#7A2540" }}>Saldo pendiente: Bs {saldoPendiente.toFixed(2)} — al cerrar se registra automáticamente el pago de esa diferencia.</div>
+                  <div className="text-xs mb-2" style={{ color: "#7A2540" }}>Saldo pendiente: Bs {saldoPendiente.toFixed(2)} — cerrar NO registra ningún pago automático; la deuda queda reflejada en el historial del pedido.</div>
                 )}
                 <div className="flex gap-2">
                   <button onClick={confirmarCierre} disabled={cerrando || (saldoAFavor > 0 && !pendienteSobrante)} className="text-xs px-4 py-2 rounded-md"

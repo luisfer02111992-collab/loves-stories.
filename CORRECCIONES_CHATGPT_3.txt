@@ -1,0 +1,6 @@
+CORRECCIONES CHATGPT 3
+- Descuentos: reconoce categorías singular/plural para arete/dije/pulsera/set/collar y anillo/cadena.
+- Asignar: muestra explícitamente descuento total y descuento por unidad.
+- Saldo a favor: reconstrucción determinista desde depósitos reales, pedidos cerrados y devoluciones registradas.
+- Cierre: ya no incrementa applied_amount de forma acumulativa sobre un estado inconsistente; lo reconstruye desde el historial.
+- La migración repara los saldos existentes al instalarse, sin borrar pagos ni pedidos.

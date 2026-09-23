@@ -246,7 +246,14 @@ export default function Asignacion() {
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{g.detalle.map((d) => `${d.cantidad} un. — ${d.fecha}`).join(" · ")}</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-serif text-sm">Bs {g.subtotalConDescuento.toFixed(2)}</span>
+                <div className="text-right">
+                  <span className="font-serif text-sm block">Bs {g.subtotalConDescuento.toFixed(2)}</span>
+                  {g.descuento > 0 && (
+                    <span className="text-xs block" style={{ color: "#4F6F52" }}>
+                      Descuento: − Bs {g.descuento.toFixed(2)} total (− Bs {(g.descuento / g.cantidadTotal).toFixed(2)} c/u)
+                    </span>
+                  )}
+                </div>
                 <button onClick={(e) => { e.stopPropagation(); disminuirUnidad(g.detalle[g.detalle.length - 1].id); }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Quitar 1 unidad">
                   <Minus size={13} />
                 </button>

@@ -62,6 +62,7 @@ export default function InicioVentas() {
       }
       return [...prev, { product: p, cantidad: 1 }];
     });
+    setFilaSeleccionada(p.id);
     setCodigo("");
     inputRef.current?.focus();
   }
@@ -121,6 +122,18 @@ export default function InicioVentas() {
 
     setProcesando(true);
     try {
+      // Validar stock de TODAS las líneas antes de escribir nada, para no
+      // dejar una asignación a medias si algo cambió justo antes de confirmar.
+      const ids = carrito.map((l) => l.product.id);
+      const { data: stockActual, error: errStock } = await supabase.from("products").select("id, code, stock_available").in("id", ids);
+      if (errStock) throw new Error(errStock.message);
+      for (const l of carrito) {
+        const actual = stockActual?.find((p: any) => p.id === l.product.id);
+        if (!actual || actual.stock_available < l.cantidad) {
+          throw new Error(`Ya no hay stock suficiente de ${l.product.code} (disponible: ${actual?.stock_available ?? 0}, pedido: ${l.cantidad}). No se asignó nada.`);
+        }
+      }
+
       let customerId: string | null = null;
       let nombreDestino = "Venta directa";
 
@@ -197,7 +210,8 @@ export default function InicioVentas() {
         <form onSubmit={buscarYAgregar} className="p-4 rounded-md mb-3" style={{ background: "#2B1E2E" }}>
           <p className="text-xs mb-2 flex items-center gap-1.5" style={{ color: "#C9BFC7" }}><ScanBarcode size={14} /> Escanear o escribir código — Enter agrega a la lista</p>
           <div className="flex gap-2">
-            <input ref={inputRef} autoFocus value={codigo} onChange={(e) => { setCodigo(e.target.value); setNoEncontrado(false); }} placeholder="80-50"
+            <input ref={inputRef} autoFocus value={codigo} onChange={(e) => { setCodigo(e.target.value); setNoEncontrado(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} placeholder="80-50"
               className="flex-1 px-3 py-3 rounded text-lg outline-none" style={{ background: "#F7F3EC", color: "#2B1E2E" }} />
             <button type="submit" disabled={buscando} className="px-5 rounded flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
               <Plus size={16} /> Agregar
