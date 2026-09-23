@@ -1,0 +1,7 @@
+CORRECCIÓN 18
+- Enter confirma la asignación rápida cuando la selección ya está lista.
+- Catálogo compartido usa el dominio público de producción (VITE_PUBLIC_APP_URL opcional).
+- Cierre sella explícitamente usuario/rol mediante stamp_order_closer.
+- Historial de clientes: PDF por cuenta.
+- Reportes y Ventas por cliente: exportación PDF.
+- Clientes: botón WhatsApp individual en cuentas abiertas y cerradas.

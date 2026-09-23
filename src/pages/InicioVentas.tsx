@@ -97,6 +97,22 @@ export default function InicioVentas() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [filaSeleccionada]);
 
+  useEffect(() => {
+    function confirmarConEnter(e: KeyboardEvent) {
+      if (e.key !== "Enter" || !mostrarAsignar || procesando || carrito.length === 0) return;
+      const el = e.target as HTMLElement | null;
+      // Los campos del formulario conservan Enter para confirmar, pero evitamos
+      // interferir con botones/selects y con el buscador mientras aún no hay cliente elegido.
+      if (el?.tagName === "BUTTON" || el?.tagName === "SELECT" || el?.tagName === "TEXTAREA") return;
+      if (modo === "cliente" && !clienteElegido) return;
+      if (modo === "nuevo" && (!nuevoNombre.trim() || !nuevoTelefono.trim())) return;
+      e.preventDefault();
+      confirmarAsignacion();
+    }
+    window.addEventListener("keydown", confirmarConEnter);
+    return () => window.removeEventListener("keydown", confirmarConEnter);
+  }, [mostrarAsignar, procesando, carrito, modo, clienteElegido, nuevoNombre, nuevoTelefono]);
+
   function precioPreview(l: LineaCarrito) {
     const categoria = categorias.find((c) => c.id === l.product.category_id)?.name ?? null;
     return precioNegocioPorCantidad(categoria, l.product.name, l.cantidad, Number(l.product.price), l.product.description);

@@ -296,6 +296,12 @@ export default function Clientes() {
       setCerrando(false);
       return;
     }
+    // Sello explícito y verificable del usuario autenticado que hizo el cierre.
+    // Evita que un cierre nuevo quede como “No registrado”.
+    const { error: selloError } = await supabase.rpc("stamp_order_closer", { p_order_id: ordenId });
+    if (selloError) {
+      alert(`El pedido se cerró, pero no se pudo registrar quién lo cerró: ${selloError.message}`);
+    }
     // close_order NUNCA registra un pago — el saldo que queda tras cerrar es
     // exactamente el mismo saldo a favor / pendiente que ya se mostraba
     // antes de cerrar (con dinero realmente depositado, nada inventado).
@@ -443,13 +449,15 @@ export default function Clientes() {
         </div>
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           {clientes.filter(c=>pestanaClientes==="abiertas"?clientesAbiertos.has(c.id):!clientesAbiertos.has(c.id)).map((c, i, arr) => (
-            <button key={c.id} onClick={() => setSeleccionado(c)} className="w-full text-left px-3.5 py-3 flex items-center justify-between"
-              style={{ background: seleccionado?.id === c.id ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-              <div>
+            <div key={c.id} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+              <button onClick={() => setSeleccionado(c)} className="flex-1 text-left">
                 <p className="text-sm">{c.name}</p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
-              </div>
-            </button>
+              </button>
+              <a href={`https://wa.me/${c.phone.replace(/\D/g, "").replace(/^0+/, "")}`} target="_blank" rel="noreferrer" onClick={(e)=>e.stopPropagation()} className="w-8 h-8 rounded-full flex items-center justify-center" style={{background:"#E4F3E7",color:"#2F6B3A"}} title={`WhatsApp de ${c.name}`}>
+                <MessageCircle size={15}/>
+              </a>
+            </div>
           ))}
           {clientes.filter(c=>pestanaClientes==="abiertas"?clientesAbiertos.has(c.id):!clientesAbiertos.has(c.id)).length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay clientes en esta lista.</p>}
         </div>

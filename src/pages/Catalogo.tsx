@@ -86,7 +86,10 @@ export default function Catalogo() {
     await supabase.from("catalog_products").delete().eq("id", id);
   }
 
-  const linkCatalogo = `${window.location.origin}/catalogo-publico`;
+  // Usar el dominio público de producción, no la URL temporal del deployment de Vercel.
+  // Puede personalizarse con VITE_PUBLIC_APP_URL sin tocar el código.
+  const basePublica = (import.meta.env.VITE_PUBLIC_APP_URL || "https://loves-stories.vercel.app").replace(/\/$/, "");
+  const linkCatalogo = `${basePublica}/catalogo-publico`;
 
   function copiarEnlace() {
     navigator.clipboard.writeText(linkCatalogo).then(() => {
