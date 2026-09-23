@@ -653,12 +653,12 @@ export default function Clientes() {
                   Cerrar pedido
                 </button>
                 <button onClick={generarPdfAbierto} disabled={generandoPdf} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                  <FileDown size={15} /> {generandoPdf ? "Generando PDF..." : "PDF acumulado"}
+                  <FileDown size={15} /> {generandoPdf ? "Generando PDF..." : "PDF cliente / WhatsApp"}
                 </button>
                 <button onClick={() => setMostrarSelectorFecha((v) => !v)} disabled={fechasConAsignaciones.length === 0} className="py-2.5 px-3 rounded-md text-sm flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
                   <FileDown size={15} /> PDF por fecha
                 </button>
-                <button onClick={() => setMostrarRecibo(true)} className="py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Recibo térmico 80×80mm">
+                <button onClick={() => setMostrarRecibo(true)} className="py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Ticket térmico 80 mm, sin imágenes">
                   <Printer size={15} />
                 </button>
               </div>
@@ -709,7 +709,7 @@ export default function Clientes() {
                 </div>
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => imprimirTicket()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                    <Printer size={13} /> Imprimir (térmica 80×80mm)
+                    <Printer size={13} /> Ticket térmico 80 mm
                   </button>
                   <button onClick={() => setMostrarRecibo(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cerrar</button>
                 </div>

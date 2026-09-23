@@ -1,0 +1,10 @@
+CORRECCIÓN 14 — IMPRESIÓN
+
+- Se separan claramente las dos salidas: PDF cliente/WhatsApp (con imágenes) y Ticket térmico 80 mm (sin imágenes).
+- El ticket térmico usa ancho fijo de 80 mm y 76 mm útiles; el largo queda libre para el rollo según el contenido.
+- Se eliminó el cálculo artificial de altura que podía provocar tamaños anómalos.
+- El ticket térmico oculta cualquier imagen por CSS.
+- La vista previa NO imprime automáticamente. Solo se abre el diálogo al pulsar “Imprimir ahora”.
+- “Cancelar” antes de imprimir cierra la vista previa y no envía trabajo.
+- Se aclara la limitación real: después de confirmar el trabajo en Windows/Chrome, una web no puede retirar de la cola un trabajo ya enviado; en ese caso debe cancelarse en el diálogo/cola de Windows o en la impresora.
+- No requiere SQL.

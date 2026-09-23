@@ -422,10 +422,10 @@ export default function Ventas() {
                 </div>
                 <div className="flex gap-1.5">
                   <button onClick={() => regenerarPdf(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                    <FileDown size={12} /> PDF
+                    <FileDown size={12} /> PDF cliente
                   </button>
-                  <button onClick={() => imprimirRecibo(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Recibo térmico 80×80mm, sin fotos">
-                    <Printer size={12} /> Imprimir
+                  <button onClick={() => imprimirRecibo(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Ticket térmico 80 mm, sin imágenes">
+                    <Printer size={12} /> Ticket 80 mm
                   </button>
                   <button onClick={() => abrirDevolucion(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
                     <Undo2 size={12} /> Registrar devolución
@@ -562,7 +562,7 @@ export default function Ventas() {
               </div>
               <div className="flex gap-2 mt-3">
                 <button onClick={() => imprimirTicket()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                  <Printer size={13} /> Imprimir (térmica 80×80mm)
+                  <Printer size={13} /> Ticket térmico 80 mm
                 </button>
                 <button onClick={() => setReciboVenta(null)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
                   <X size={13} /> Cerrar
