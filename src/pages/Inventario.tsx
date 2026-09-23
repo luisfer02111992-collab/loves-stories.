@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Upload, AlertTriangle, Search, Camera, Image as ImageIcon, Download } from "lucide-react";
 import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { supabase } from "../lib/supabase";
 import CamaraCaptura from "../components/CamaraCaptura";
 import type { Product, Category } from "../lib/types";
@@ -68,15 +69,28 @@ export default function Inventario() {
   }, []);
 
   async function cargar() {
-    const { data } = await supabase.from("products").select("*").is("deleted_at", null).order("name");
+    const { data } = await supabase.from("products").select("*, purchase_batches(label)").is("deleted_at", null).order("name");
     setProductos((data as Product[]) ?? []);
     if (data && data.length > 0) setMermaCodigo((data[0] as Product).code);
   }
 
-  function exportarInventario() {
-    const catMap=new Map(categorias.map(c=>[c.id,c.name]));
-    const filas=productos.map((x:any)=>({Codigo:x.code,Descripcion:x.name,Categoria:catMap.get(x.category_id)??"",Costo:Number(x.cost??0),Precio_venta:Number(x.price??0),Stock_fisico:Number(x.stock_physical??0),Stock_reservado:Number(x.stock_reserved??0),Stock_disponible:Number(x.stock_available??0),Lote:x.batch_id??"",Imagen:x.image_url??"",Estado:Number(x.stock_available??0)>0?"Disponible":"Agotado",Actualizado:x.updated_at??""}));
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(filas),"Inventario"); XLSX.writeFile(wb,`Inventario-Loves-Stories-${new Date().toISOString().slice(0,10)}.xlsx`);
+  async function exportarInventario() {
+    const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet("Inventario");
+    ws.columns=[
+      {header:"Código",key:"codigo",width:14},{header:"Descripción",key:"descripcion",width:28},{header:"Costo",key:"costo",width:13},
+      {header:"Precio de venta",key:"precio",width:16},{header:"Ganancia",key:"ganancia",width:14},{header:"Stock físico",key:"fisico",width:13},
+      {header:"Stock reservado",key:"reservado",width:15},{header:"Stock disponible",key:"disponible",width:15},{header:"Lote",key:"lote",width:22},
+      {header:"Imagen",key:"imagen",width:18},{header:"Estado",key:"estado",width:14}
+    ];
+    ws.getRow(1).font={bold:true}; ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"K1"};
+    for (const x of productos as any[]) {
+      const row=ws.addRow({codigo:x.code,descripcion:x.description || x.name,costo:Number(x.cost||0),precio:Number(x.price||0),ganancia:Number(x.price||0)-Number(x.cost||0),fisico:Number(x.stock_physical||0),reservado:Number(x.stock_reserved||0),disponible:Number(x.stock_available||0),lote:x.purchase_batches?.label || "",imagen:"",estado:Number(x.stock_available||0)>0?"Disponible":"Agotado"});
+      row.height=58;
+      if(x.image_url){ try { const r=await fetch(x.image_url); if(r.ok){ const blob=await r.blob(); const ext=(blob.type.includes("png")?"png":"jpeg") as "png"|"jpeg"; const base64=await new Promise<string>((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(String(fr.result));fr.onerror=()=>reject(fr.error);fr.readAsDataURL(blob);}); const imageId=wb.addImage({base64,extension:ext}); ws.addImage(imageId,{tl:{col:9.15,row:row.number-0.9},ext:{width:62,height:62}}); } } catch {} }
+    }
+    [3,4,5].forEach(c=>ws.getColumn(c).numFmt='"Bs" #,##0.00');
+    const buffer=await wb.xlsx.writeBuffer(); const blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`Inventario-Loves-Stories-${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
   }
 
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {

@@ -1,0 +1,7 @@
+CORRECCIÓN 8
+- Excel Ventas: fecha, cliente, código, descripción, teléfono, producto, cantidad, costo, precio de venta y margen.
+- Excel Inventario: código, descripción, costo, precio, ganancia, stocks, lote, imagen incrustada y estado.
+- Historial: fecha de apertura y cierre por ciclo.
+- Resumen: cuentas abiertas calculadas desde los mismos pedidos open/reopened que Clientes y recarga al volver a la ventana.
+- Reportes: columnas/barras, líneas, área y circular/pastel.
+- Configuración: preferencia de impresora térmica USB y prueba mediante diálogo del navegador/Windows.

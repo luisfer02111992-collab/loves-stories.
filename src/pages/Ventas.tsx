@@ -5,7 +5,7 @@ import { useSellerSession } from "../hooks/useSellerSession";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "../lib/pricing";
 import { generarPdfPedido, generarPdfGrande, generarPdfDevolucion } from "../lib/pdf";
 import type { Devolucion, DevolucionItem } from "../lib/types";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 
 interface VentaCerrada {
   id: string;
@@ -14,7 +14,7 @@ interface VentaCerrada {
   telefono: string;
   closed_at: string;
   total_cerrado: number | null;
-  items: LineaPedido[];
+  items: (LineaPedido & { descripcion?: string; costo?: number })[];
 }
 
 const MOTIVOS = ["Producto roto", "Producto defectuoso", "Producto equivocado", "Otro"];
@@ -72,7 +72,7 @@ export default function Ventas() {
     const hasta = new Date(fecha + "T23:59:59");
     const { data } = await supabase
       .from("orders")
-      .select("id, order_number, closed_at, total_cerrado, customers(name, phone), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, products(code, name, category_id))")
+      .select("id, order_number, closed_at, total_cerrado, customers(name, phone), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, products(code, name, description, category_id, cost))")
       .eq("status", "closed")
       .gte("closed_at", desde.toISOString())
       .lte("closed_at", hasta.toISOString())
@@ -91,6 +91,8 @@ export default function Ventas() {
         codigo: it.products?.code ?? "",
         nombre: it.products?.name ?? "",
         categoria_id: it.products?.category_id ?? null,
+        descripcion: it.products?.description ?? "",
+        costo: Number(it.products?.cost ?? 0),
         cantidad: it.quantity,
         precio_base: it.unit_price,
         fecha: new Date(it.assigned_at).toLocaleDateString("es-BO"),
@@ -265,10 +267,33 @@ export default function Ventas() {
     setReciboVenta(v.id);
   }
 
-  function exportarVentasExcel() {
-    const filas:any[]=[];
-    ventas.forEach(v=>{ const t=totalesVenta(v); t.grupos.forEach(g=>filas.push({Fecha_cierre:new Date(v.closed_at).toLocaleString("es-BO"),Pedido:v.order_number,Cliente:v.cliente,Telefono:v.telefono,Codigo:g.codigo,Producto:g.nombre,Cantidad:g.cantidadTotal,Precio_unitario:g.precioUnitarioFinal,Descuento:g.descuento,Subtotal:g.subtotalConDescuento,Total_venta:t.bruta})); });
-    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(filas),"Ventas"); XLSX.writeFile(wb,`Ventas-Loves-Stories-${fecha}.xlsx`);
+  async function exportarVentasExcel() {
+    const wb = new ExcelJS.Workbook();
+    const ws = wb.addWorksheet("Ventas");
+    ws.columns = [
+      { header:"Fecha", key:"fecha", width:21 }, { header:"Cliente", key:"cliente", width:24 },
+      { header:"Código", key:"codigo", width:14 }, { header:"Descripción", key:"descripcion", width:28 },
+      { header:"Teléfono", key:"telefono", width:16 }, { header:"Producto", key:"producto", width:25 },
+      { header:"Cantidad", key:"cantidad", width:11 }, { header:"Costo producto", key:"costo", width:15 },
+      { header:"Precio de venta", key:"precio", width:16 }, { header:"Margen ganancia", key:"margen", width:17 },
+      { header:"Margen total", key:"margenTotal", width:15 }
+    ];
+    ventas.forEach(v => {
+      const grupos = agruparPorProducto(reglas, v.items);
+      grupos.forEach(g => {
+        const original = v.items.find(i => i.product_id === g.product_id) as any;
+        const costo = Number(original?.costo ?? 0);
+        const precio = Number(g.precioUnitarioFinal ?? 0);
+        ws.addRow({ fecha:new Date(v.closed_at).toLocaleString("es-BO"), cliente:v.cliente, codigo:g.codigo,
+          descripcion:original?.descripcion ?? "", telefono:v.telefono, producto:g.nombre, cantidad:g.cantidadTotal,
+          costo, precio, margen:precio-costo, margenTotal:(precio-costo)*g.cantidadTotal });
+      });
+    });
+    ws.getRow(1).font = { bold:true }; ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"K1"};
+    [8,9,10,11].forEach(c=>ws.getColumn(c).numFmt='"Bs" #,##0.00');
+    const buffer = await wb.xlsx.writeBuffer();
+    const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`Ventas-Loves-Stories-${fecha}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
   }
 
   return (

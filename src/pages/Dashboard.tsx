@@ -25,6 +25,7 @@ function badgeDias(dias: number) {
 export default function Dashboard() {
   const [ventasHoy, setVentasHoy] = useState(0);
   const [pedidosAbiertosValor, setPedidosAbiertosValor] = useState(0);
+  const [cuentasAbiertas, setCuentasAbiertas] = useState(0);
   const [depositosHoy, setDepositosHoy] = useState(0);
   const [unidadesHoy, setUnidadesHoy] = useState(0);
   const [stockBajo, setStockBajo] = useState(0);
@@ -34,6 +35,9 @@ export default function Dashboard() {
 
   useEffect(() => {
     cargar();
+    const alVolver = () => cargar();
+    window.addEventListener("focus", alVolver);
+    return () => window.removeEventListener("focus", alVolver);
   }, []);
 
   async function cargar() {
@@ -58,7 +62,7 @@ export default function Dashboard() {
     // Pedidos abiertos → valor total pendiente y antigüedad
     const { data: abiertos } = await supabase
       .from("orders")
-      .select("id, opened_at, customers(name, phone), order_items(quantity, unit_price)")
+      .select("id, customer_id, opened_at, customers(name, phone), order_items(quantity, unit_price)")
       .in("status", ["open", "reopened"]);
     let valorAbiertos = 0;
     const vencer: PedidoPorVencer[] = [];
@@ -84,6 +88,7 @@ export default function Dashboard() {
     setVentasHoy(ventas);
     setUnidadesHoy(unidades);
     setPedidosAbiertosValor(valorAbiertos);
+    setCuentasAbiertas(new Set((abiertos ?? []).map((o:any)=>o.customer_id).filter(Boolean)).size);
     setDepositosHoy(totalDepositos);
     setStockBajo(count ?? 0);
     setPorVencer(vencer.sort((a, b) => b.dias - a.dias).slice(0, 6));
@@ -97,7 +102,7 @@ export default function Dashboard() {
       <p className="font-serif text-lg mb-3">Hoy</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard label="Ventas cerradas" value={`Bs ${ventasHoy.toLocaleString("es-BO")}`} />
-        <StatCard label="Pedidos abiertos" value={`Bs ${pedidosAbiertosValor.toLocaleString("es-BO")}`} />
+        <StatCard label="Cuentas abiertas" value={cuentasAbiertas} sub={`Bs ${pedidosAbiertosValor.toLocaleString("es-BO")} seleccionados`} />
         <StatCard label="Depósitos recibidos" value={`Bs ${depositosHoy.toLocaleString("es-BO")}`} accent="#4F6F52" />
         <StatCard label="Unidades vendidas" value={unidadesHoy} />
         <StatCard label="Pedidos por vencer" value={porVencer.length} accent="#B7791F" />

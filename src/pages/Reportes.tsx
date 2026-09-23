@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Boxes, PackageX } from "lucide-react";
-import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import StatCard from "../components/StatCard";
 import type { Product } from "../lib/types";
@@ -169,7 +169,7 @@ export default function Reportes() {
         <p className="font-serif text-base mb-3">Ventas por categoría</p>
         <div style={{ width: "100%", height: 220 }}>
           <ResponsiveContainer>
-            {estiloGrafico === "line" ? <LineChart data={porCategoria}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="cat"/><YAxis/><Tooltip/><Line type="monotone" dataKey="ventas" /></LineChart> : estiloGrafico === "area" ? <AreaChart data={porCategoria}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="cat"/><YAxis/><Tooltip/><Area type="monotone" dataKey="ventas" /></AreaChart> : <BarChart data={porCategoria}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="cat"/><YAxis/><Tooltip/><Bar dataKey="ventas" /></BarChart>}
+            {estiloGrafico === "line" ? <LineChart data={porCategoria}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="cat"/><YAxis/><Tooltip/><Line type="monotone" dataKey="ventas" /></LineChart> : estiloGrafico === "area" ? <AreaChart data={porCategoria}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="cat"/><YAxis/><Tooltip/><Area type="monotone" dataKey="ventas" /></AreaChart> : estiloGrafico === "pie" ? <PieChart><Pie data={porCategoria} dataKey="ventas" nameKey="cat" cx="50%" cy="45%" outerRadius={75} label><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/><Cell/></Pie><Tooltip/><Legend/></PieChart> : <BarChart data={porCategoria}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="cat"/><YAxis/><Tooltip/><Bar dataKey="ventas" /></BarChart>}
           </ResponsiveContainer>
         </div>
       </div>

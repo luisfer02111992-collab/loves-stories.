@@ -29,6 +29,7 @@ export default function Configuracion() {
   const [estiloBarra, setEstiloBarra] = useState("solido");
   const [estiloGrafico, setEstiloGrafico] = useState("bar");
   const [mensajeAtraso, setMensajeAtraso] = useState("");
+  const [impresoraTermica, setImpresoraTermica] = useState("");
 
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoCorreo, setNuevoCorreo] = useState("");
@@ -68,6 +69,7 @@ export default function Configuracion() {
       setEstiloGrafico(estilo);
       localStorage.setItem("loves_chart_style", estilo);
       setMensajeAtraso(settings.overdue_whatsapp_message ?? "");
+      setImpresoraTermica(settings.thermal_printer_name ?? "");
     }
     const { data: perfiles } = await supabase.from("profiles").select("*").order("created_at");
     setUsuarios((perfiles as Profile[]) ?? []);
@@ -111,6 +113,14 @@ export default function Configuracion() {
     window.dispatchEvent(new Event("loves-chart-style-changed"));
     alert("Preferencias guardadas. El gráfico de Reportes ya usará este estilo.");
   }
+
+  async function guardarImpresora() {
+    const { error } = await supabase.from("app_settings").update({ thermal_printer_name: impresoraTermica, updated_at:new Date().toISOString() }).eq("id",1);
+    if(error){alert(`No se pudo guardar: ${error.message}`);return;}
+    localStorage.setItem("loves_thermal_printer",impresoraTermica); alert("Preferencia guardada. Al imprimir, selecciona esa impresora USB en el cuadro de impresión de Windows/Chrome.");
+  }
+
+  function probarImpresora(){ window.print(); }
 
   async function conectarWhatsapp() {
     await supabase.from("app_settings").update({ whatsapp_number: whatsapp }).eq("id", 1);
@@ -297,11 +307,18 @@ export default function Configuracion() {
         <div className="p-4 mb-5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Estilo de gráfico de reportes</p>
           <select value={estiloGrafico} onChange={(e)=>setEstiloGrafico(e.target.value)} className="px-3 py-2 rounded text-sm mb-3" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-            <option value="bar">Barras</option><option value="line">Líneas</option><option value="area">Área</option>
+            <option value="bar">Columnas / barras</option><option value="line">Líneas</option><option value="area">Área</option><option value="pie">Circular / pastel</option>
           </select>
           <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Mensaje de WhatsApp para clientes atrasados</p>
           <textarea value={mensajeAtraso} onChange={(e)=>setMensajeAtraso(e.target.value)} rows={4} className="w-full px-3 py-2 rounded text-sm mb-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
           <button onClick={guardarPreferenciasReportes} className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar preferencias</button>
+        </div>
+
+        <p className="font-serif text-lg mb-3">Impresora térmica USB</p>
+        <div className="p-4 mb-5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+          <p className="text-xs mb-2" style={{color:"#5B4E5E"}}>Nombre de tu impresora térmica (por ejemplo: POS-80). Se guarda como preferencia.</p>
+          <div className="flex gap-2 flex-wrap"><input value={impresoraTermica} onChange={e=>setImpresoraTermica(e.target.value)} placeholder="Nombre de la impresora USB" className="flex-1 min-w-52 px-3 py-2 rounded text-sm" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}/><button onClick={guardarImpresora} className="text-xs px-3 py-2 rounded-md" style={{background:"#9C7A3C",color:"white"}}>Guardar impresora</button><button onClick={probarImpresora} className="text-xs px-3 py-2 rounded-md" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>Seleccionar / probar en Windows</button></div>
+          <p className="text-xs mt-2" style={{color:"#5B4E5E"}}>Por seguridad, Chrome no permite que una web elija silenciosamente una impresora USB. El botón abre el cuadro de impresión; selecciona allí tu impresora térmica. El sistema mantiene el formato térmico de 80 mm.</p>
         </div>
 
         <p className="font-serif text-lg mb-3">Número de WhatsApp conectado</p>
