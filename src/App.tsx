@@ -24,7 +24,6 @@ import Vendedores from "./pages/Vendedores";
 import ReporteVendedores from "./pages/ReporteVendedores";
 import CierreCaja from "./pages/CierreCaja";
 import HistorialClientes from "./pages/HistorialClientes";
-import Respaldo from "./pages/Respaldo";
 
 function Privado({ children }: { children: React.ReactNode }) {
   const { loading, userId } = useAuth();
@@ -101,7 +100,6 @@ function AppRoutes() {
         <Route path="ventas" element={<Ventas />} />
         <Route path="cierre-caja" element={<SoloAdmin><CierreCaja /></SoloAdmin>} />
         <Route path="historial-clientes" element={<HistorialClientes />} />
-        <Route path="respaldo" element={<SoloAdmin><Respaldo /></SoloAdmin>} />
         <Route
           path="vendedores"
           element={

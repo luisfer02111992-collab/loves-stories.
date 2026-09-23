@@ -1,0 +1,12 @@
+CORRECCIÓN 7
+- Ventas cerradas: +/- quedan en borrador hasta Guardar cambios.
+- Se pueden agregar otros productos por código al editar una venta.
+- Corregir/quitar productos NO genera dinero devuelto, reembolso ni saldo a favor; solo corrige venta e inventario.
+- Se ocultan los antiguos “Ajustes por corrección” y “Reembolso por corrección”.
+- Reportes toma correctamente el estilo de gráfico guardado en Configuración.
+- Se elimina “Respaldo Excel” del menú.
+- Ventas tiene Exportar Excel por fecha con detalle.
+- Inventario tiene Exportar Excel con todos los datos disponibles.
+- Historial del cliente muestra fecha/hora de cierre.
+- Clientes se divide en Cuentas abiertas / Cuentas cerradas.
+- Registrar un depósito a un cliente cerrado abre automáticamente un nuevo ciclo y lo mueve a Cuentas abiertas.

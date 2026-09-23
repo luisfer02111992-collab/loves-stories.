@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, AlertTriangle, Search, Camera, Image as ImageIcon } from "lucide-react";
+import { Upload, AlertTriangle, Search, Camera, Image as ImageIcon, Download } from "lucide-react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabase";
 import CamaraCaptura from "../components/CamaraCaptura";
@@ -71,6 +71,12 @@ export default function Inventario() {
     const { data } = await supabase.from("products").select("*").is("deleted_at", null).order("name");
     setProductos((data as Product[]) ?? []);
     if (data && data.length > 0) setMermaCodigo((data[0] as Product).code);
+  }
+
+  function exportarInventario() {
+    const catMap=new Map(categorias.map(c=>[c.id,c.name]));
+    const filas=productos.map((x:any)=>({Codigo:x.code,Descripcion:x.name,Categoria:catMap.get(x.category_id)??"",Costo:Number(x.cost??0),Precio_venta:Number(x.price??0),Stock_fisico:Number(x.stock_physical??0),Stock_reservado:Number(x.stock_reserved??0),Stock_disponible:Number(x.stock_available??0),Lote:x.batch_id??"",Imagen:x.image_url??"",Estado:Number(x.stock_available??0)>0?"Disponible":"Agotado",Actualizado:x.updated_at??""}));
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(filas),"Inventario"); XLSX.writeFile(wb,`Inventario-Loves-Stories-${new Date().toISOString().slice(0,10)}.xlsx`);
   }
 
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -250,6 +256,7 @@ export default function Inventario() {
       <div className="flex items-center justify-between mb-3">
         <p className="font-serif text-lg">Inventario</p>
         <div className="flex gap-2">
+          <button onClick={exportarInventario} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}><Download size={13}/> Exportar Excel</button>
           <button onClick={() => setMostrarMerma(true)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#F4E3E6", color: "#7A2540" }}>
             <AlertTriangle size={13} /> Registrar merma
           </button>

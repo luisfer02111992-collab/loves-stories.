@@ -23,7 +23,6 @@ const SECCIONES = [
   { to: "/ventas", label: "Ventas", icon: Receipt, roles: ["admin", "employee"] },
   { to: "/historial-clientes", label: "Historial clientes", icon: History, roles: ["admin", "employee"] },
   { to: "/cierre-caja", label: "Cierre de caja", icon: Calculator, roles: ["admin"] },
-  { to: "/respaldo", label: "Respaldo Excel", icon: Download, roles: ["admin"] },
   { to: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
   { to: "/vendedores", label: "Vendedores", icon: UserCog, roles: ["admin"] },
   { to: "/reporte-vendedores", label: "Reporte de vendedores", icon: BadgePercent, roles: ["admin"] },

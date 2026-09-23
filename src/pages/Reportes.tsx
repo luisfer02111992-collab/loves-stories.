@@ -17,7 +17,6 @@ export default function Reportes() {
   const [periodo, setPeriodo] = useState("dia");
   const [ventas, setVentas] = useState(0);
   const [devolucionProducto, setDevolucionProducto] = useState(0);
-  const [reembolsoCorreccion, setReembolsoCorreccion] = useState(0);
   const [cobrado, setCobrado] = useState(0);
   const [costo, setCosto] = useState(0);
   const [costoBuenEstado, setCostoBuenEstado] = useState(0);
@@ -35,7 +34,9 @@ export default function Reportes() {
   useEffect(() => {
     supabase.from("products").select("*").is("deleted_at", null).then(({ data }) => setProductos((data as Product[]) ?? []));
     cargarStockMuerto();
-    supabase.from("app_settings").select("chart_style").eq("id",1).single().then(({data})=>setEstiloGrafico(data?.chart_style ?? "bar"));
+    const local = localStorage.getItem("loves_chart_style"); if (local) setEstiloGrafico(local);
+    supabase.from("app_settings").select("chart_style").eq("id",1).single().then(({data})=>{ const e=data?.chart_style ?? local ?? "bar"; setEstiloGrafico(e); localStorage.setItem("loves_chart_style",e); });
+    const sync=()=>setEstiloGrafico(localStorage.getItem("loves_chart_style") ?? "bar"); window.addEventListener("loves-chart-style-changed",sync); return ()=>window.removeEventListener("loves-chart-style-changed",sync);
   }, []);
 
   async function cargarPeriodo() {
@@ -60,13 +61,12 @@ export default function Reportes() {
       });
     });
 
-    let devolucionProducto = 0, reembolsoCorreccion = 0;
+    let devolucionProducto = 0;
     let costoBuenEstado = 0, costoMerma = 0;
     if (idsOrdenes.length > 0) {
       const { data: devs } = await supabase.from("returns").select("total_amount, type, order_id").eq("status", "activa").in("order_id", idsOrdenes);
       (devs ?? []).forEach((d: any) => {
-        if (d.type === "correccion") reembolsoCorreccion += d.total_amount;
-        else devolucionProducto += d.total_amount;
+        if (d.type === "producto") devolucionProducto += d.total_amount;
       });
 
       // Costo de las unidades devueltas: si volvieron al inventario (restock),
@@ -94,7 +94,6 @@ export default function Reportes() {
 
     setVentas(bruta);
     setDevolucionProducto(devolucionProducto);
-    setReembolsoCorreccion(reembolsoCorreccion);
     setCobrado(cobrado);
     setCosto(c);
     setCostoBuenEstado(costoBuenEstado);
@@ -114,7 +113,7 @@ export default function Reportes() {
   // corrección no se vuelve a restar aquí: "ventas" (bruta) ya viene de
   // total_cerrado, que quedó en el valor correcto tras cualquier corrección.
   const ventaNeta = ventas - devolucionProducto;
-  const devueltoTotal = devolucionProducto + reembolsoCorreccion;
+  const devueltoTotal = devolucionProducto;
   const cobroNeto = cobrado - devueltoTotal;
   // Costo de mercadería vendida ajustado: al producto devuelto en buen estado
   // se le resta su costo (volvió al inventario, ya no se considera vendido).
@@ -143,7 +142,6 @@ export default function Reportes() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
         <StatCard label="Venta bruta" value={`Bs ${ventas.toLocaleString("es-BO")}`} />
         <StatCard label="Devolución de producto" value={`Bs ${devolucionProducto.toLocaleString("es-BO")}`} accent="#7A2540" />
-        <StatCard label="Reembolso por corrección" value={`Bs ${reembolsoCorreccion.toLocaleString("es-BO")}`} accent="#7A5F2D" />
         <StatCard label="Venta neta" value={`Bs ${ventaNeta.toLocaleString("es-BO")}`} accent="#4F6F52" />
       </div>
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">

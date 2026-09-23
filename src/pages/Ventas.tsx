@@ -5,6 +5,7 @@ import { useSellerSession } from "../hooks/useSellerSession";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "../lib/pricing";
 import { generarPdfPedido, generarPdfGrande, generarPdfDevolucion } from "../lib/pdf";
 import type { Devolucion, DevolucionItem } from "../lib/types";
+import * as XLSX from "xlsx";
 
 interface VentaCerrada {
   id: string;
@@ -21,6 +22,7 @@ const MOTIVOS = ["Producto roto", "Producto defectuoso", "Producto equivocado", 
 export default function Ventas() {
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const [cambiosSinGuardar, setCambiosSinGuardar] = useState<Set<string>>(new Set());
+  const [cambiosPendientes, setCambiosPendientes] = useState<Record<string, Record<string,{delta:number;codigo:string;nombre:string}>>>({});
   const [fecha, setFecha] = useState(() => new Date().toISOString().slice(0, 10));
   const [ventas, setVentas] = useState<VentaCerrada[]>([]);
   const [reglas, setReglas] = useState<PricingRule[]>([]);
@@ -130,11 +132,11 @@ export default function Ventas() {
     const bruta = v.total_cerrado ?? grupos.reduce((a, g) => a + g.subtotalConDescuento, 0);
     const devsActivas = (devoluciones[v.id] ?? []).filter((d) => d.status === "activa");
     const devolucionProducto = devsActivas.filter((d) => d.type === "producto").reduce((a, d) => a + d.total_amount, 0);
-    const reembolsoCorreccion = devsActivas.filter((d) => d.type === "correccion").reduce((a, d) => a + d.total_amount, 0);
+    const reembolsoCorreccion = 0;
     const neta = bruta - devolucionProducto;
     const cobrado = pagos[v.id] ?? 0;
     // Cobro neto sí resta ambos: los dos son dinero que salió de la caja.
-    const cobroNeto = cobrado - devolucionProducto - reembolsoCorreccion;
+    const cobroNeto = cobrado - devolucionProducto;
     return { grupos, bruta, devolucionProducto, reembolsoCorreccion, neta, cobrado, cobroNeto };
   }
 
@@ -155,68 +157,38 @@ export default function Ventas() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ventas, reglas, devoluciones, pagos]);
 
-  // Quitar/agregar SÍ ajusta el inventario de inmediato (es necesario para que
-  // el stock quede siempre correcto), pero el total OFICIAL de la venta
-  // (total_cerrado) y el aviso de diferencia solo se actualizan cuando se
-  // presiona "Guardar cambios" — nada queda confirmado accidentalmente mientras editas.
-  async function ajustarVentaDirecta(orderId: string, productId: string, delta: number) {
-    const { error } = await supabase.rpc("adjust_closed_sale_item", { p_order_id: orderId, p_product_id: productId, p_delta: delta });
-    if (error) { alert(error.message); return; }
-    await cargar();
+  // La edición es un borrador: + / - y productos nuevos NO tocan inventario ni dinero hasta Guardar cambios.
+  function ajustarVentaDirecta(orderId: string, productId: string, delta: number, codigo="", nombre="") {
+    const venta=ventas.find(v=>v.id===orderId); const actual=venta?.items.filter(i=>i.product_id===productId).reduce((a,i)=>a+i.cantidad,0)??0;
+    const previo=cambiosPendientes[orderId]?.[productId]?.delta??0;
+    if(actual+previo+delta<0) return;
+    setCambiosPendientes(prev=>({...prev,[orderId]:{...(prev[orderId]??{}),[productId]:{delta:previo+delta,codigo,nombre}}}));
+    setCambiosSinGuardar(prev=>new Set(prev).add(orderId));
   }
-
 
   async function agregarItem(orderId: string) {
     if (!codigoNuevo.trim()) return;
-    const { data: producto } = await supabase.from("products").select("id").eq("code", codigoNuevo.trim()).is("deleted_at", null).maybeSingle();
+    const { data: producto } = await supabase.from("products").select("id,code,name,stock_available").eq("code", codigoNuevo.trim()).is("deleted_at", null).maybeSingle();
     if (!producto) { alert("No se encontró ese código en el inventario."); return; }
-    const { error } = await supabase.rpc("assign_product_to_order", {
-      p_order_id: orderId, p_product_id: producto.id, p_quantity: cantidadNueva, p_origin: "correccion",
-      p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
-    });
-    if (error) { alert(error.message); return; }
-    setCodigoNuevo("");
-    setCantidadNueva(1);
-    setCambiosSinGuardar((prev) => new Set(prev).add(orderId));
-    await cargar();
+    const previo=cambiosPendientes[orderId]?.[producto.id]?.delta??0;
+    if(Number(producto.stock_available??0)<previo+cantidadNueva){alert(`Stock insuficiente. Disponible: ${producto.stock_available}`);return;}
+    ajustarVentaDirecta(orderId, producto.id, cantidadNueva, producto.code, producto.name);
+    setCodigoNuevo(""); setCantidadNueva(1);
   }
 
-  // "Guardar cambios": recién aquí se recalcula el total EN SUPABASE y se
-  // muestra la diferencia frente a lo ya pagado — la decisión de qué hacer
-  // con esa diferencia la tomas tú, nunca es automática.
   async function guardarCambios(orderId: string) {
-    await recalcular(orderId);
-    setCambiosSinGuardar((prev) => { const n = new Set(prev); n.delete(orderId); return n; });
+    const cambios=Object.entries(cambiosPendientes[orderId]??{}).filter(([,x])=>x.delta!==0).map(([product_id,x])=>({product_id,delta:x.delta}));
+    if(!cambios.length){setEditando(null);return;}
+    const {error}=await supabase.rpc("save_closed_sale_corrections",{p_order_id:orderId,p_changes:cambios});
+    if(error){alert(`No se pudieron guardar los cambios: ${error.message}`);return;}
+    setCambiosPendientes(prev=>{const n={...prev};delete n[orderId];return n});
+    setCambiosSinGuardar(prev=>{const n=new Set(prev);n.delete(orderId);return n});
+    setEditando(null); await cargar();
   }
 
-  async function recalcular(orderId: string) {
-    const { data, error } = await supabase.rpc("recalcular_total_venta", { p_order_id: orderId }).single();
-    if (error) { alert(error.message); await cargar(); return; }
-    const r = data as any;
-    setBanner({ orderId, original: r.total_original ?? r.total_anterior ?? 0, anterior: r.total_anterior ?? 0, nuevo: r.total_nuevo, pagado: r.pagado, diferencia: r.diferencia });
-    await cargar();
-  }
-
-  async function registrarDevolucionCorreccion() {
-    if (!banner || banner.diferencia <= 0) return;
-    await supabase.rpc("registrar_devolucion_correccion", {
-      p_order_id: banner.orderId, p_amount: banner.diferencia, p_observation: "Ajuste por corrección de registro",
-    });
-    setBanner(null);
-    cargar();
-  }
-
-  async function registrarCobroAdicional() {
-    if (!banner || banner.diferencia >= 0) return;
-    const venta = ventas.find((v) => v.id === banner.orderId);
-    if (!venta) return;
-    const { data: orden } = await supabase.from("orders").select("customer_id").eq("id", banner.orderId).single();
-    if (!orden) return;
-    await supabase.from("payments").insert({
-      customer_id: orden.customer_id, order_id: banner.orderId, amount: -banner.diferencia, method: "correccion_cobro",
-    });
-    setBanner(null);
-    cargar();
+  function cancelarCambios(orderId:string){
+    setCambiosPendientes(prev=>{const n={...prev};delete n[orderId];return n});
+    setCambiosSinGuardar(prev=>{const n=new Set(prev);n.delete(orderId);return n}); setEditando(null);
   }
 
   function abrirDevolucion(v: VentaCerrada) {
@@ -293,17 +265,23 @@ export default function Ventas() {
     setReciboVenta(v.id);
   }
 
+  function exportarVentasExcel() {
+    const filas:any[]=[];
+    ventas.forEach(v=>{ const t=totalesVenta(v); t.grupos.forEach(g=>filas.push({Fecha_cierre:new Date(v.closed_at).toLocaleString("es-BO"),Pedido:v.order_number,Cliente:v.cliente,Telefono:v.telefono,Codigo:g.codigo,Producto:g.nombre,Cantidad:g.cantidadTotal,Precio_unitario:g.precioUnitarioFinal,Descuento:g.descuento,Subtotal:g.subtotalConDescuento,Total_venta:t.bruta})); });
+    const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(filas),"Ventas"); XLSX.writeFile(wb,`Ventas-Loves-Stories-${fecha}.xlsx`);
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
         <p className="font-serif text-lg">Ventas</p>
-        <div className="flex items-center gap-2 px-3 py-2 rounded" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        <div className="flex items-center gap-2"><button onClick={exportarVentasExcel} className="text-xs px-3 py-2 rounded-md flex items-center gap-1" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}><FileDown size={13}/> Exportar Excel</button><div className="flex items-center gap-2 px-3 py-2 rounded" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <Calendar size={14} style={{ color: "#5B4E5E" }} />
           <input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} className="text-sm outline-none bg-transparent" />
-        </div>
+        </div></div>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
         <div className="p-3 rounded-md text-center" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <p className="text-xs" style={{ color: "#5B4E5E" }}>Venta bruta</p>
           <p className="font-serif text-lg">Bs {resumenDia.bruta.toFixed(2)}</p>
@@ -311,10 +289,6 @@ export default function Ventas() {
         <div className="p-3 rounded-md text-center" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <p className="text-xs" style={{ color: "#5B4E5E" }}>Devolución de producto</p>
           <p className="font-serif text-lg" style={{ color: "#7A2540" }}>Bs {resumenDia.devolucionProducto.toFixed(2)}</p>
-        </div>
-        <div className="p-3 rounded-md text-center" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          <p className="text-xs" style={{ color: "#5B4E5E" }}>Reembolso por corrección</p>
-          <p className="font-serif text-lg" style={{ color: "#7A5F2D" }}>Bs {resumenDia.reembolsoCorreccion.toFixed(2)}</p>
         </div>
         <div className="p-3 rounded-md text-center" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <p className="text-xs" style={{ color: "#5B4E5E" }}>Venta neta</p>
@@ -330,7 +304,7 @@ export default function Ventas() {
         {ventas.map((v) => {
           const t = totalesVenta(v);
           const abierto = editando === v.id;
-          const devs = devoluciones[v.id] ?? [];
+          const devs = (devoluciones[v.id] ?? []).filter(d=>d.type === "producto");
           return (
             <div key={v.id} className="p-4 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               <div className="flex items-center justify-between mb-2">
@@ -369,9 +343,9 @@ export default function Ventas() {
                         <span className="text-sm font-serif">Bs {g.subtotalConDescuento.toFixed(2)}</span>
                         {abierto && (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, -1)} title="Disminuir 1; devuelve stock y dinero" className="p-1 rounded" style={{ color: "#7A2540", border: "1px solid #D9D0C2" }}><Minus size={13} /></button>
-                            <span className="text-xs min-w-5 text-center">{g.cantidadTotal}</span>
-                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, 1)} title="Aumentar 1; descuenta stock y registra cobro" className="p-1 rounded" style={{ color: "#4F6F52", border: "1px solid #D9D0C2" }}><Plus size={13} /></button>
+                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, -1, g.codigo, g.nombre)} title="Disminuir 1; devuelve stock y dinero" className="p-1 rounded" style={{ color: "#7A2540", border: "1px solid #D9D0C2" }}><Minus size={13} /></button>
+                            <span className="text-xs min-w-5 text-center">{g.cantidadTotal + (cambiosPendientes[v.id]?.[g.product_id]?.delta ?? 0)}</span>
+                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, 1, g.codigo, g.nombre)} title="Aumentar 1; descuenta stock y registra cobro" className="p-1 rounded" style={{ color: "#4F6F52", border: "1px solid #D9D0C2" }}><Plus size={13} /></button>
                           </div>
                         )}
                       </div>
@@ -381,34 +355,11 @@ export default function Ventas() {
                 ))}
               </div>
 
-              {abierto && <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Usa − o + directamente en cada producto. Cada cambio ajusta inventario, total y dinero en el momento.</p>}
-
-              {banner && banner.orderId === v.id && (
-                <div className="p-3 mb-2 rounded-md" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
-                  <p className="text-xs mb-2" style={{ color: "#7A5F2D" }}>
-                    Total original (con el que se cerró): Bs {banner.original.toFixed(2)} · Total corregido: Bs {banner.nuevo.toFixed(2)} ·
-                    Pagado: Bs {banner.pagado.toFixed(2)} · Diferencia: Bs {banner.diferencia.toFixed(2)}
-                  </p>
-                  {banner.diferencia > 0 ? (
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs" style={{ color: "#7A2540" }}>El cliente pagó de más — se le debe devolver Bs {banner.diferencia.toFixed(2)}. Esto NO se vuelve a restar de la venta neta (el total corregido ya la refleja).</p>
-                      <button onClick={registrarDevolucionCorreccion} className="text-xs px-3 py-1.5 rounded-md shrink-0" style={{ background: "#7A2540", color: "#F7F3EC" }}>
-                        Registrar reembolso de Bs {banner.diferencia.toFixed(2)}
-                      </button>
-                    </div>
-                  ) : banner.diferencia < 0 ? (
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs" style={{ color: "#4F6F52" }}>El total subió — al cliente le falta pagar Bs {(-banner.diferencia).toFixed(2)}.</p>
-                      <button onClick={registrarCobroAdicional} className="text-xs px-3 py-1.5 rounded-md shrink-0" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
-                        Registrar cobro adicional de Bs {(-banner.diferencia).toFixed(2)}
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-xs" style={{ color: "#4F6F52" }}>El total no cambió respecto a lo pagado.</p>
-                  )}
-                  <button onClick={() => setBanner(null)} className="text-xs mt-1.5 underline" style={{ color: "#7A5F2D" }}>Cerrar aviso</button>
-                </div>
-              )}
+              {abierto && <div className="p-3 mb-2 rounded" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
+                <p className="text-xs mb-2" style={{color:"#5B4E5E"}}>Usa − / + o agrega otro producto. Nada se modifica hasta pulsar <strong>Guardar cambios</strong>.</p>
+                <div className="flex flex-wrap gap-2 items-end"><div><p className="text-xs mb-1">Código de otro producto</p><input value={codigoNuevo} onChange={e=>setCodigoNuevo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();agregarItem(v.id)}}} className="px-2 py-1.5 rounded text-sm" placeholder="Código"/></div><div><p className="text-xs mb-1">Cantidad</p><input type="number" min={1} value={cantidadNueva} onChange={e=>setCantidadNueva(Math.max(1,Number(e.target.value)))} className="w-20 px-2 py-1.5 rounded text-sm"/></div><button onClick={()=>agregarItem(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#4F6F52",color:"white"}}><Plus size={12} className="inline"/> Agregar</button><button onClick={()=>guardarCambios(v.id)} className="text-xs px-3 py-2 rounded flex items-center gap-1" style={{background:"#9C7A3C",color:"white"}}><Save size={12}/> Guardar cambios</button><button onClick={()=>cancelarCambios(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>Cancelar</button></div>
+                {Object.entries(cambiosPendientes[v.id]??{}).filter(([,x])=>x.delta>0 && !t.grupos.some(g=>g.product_id===pid)).map(([pid,x])=><p key={pid} className="text-xs mt-2" style={{color:"#4F6F52"}}>+ {x.delta} × {x.codigo} · {x.nombre}</p>)}
+              </div>}
 
               {mostrarDevolucion === v.id && (
                 <div className="p-3 mb-2 rounded-md" style={{ background: "#F4E3E6", border: "1px solid #7A2540" }}>
@@ -467,10 +418,9 @@ export default function Ventas() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs pt-2" style={{ borderTop: "1px solid #D9D0C2" }}>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-2" style={{ borderTop: "1px solid #D9D0C2" }}>
                 <span style={{ color: "#5B4E5E" }}>Bruta: Bs {t.bruta.toFixed(2)}</span>
                 <span style={{ color: "#7A2540" }}>Dev. producto: Bs {t.devolucionProducto.toFixed(2)}</span>
-                <span style={{ color: "#7A5F2D" }}>Reembolso corr.: Bs {t.reembolsoCorreccion.toFixed(2)}</span>
                 <span style={{ color: "#4F6F52" }}>Neta: Bs {t.neta.toFixed(2)}</span>
                 <span className="font-serif">Cobro neto: Bs {t.cobroNeto.toFixed(2)}</span>
               </div>
@@ -498,8 +448,8 @@ export default function Ventas() {
                 <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
                 <div className="flex justify-between font-bold"><span>Total</span><span>Bs {t.bruta.toFixed(2)}</span></div>
                 <div className="flex justify-between"><span>Cobrado</span><span>Bs {t.cobrado.toFixed(2)}</span></div>
-                {t.devolucionProducto + t.reembolsoCorreccion > 0 && (
-                  <div className="flex justify-between"><span>Devuelto</span><span>Bs {(t.devolucionProducto + t.reembolsoCorreccion).toFixed(2)}</span></div>
+                {t.devolucionProducto > 0 && (
+                  <div className="flex justify-between"><span>Devuelto</span><span>Bs {t.devolucionProducto.toFixed(2)}</span></div>
                 )}
               </div>
               <div className="flex gap-2 mt-3">

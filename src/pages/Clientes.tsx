@@ -25,6 +25,8 @@ export default function Clientes() {
   const [depositoSeleccionado, setDepositoSeleccionado] = useState<string | null>(null);
   const [guardandoDeposito, setGuardandoDeposito] = useState(false);
   const [clientes, setClientes] = useState<Customer[]>([]);
+  const [pestanaClientes, setPestanaClientes] = useState<"abiertas" | "cerradas">("abiertas");
+  const [clientesAbiertos, setClientesAbiertos] = useState<Set<string>>(new Set());
   const [seleccionado, setSeleccionado] = useState<Customer | null>(null);
   const [ordenId, setOrdenId] = useState<string | null>(null);
   const [fechaApertura, setFechaApertura] = useState<string | null>(null);
@@ -65,6 +67,11 @@ export default function Clientes() {
   }, []);
 
   useEffect(() => {
+    const visibles=clientes.filter(c=>pestanaClientes==="abiertas"?clientesAbiertos.has(c.id):!clientesAbiertos.has(c.id));
+    if (!seleccionado || !visibles.some(c=>c.id===seleccionado.id)) setSeleccionado(visibles[0] ?? null);
+  }, [pestanaClientes, clientesAbiertos]);
+
+  useEffect(() => {
     if (seleccionado) {
       cargarPedido(seleccionado.id);
       setEdicion({ name: seleccionado.name, phone: seleccionado.phone, notes: seleccionado.notes ?? "" });
@@ -78,10 +85,15 @@ export default function Clientes() {
   }, [seleccionado]);
 
   async function cargarClientes() {
-    const { data } = await supabase.from("customers").select("*").is("deleted_at", null).order("name");
-    setClientes((data as Customer[]) ?? []);
-    if (data && data.length > 0) setSeleccionado(data[0] as Customer);
-    else setSeleccionado(null);
+    const [{ data }, { data: abiertas }] = await Promise.all([
+      supabase.from("customers").select("*").is("deleted_at", null).order("name"),
+      supabase.from("orders").select("customer_id").in("status", ["open", "reopened"])
+    ]);
+    const lista=(data as Customer[]) ?? [];
+    const ids=new Set<string>((abiertas ?? []).map((o:any)=>o.customer_id).filter(Boolean));
+    setClientes(lista); setClientesAbiertos(ids);
+    const visibles=lista.filter(c=>pestanaClientes==="abiertas"?ids.has(c.id):!ids.has(c.id));
+    if (!seleccionado || !visibles.some(c=>c.id===seleccionado.id)) setSeleccionado(visibles[0] ?? null);
   }
 
   async function cargarInactivos() {
@@ -391,11 +403,13 @@ export default function Clientes() {
   async function registrarDeposito() {
     if (!seleccionado || montoDeposito <= 0 || guardandoDeposito) return;
     setGuardandoDeposito(true);
-    await supabase.from("payments").insert({ customer_id: seleccionado.id, order_id: ordenId, amount: montoDeposito, method: metodoDeposito });
+    const { error } = await supabase.rpc("register_customer_deposit", { p_customer_id: seleccionado.id, p_amount: montoDeposito, p_method: metodoDeposito });
+    if (error) { alert(error.message); setGuardandoDeposito(false); return; }
     setMontoDeposito(0);
     setMostrarDeposito(false);
     setGuardandoDeposito(false);
     // Registrar un pago renueva el plazo de 5 días (vuelve a verde) y NUNCA cierra el pedido.
+    await cargarClientes();
     await cargarPedido(seleccionado.id);
     await cargarInactivos();
   }
@@ -420,17 +434,21 @@ export default function Clientes() {
           </form>
         )}
 
+        <div className="flex gap-1 mb-2">
+          <button onClick={()=>setPestanaClientes("abiertas")} className="text-xs px-3 py-2 rounded" style={{background:pestanaClientes==="abiertas"?"#9C7A3C":"#EDE7DE",color:pestanaClientes==="abiertas"?"white":"#5B4E5E"}}>Cuentas abiertas</button>
+          <button onClick={()=>setPestanaClientes("cerradas")} className="text-xs px-3 py-2 rounded" style={{background:pestanaClientes==="cerradas"?"#9C7A3C":"#EDE7DE",color:pestanaClientes==="cerradas"?"white":"#5B4E5E"}}>Cuentas cerradas</button>
+        </div>
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          {clientes.map((c, i) => (
+          {clientes.filter(c=>pestanaClientes==="abiertas"?clientesAbiertos.has(c.id):!clientesAbiertos.has(c.id)).map((c, i, arr) => (
             <button key={c.id} onClick={() => setSeleccionado(c)} className="w-full text-left px-3.5 py-3 flex items-center justify-between"
-              style={{ background: seleccionado?.id === c.id ? "#EDE7DE" : "transparent", borderBottom: i < clientes.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+              style={{ background: seleccionado?.id === c.id ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <div>
                 <p className="text-sm">{c.name}</p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
               </div>
             </button>
           ))}
-          {clientes.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay clientes.</p>}
+          {clientes.filter(c=>pestanaClientes==="abiertas"?clientesAbiertos.has(c.id):!clientesAbiertos.has(c.id)).length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay clientes en esta lista.</p>}
         </div>
 
         {inactivos.length > 0 && (

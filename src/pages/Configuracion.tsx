@@ -64,7 +64,9 @@ export default function Configuracion() {
       setColorPrimario(settings.color_primario ?? "#9C7A3C");
       setColorAcento(settings.color_acento ?? "#4F6F52");
       setEstiloBarra(settings.estilo_barra ?? "solido");
-      setEstiloGrafico(settings.chart_style ?? "bar");
+      const estilo = settings.chart_style ?? "bar";
+      setEstiloGrafico(estilo);
+      localStorage.setItem("loves_chart_style", estilo);
       setMensajeAtraso(settings.overdue_whatsapp_message ?? "");
     }
     const { data: perfiles } = await supabase.from("profiles").select("*").order("created_at");
@@ -103,8 +105,11 @@ export default function Configuracion() {
   }
 
   async function guardarPreferenciasReportes() {
-    await supabase.from("app_settings").update({ chart_style: estiloGrafico, overdue_whatsapp_message: mensajeAtraso, updated_at: new Date().toISOString() }).eq("id",1);
-    alert("Preferencias guardadas.");
+    const { error } = await supabase.from("app_settings").update({ chart_style: estiloGrafico, overdue_whatsapp_message: mensajeAtraso, updated_at: new Date().toISOString() }).eq("id",1);
+    if (error) { alert(`No se pudo guardar: ${error.message}`); return; }
+    localStorage.setItem("loves_chart_style", estiloGrafico);
+    window.dispatchEvent(new Event("loves-chart-style-changed"));
+    alert("Preferencias guardadas. El gráfico de Reportes ya usará este estilo.");
   }
 
   async function conectarWhatsapp() {
