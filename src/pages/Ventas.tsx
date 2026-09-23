@@ -269,31 +269,113 @@ export default function Ventas() {
 
   async function exportarVentasExcel() {
     const wb = new ExcelJS.Workbook();
-    const ws = wb.addWorksheet("Ventas");
-    ws.columns = [
-      { header:"Fecha", key:"fecha", width:21 }, { header:"Cliente", key:"cliente", width:24 },
-      { header:"Código", key:"codigo", width:14 }, { header:"Descripción", key:"descripcion", width:28 },
-      { header:"Teléfono", key:"telefono", width:16 }, { header:"Producto", key:"producto", width:25 },
-      { header:"Cantidad", key:"cantidad", width:11 }, { header:"Costo producto", key:"costo", width:15 },
-      { header:"Precio de venta", key:"precio", width:16 }, { header:"Margen ganancia", key:"margen", width:17 },
-      { header:"Margen total", key:"margenTotal", width:15 }
-    ];
+    wb.creator = "Loves Stories";
+    wb.created = new Date();
+
+    const detalle = wb.addWorksheet("Detalle de ventas", { views: [{ state: "frozen", ySplit: 5 }] });
+    const clientes = wb.addWorksheet("Ventas por cliente", { views: [{ state: "frozen", ySplit: 4 }] });
+
+    const oro = "B58A3B";
+    const vino = "4A2637";
+    const crema = "F7F3EC";
+    const verde = "4F6F52";
+    const blanco = "FFFFFF";
+    const borde = "D9D0C2";
+
+    const filasDetalle: any[] = [];
     ventas.forEach(v => {
       const grupos = agruparPorProducto(reglas, v.items);
       grupos.forEach(g => {
         const original = v.items.find(i => i.product_id === g.product_id) as any;
-        const costo = Number(original?.costo ?? 0);
-        const precio = Number(g.precioUnitarioFinal ?? 0);
-        ws.addRow({ fecha:new Date(v.closed_at).toLocaleString("es-BO"), cliente:v.cliente, codigo:g.codigo,
-          descripcion:original?.descripcion ?? "", telefono:v.telefono, producto:g.nombre, cantidad:g.cantidadTotal,
-          costo, precio, margen:precio-costo, margenTotal:(precio-costo)*g.cantidadTotal });
+        const costoUnitario = Number(original?.costo ?? 0);
+        const precioUnitario = Number(g.precioUnitarioFinal ?? 0);
+        const cantidad = Number(g.cantidadTotal ?? 0);
+        const ventaTotal = precioUnitario * cantidad;
+        const costoTotal = costoUnitario * cantidad;
+        const ganancia = ventaTotal - costoTotal;
+        filasDetalle.push({
+          fecha: new Date(v.closed_at), cliente: v.cliente, telefono: v.telefono,
+          codigo: g.codigo, producto: g.nombre, cantidad,
+          costoUnitario, precioUnitario, ventaTotal, costoTotal, ganancia,
+          margenPct: ventaTotal > 0 ? ganancia / ventaTotal : 0,
+          orderId: v.id,
+        });
       });
     });
-    ws.getRow(1).font = { bold:true }; ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"K1"};
-    [8,9,10,11].forEach(c=>ws.getColumn(c).numFmt='"Bs" #,##0.00');
+
+    const ventaTotalGeneral = filasDetalle.reduce((a,r)=>a+r.ventaTotal,0);
+    const costoTotalGeneral = filasDetalle.reduce((a,r)=>a+r.costoTotal,0);
+    const gananciaGeneral = ventaTotalGeneral - costoTotalGeneral;
+    const ventasUnicas = new Set(filasDetalle.map(r=>r.orderId)).size;
+    const unidades = filasDetalle.reduce((a,r)=>a+r.cantidad,0);
+    const margenGeneral = ventaTotalGeneral > 0 ? gananciaGeneral / ventaTotalGeneral : 0;
+    const promedioVenta = ventasUnicas > 0 ? ventaTotalGeneral / ventasUnicas : 0;
+
+    detalle.mergeCells("A1:L1");
+    detalle.getCell("A1").value = "REPORTE DE VENTAS — LOVES STORIES";
+    detalle.getCell("A1").font = { bold:true, size:18, color:{argb:blanco} };
+    detalle.getCell("A1").alignment = { horizontal:"center", vertical:"middle" };
+    detalle.getCell("A1").fill = { type:"pattern", pattern:"solid", fgColor:{argb:vino} };
+    detalle.getRow(1).height = 30;
+    detalle.mergeCells("A2:L2");
+    detalle.getCell("A2").value = `Fecha del reporte: ${new Date(fecha + "T12:00:00").toLocaleDateString("es-BO")}`;
+    detalle.getCell("A2").alignment = { horizontal:"center" };
+    detalle.getCell("A2").font = { italic:true, color:{argb:"5B4E5E"} };
+
+    const resumen = [
+      ["Ventas totales", ventaTotalGeneral], ["Costo total", costoTotalGeneral], ["Ganancia total", gananciaGeneral],
+      ["Margen", margenGeneral], ["Nº de ventas", ventasUnicas], ["Unidades", unidades], ["Venta promedio", promedioVenta]
+    ];
+    resumen.forEach((r,i)=>{
+      const c = 1 + i;
+      detalle.getCell(3,c).value = r[0]; detalle.getCell(4,c).value = r[1] as any;
+      detalle.getCell(3,c).font = {bold:true,color:{argb:blanco}};
+      detalle.getCell(3,c).fill = {type:"pattern",pattern:"solid",fgColor:{argb:oro}};
+      detalle.getCell(3,c).alignment = {horizontal:"center"};
+      detalle.getCell(4,c).alignment = {horizontal:"center"};
+      detalle.getCell(4,c).fill = {type:"pattern",pattern:"solid",fgColor:{argb:crema}};
+    });
+    [1,2,3,7].forEach(c=>detalle.getCell(4,c).numFmt='"Bs" #,##0.00');
+    detalle.getCell(4,4).numFmt='0.00%';
+
+    const headers = ["Fecha","Cliente","Teléfono","Código","Producto","Cantidad","Costo unitario","Precio de venta","Venta total","Costo total","Ganancia","Margen %"];
+    const widths = [20,26,17,14,28,11,16,17,16,16,16,13];
+    headers.forEach((h,i)=>{ const cell=detalle.getCell(5,i+1); cell.value=h; cell.font={bold:true,color:{argb:blanco}}; cell.fill={type:"pattern",pattern:"solid",fgColor:{argb:vino}}; cell.alignment={horizontal:"center"}; cell.border={bottom:{style:"thin",color:{argb:borde}}}; detalle.getColumn(i+1).width=widths[i]; });
+    filasDetalle.forEach((r,idx)=>{
+      const row=detalle.addRow([r.fecha,r.cliente,r.telefono,r.codigo,r.producto,r.cantidad,r.costoUnitario,r.precioUnitario,r.ventaTotal,r.costoTotal,r.ganancia,r.margenPct]);
+      row.getCell(1).numFmt="dd/mm/yyyy hh:mm";
+      [7,8,9,10,11].forEach(c=>row.getCell(c).numFmt='"Bs" #,##0.00');
+      row.getCell(12).numFmt="0.00%";
+      if(idx%2===1) row.eachCell(c=>c.fill={type:"pattern",pattern:"solid",fgColor:{argb:crema}});
+    });
+    detalle.autoFilter={from:"A5",to:"L5"};
+
+    const porCliente = new Map<string, any>();
+    filasDetalle.forEach(r=>{
+      const key=`${r.cliente}__${r.telefono}`;
+      const x=porCliente.get(key) ?? {cliente:r.cliente,telefono:r.telefono,orders:new Set<string>(),unidades:0,ventas:0,costos:0,ganancia:0};
+      x.orders.add(r.orderId); x.unidades+=r.cantidad; x.ventas+=r.ventaTotal; x.costos+=r.costoTotal; x.ganancia+=r.ganancia;
+      porCliente.set(key,x);
+    });
+    const listaClientes=Array.from(porCliente.values()).sort((a,b)=>b.ventas-a.ventas);
+
+    clientes.mergeCells("A1:H1"); clientes.getCell("A1").value="REPORTE DE VENTAS POR CLIENTE";
+    clientes.getCell("A1").font={bold:true,size:18,color:{argb:blanco}}; clientes.getCell("A1").fill={type:"pattern",pattern:"solid",fgColor:{argb:vino}}; clientes.getCell("A1").alignment={horizontal:"center"}; clientes.getRow(1).height=30;
+    clientes.mergeCells("A2:H2"); clientes.getCell("A2").value=`Fecha del reporte: ${new Date(fecha + "T12:00:00").toLocaleDateString("es-BO")}`; clientes.getCell("A2").alignment={horizontal:"center"};
+    const h2=["Cliente","Teléfono","Número de ventas","Unidades compradas","Acumulado ventas","Costo acumulado","Ganancia acumulada","Margen %"];
+    const w2=[28,18,18,19,20,20,21,13];
+    h2.forEach((h,i)=>{const c=clientes.getCell(4,i+1);c.value=h;c.font={bold:true,color:{argb:blanco}};c.fill={type:"pattern",pattern:"solid",fgColor:{argb:verde}};c.alignment={horizontal:"center"};clientes.getColumn(i+1).width=w2[i];});
+    listaClientes.forEach((x,idx)=>{
+      const margen=x.ventas>0?x.ganancia/x.ventas:0;
+      const row=clientes.addRow([x.cliente,x.telefono,x.orders.size,x.unidades,x.ventas,x.costos,x.ganancia,margen]);
+      [5,6,7].forEach(c=>row.getCell(c).numFmt='"Bs" #,##0.00'); row.getCell(8).numFmt="0.00%";
+      if(idx%2===1) row.eachCell(c=>c.fill={type:"pattern",pattern:"solid",fgColor:{argb:crema}});
+    });
+    clientes.autoFilter={from:"A4",to:"H4"};
+
     const buffer = await wb.xlsx.writeBuffer();
     const blob = new Blob([buffer], {type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`Ventas-Loves-Stories-${fecha}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
+    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`Reporte-Ventas-Loves-Stories-${fecha}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
   }
 
   return (

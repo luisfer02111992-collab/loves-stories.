@@ -1,0 +1,8 @@
+CORRECCIÓN 9 — REPORTES EXCEL DE VENTAS
+
+- Se elimina la columna Descripción del Excel de ventas.
+- Nuevo orden: Fecha, Cliente, Teléfono, Código, Producto, Cantidad, Costo unitario, Precio de venta, Venta total, Costo total, Ganancia, Margen %.
+- Formato visual profesional con colores, filtros, fila congelada y formatos Bs/%.
+- Resumen superior: ventas totales, costo total, ganancia total, margen, número de ventas, unidades y venta promedio.
+- Segunda hoja "Ventas por cliente": Cliente, Teléfono, Número de ventas, Unidades compradas, Acumulado ventas, Costo acumulado, Ganancia acumulada y Margen %.
+- No requiere migración SQL nueva.
