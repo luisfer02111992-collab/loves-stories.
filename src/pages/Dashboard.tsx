@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Clock } from "lucide-react";
+import { Clock, MessageCircle } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import StatCard from "../components/StatCard";
 
@@ -7,6 +7,7 @@ interface PedidoPorVencer {
   id: string;
   cliente: string;
   dias: number;
+  telefono: string;
 }
 
 function inicioDeHoy() {
@@ -29,6 +30,7 @@ export default function Dashboard() {
   const [stockBajo, setStockBajo] = useState(0);
   const [porVencer, setPorVencer] = useState<PedidoPorVencer[]>([]);
   const [cargando, setCargando] = useState(true);
+  const [mensajeWhatsApp, setMensajeWhatsApp] = useState("Hola 😊 Esperamos que estés muy bien. Queríamos comentarte que ya se cumplió el plazo de selección de tu cuenta. Para poder continuar reservando nuevas joyitas, puedes realizar el cierre de tu cuenta o un pago correspondiente. 💕 Muchas gracias por tu preferencia y comprensión.");
 
   useEffect(() => {
     cargar();
@@ -37,6 +39,7 @@ export default function Dashboard() {
   async function cargar() {
     setCargando(true);
     const hoy = inicioDeHoy();
+    supabase.from("app_settings").select("overdue_whatsapp_message").eq("id",1).single().then(({data})=>{ if(data?.overdue_whatsapp_message) setMensajeWhatsApp(data.overdue_whatsapp_message); });
 
     // Pedidos cerrados hoy → ventas del día
     const { data: cerradosHoy } = await supabase
@@ -55,7 +58,7 @@ export default function Dashboard() {
     // Pedidos abiertos → valor total pendiente y antigüedad
     const { data: abiertos } = await supabase
       .from("orders")
-      .select("id, opened_at, customers(name), order_items(quantity, unit_price)")
+      .select("id, opened_at, customers(name, phone), order_items(quantity, unit_price)")
       .in("status", ["open", "reopened"]);
     let valorAbiertos = 0;
     const vencer: PedidoPorVencer[] = [];
@@ -64,7 +67,7 @@ export default function Dashboard() {
       (o.order_items ?? []).forEach((it: any) => (subtotal += it.quantity * it.unit_price));
       valorAbiertos += subtotal;
       const dias = Math.floor((Date.now() - new Date(o.opened_at).getTime()) / 86400000) + 1;
-      if (dias >= 3) vencer.push({ id: o.id, cliente: o.customers?.name ?? "Cliente", dias });
+      if (dias >= 3) vencer.push({ id: o.id, cliente: o.customers?.name ?? "Cliente", telefono: o.customers?.phone ?? "", dias });
     });
 
     // Depósitos de hoy
@@ -115,7 +118,7 @@ export default function Dashboard() {
                   <Clock size={15} style={{ color: "#5B4E5E" }} />
                   <span className="text-sm">{p.cliente}</span>
                 </div>
-                <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: b.bg, color: b.fg }}>{b.label}</span>
+                <div className="flex items-center gap-2"><span className="text-xs px-2.5 py-1 rounded-full" style={{ background: b.bg, color: b.fg }}>{b.label}</span>{p.dias >= 5 && p.telefono && <button onClick={() => window.open(`https://wa.me/${p.telefono.replace(/\D/g, "").replace(/^0+/, "")}?text=${encodeURIComponent(mensajeWhatsApp)}`, "_blank")} className="text-xs px-2.5 py-1 rounded-md flex items-center gap-1" style={{ background: "#4F6F52", color: "white" }}><MessageCircle size={12}/> WhatsApp</button>}</div>
               </div>
             );
           })}

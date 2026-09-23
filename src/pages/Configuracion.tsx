@@ -27,6 +27,8 @@ export default function Configuracion() {
   const [colorPrimario, setColorPrimario] = useState("#9C7A3C");
   const [colorAcento, setColorAcento] = useState("#4F6F52");
   const [estiloBarra, setEstiloBarra] = useState("solido");
+  const [estiloGrafico, setEstiloGrafico] = useState("bar");
+  const [mensajeAtraso, setMensajeAtraso] = useState("");
 
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoCorreo, setNuevoCorreo] = useState("");
@@ -62,6 +64,8 @@ export default function Configuracion() {
       setColorPrimario(settings.color_primario ?? "#9C7A3C");
       setColorAcento(settings.color_acento ?? "#4F6F52");
       setEstiloBarra(settings.estilo_barra ?? "solido");
+      setEstiloGrafico(settings.chart_style ?? "bar");
+      setMensajeAtraso(settings.overdue_whatsapp_message ?? "");
     }
     const { data: perfiles } = await supabase.from("profiles").select("*").order("created_at");
     setUsuarios((perfiles as Profile[]) ?? []);
@@ -96,6 +100,11 @@ export default function Configuracion() {
   async function guardarEstiloBarra(estilo: string) {
     setEstiloBarra(estilo);
     await supabase.from("app_settings").update({ estilo_barra: estilo, updated_at: new Date().toISOString() }).eq("id", 1);
+  }
+
+  async function guardarPreferenciasReportes() {
+    await supabase.from("app_settings").update({ chart_style: estiloGrafico, overdue_whatsapp_message: mensajeAtraso, updated_at: new Date().toISOString() }).eq("id",1);
+    alert("Preferencias guardadas.");
   }
 
   async function conectarWhatsapp() {
@@ -277,6 +286,17 @@ export default function Configuracion() {
             ))}
           </div>
           <p className="text-xs mt-2" style={{ color: "#5B4E5E" }}>Los cambios se ven al instante en la barra lateral y la parte superior.</p>
+        </div>
+
+        <p className="font-serif text-lg mb-3">Reportes y recordatorios</p>
+        <div className="p-4 mb-5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+          <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Estilo de gráfico de reportes</p>
+          <select value={estiloGrafico} onChange={(e)=>setEstiloGrafico(e.target.value)} className="px-3 py-2 rounded text-sm mb-3" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+            <option value="bar">Barras</option><option value="line">Líneas</option><option value="area">Área</option>
+          </select>
+          <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Mensaje de WhatsApp para clientes atrasados</p>
+          <textarea value={mensajeAtraso} onChange={(e)=>setMensajeAtraso(e.target.value)} rows={4} className="w-full px-3 py-2 rounded text-sm mb-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+          <button onClick={guardarPreferenciasReportes} className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar preferencias</button>
         </div>
 
         <p className="font-serif text-lg mb-3">Número de WhatsApp conectado</p>

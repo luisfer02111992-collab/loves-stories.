@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Boxes, PackageX } from "lucide-react";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
+import { BarChart, Bar, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import StatCard from "../components/StatCard";
 import type { Product } from "../lib/types";
@@ -25,6 +25,7 @@ export default function Reportes() {
   const [unidades, setUnidades] = useState(0);
   const [porCategoria, setPorCategoria] = useState<{ cat: string; ventas: number }[]>([]);
   const [productos, setProductos] = useState<Product[]>([]);
+  const [estiloGrafico, setEstiloGrafico] = useState("bar");
   const [stockMuerto, setStockMuerto] = useState<{ code: string; name: string; stock_available: number; ultima: string | null }[]>([]);
 
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function Reportes() {
   useEffect(() => {
     supabase.from("products").select("*").is("deleted_at", null).then(({ data }) => setProductos((data as Product[]) ?? []));
     cargarStockMuerto();
+    supabase.from("app_settings").select("chart_style").eq("id",1).single().then(({data})=>setEstiloGrafico(data?.chart_style ?? "bar"));
   }, []);
 
   async function cargarPeriodo() {
@@ -169,13 +171,7 @@ export default function Reportes() {
         <p className="font-serif text-base mb-3">Ventas por categoría</p>
         <div style={{ width: "100%", height: 220 }}>
           <ResponsiveContainer>
-            <BarChart data={porCategoria}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#D9D0C2" />
-              <XAxis dataKey="cat" tick={{ fontSize: 11, fill: "#5B4E5E" }} />
-              <YAxis tick={{ fontSize: 11, fill: "#5B4E5E" }} />
-              <Tooltip contentStyle={{ background: "#F7F3EC", border: "1px solid #D9D0C2", fontSize: 12 }} />
-              <Bar dataKey="ventas" fill="#9C7A3C" radius={[3, 3, 0, 0]} />
-            </BarChart>
+            {estiloGrafico === "line" ? <LineChart data={porCategoria}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="cat"/><YAxis/><Tooltip/><Line type="monotone" dataKey="ventas" /></LineChart> : estiloGrafico === "area" ? <AreaChart data={porCategoria}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="cat"/><YAxis/><Tooltip/><Area type="monotone" dataKey="ventas" /></AreaChart> : <BarChart data={porCategoria}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey="cat"/><YAxis/><Tooltip/><Bar dataKey="ventas" /></BarChart>}
           </ResponsiveContainer>
         </div>
       </div>

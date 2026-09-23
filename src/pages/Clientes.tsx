@@ -661,20 +661,10 @@ export default function Clientes() {
                 <p className="text-sm font-medium mb-2" style={{ color: "#7A5F2D" }}>Confirmar cierre de pedido</p>
                 <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Total del pedido: Bs {total.toFixed(2)} (incluye Bs {descuentoTotal.toFixed(2)} de descuento)</div>
                 <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Dinero disponible para este pedido: Bs {depositado.toFixed(2)}</div>
-                {saldoAFavor > 0 ? (
-                  <>
-                    <div className="text-xs mb-2" style={{ color: "#4F6F52" }}>Saldo a favor: Bs {saldoAFavor.toFixed(2)} — decide qué hacer con el sobrante antes de cerrar:</div>
-                    <div className="flex gap-2 mb-2">
-                      <button onClick={devolverSobrante} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#7A2540", color: "#F7F3EC" }}>Devolver el sobrante al cliente</button>
-                      <button onClick={() => setPendienteSobrante(true)} className="text-xs px-3 py-1.5 rounded-md" style={{ background: pendienteSobrante ? "#4F6F52" : "#EDE7DE", color: pendienteSobrante ? "#F7F3EC" : "#2B1E2E" }}>Dejarlo como saldo a favor</button>
-                    </div>
-                  </>
-                ) : (
-                  <div className="text-xs mb-2" style={{ color: "#7A2540" }}>Saldo pendiente: Bs {saldoPendiente.toFixed(2)} — cerrar NO registra ningún pago automático; la deuda queda reflejada en el historial del pedido.</div>
-                )}
+                {saldoAFavor > 0 ? <div className="text-xs mb-2" style={{ color: "#4F6F52" }}>Saldo a favor: Bs {saldoAFavor.toFixed(2)} — al cerrar se registrará automáticamente como dinero devuelto y la cuenta terminará en Bs 0.</div> : <div className="text-xs mb-2" style={{ color: "#7A2540" }}>Saldo pendiente: Bs {saldoPendiente.toFixed(2)} — al cerrar se registrará automáticamente como pagado y la cuenta terminará en Bs 0.</div>}
                 <div className="flex gap-2">
-                  <button onClick={confirmarCierre} disabled={cerrando || (saldoAFavor > 0 && !pendienteSobrante)} className="text-xs px-4 py-2 rounded-md"
-                    style={{ background: (saldoAFavor > 0 && !pendienteSobrante) ? "#D9D0C2" : "#2B1E2E", color: "#F7F3EC" }}>
+                  <button onClick={confirmarCierre} disabled={cerrando} className="text-xs px-4 py-2 rounded-md"
+                    style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
                     {cerrando ? "Cerrando..." : "Confirmar y cerrar pedido"}
                   </button>
                   <button onClick={() => { setMostrarResumenCierre(false); setPendienteSobrante(false); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>

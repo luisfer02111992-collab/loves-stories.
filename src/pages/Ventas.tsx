@@ -159,11 +159,12 @@ export default function Ventas() {
   // el stock quede siempre correcto), pero el total OFICIAL de la venta
   // (total_cerrado) y el aviso de diferencia solo se actualizan cuando se
   // presiona "Guardar cambios" — nada queda confirmado accidentalmente mientras editas.
-  async function quitarUnidad(orderId: string, itemId: string) {
-    await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
-    setCambiosSinGuardar((prev) => new Set(prev).add(orderId));
+  async function ajustarVentaDirecta(orderId: string, productId: string, delta: number) {
+    const { error } = await supabase.rpc("adjust_closed_sale_item", { p_order_id: orderId, p_product_id: productId, p_delta: delta });
+    if (error) { alert(error.message); return; }
     await cargar();
   }
+
 
   async function agregarItem(orderId: string) {
     if (!codigoNuevo.trim()) return;
@@ -367,9 +368,11 @@ export default function Ventas() {
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-serif">Bs {g.subtotalConDescuento.toFixed(2)}</span>
                         {abierto && (
-                          <button onClick={() => quitarUnidad(v.id, g.detalle[g.detalle.length - 1].id)} title="Quitar una unidad (corrección)" className="p-1 rounded" style={{ color: "#7A2540" }}>
-                            <Minus size={13} />
-                          </button>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, -1)} title="Disminuir 1; devuelve stock y dinero" className="p-1 rounded" style={{ color: "#7A2540", border: "1px solid #D9D0C2" }}><Minus size={13} /></button>
+                            <span className="text-xs min-w-5 text-center">{g.cantidadTotal}</span>
+                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, 1)} title="Aumentar 1; descuenta stock y registra cobro" className="p-1 rounded" style={{ color: "#4F6F52", border: "1px solid #D9D0C2" }}><Plus size={13} /></button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -378,30 +381,7 @@ export default function Ventas() {
                 ))}
               </div>
 
-              {abierto && (
-                <div className="flex items-end gap-2 mb-2 p-2 rounded" style={{ background: "#EDE7DE" }}>
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Código a agregar</p>
-                    <input value={codigoNuevo} onChange={(e) => setCodigoNuevo(e.target.value)} className="w-28 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                  </div>
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Cantidad</p>
-                    <input type="number" min={1} value={cantidadNueva} onChange={(e) => setCantidadNueva(Math.max(1, Number(e.target.value)))} className="w-16 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                  </div>
-                  <button onClick={() => agregarItem(v.id)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                    <Plus size={13} /> Agregar (corrección)
-                  </button>
-                </div>
-              )}
-
-              {abierto && cambiosSinGuardar.has(v.id) && (
-                <div className="p-2 mb-2 rounded-md flex items-center justify-between" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
-                  <p className="text-xs" style={{ color: "#7A5F2D" }}>Hay cambios sin guardar en esta venta. El total oficial no se actualiza hasta que guardes.</p>
-                  <button onClick={() => guardarCambios(v.id)} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5 shrink-0 ml-2" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
-                    <Save size={12} /> Guardar cambios
-                  </button>
-                </div>
-              )}
+              {abierto && <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Usa − o + directamente en cada producto. Cada cambio ajusta inventario, total y dinero en el momento.</p>}
 
               {banner && banner.orderId === v.id && (
                 <div className="p-3 mb-2 rounded-md" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>

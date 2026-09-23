@@ -3,7 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Users, Tag, Boxes, Truck, ScanLine, Share2,
   ShoppingBag, BarChart3, Settings, Trash2, LogOut, Send, Inbox, Receipt,
-  UserCog, BadgePercent, UserCheck,
+  UserCog, BadgePercent, UserCheck, History, Download, Calculator,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useSellerSession } from "../hooks/useSellerSession";
@@ -21,6 +21,9 @@ const SECCIONES = [
   { to: "/catalogo", label: "Catálogo", icon: ShoppingBag, roles: ["admin", "employee"] },
   { to: "/pedidos-catalogo", label: "Pedidos del catálogo", icon: Inbox, roles: ["admin", "employee"] },
   { to: "/ventas", label: "Ventas", icon: Receipt, roles: ["admin", "employee"] },
+  { to: "/historial-clientes", label: "Historial clientes", icon: History, roles: ["admin", "employee"] },
+  { to: "/cierre-caja", label: "Cierre de caja", icon: Calculator, roles: ["admin"] },
+  { to: "/respaldo", label: "Respaldo Excel", icon: Download, roles: ["admin"] },
   { to: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
   { to: "/vendedores", label: "Vendedores", icon: UserCog, roles: ["admin"] },
   { to: "/reporte-vendedores", label: "Reporte de vendedores", icon: BadgePercent, roles: ["admin"] },
