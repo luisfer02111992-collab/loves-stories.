@@ -1,0 +1,8 @@
+CORRECCIÓN 4
+- Descuentos unificados en Asignar, Asignar a varios y cálculo servidor.
+- Reportes del día: +, -, eliminar; ajusta inventario y recalcula venta/saldo si estaba cerrada.
+- Catálogo público: buscador por código/descripción; Enter agrega.
+- Pedido catálogo se guarda atómicamente en Supabase ANTES de WhatsApp y muestra error si no se registró.
+- Pedidos catálogo: coincidencia por teléfono normalizado, reutiliza cliente existente y su pedido abierto.
+- Pedidos catálogo: permite elegir manualmente otro cliente.
+- Pendientes permanecen visibles hasta Aceptar o Rechazar correctamente.

@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Minus, Trash2, Search, ScanBarcode, UserPlus, ShoppingCart, Users } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
-import type { Customer, Product } from "../lib/types";
+import type { Customer, Product, Category } from "../lib/types";
+import { precioNegocioPorCantidad } from "../lib/pricing";
 
 interface LineaCarrito {
   product: Product;
@@ -32,9 +33,11 @@ export default function InicioVentas() {
   const [metodoPago, setMetodoPago] = useState("efectivo");
   const [procesando, setProcesando] = useState(false);
   const [ultimoResultado, setUltimoResultado] = useState<string | null>(null);
+  const [categorias, setCategorias] = useState<Category[]>([]);
 
   useEffect(() => {
     supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
+    supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
   }, []);
 
   async function buscarYAgregar(e: React.FormEvent) {
@@ -94,7 +97,11 @@ export default function InicioVentas() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [filaSeleccionada]);
 
-  const total = carrito.reduce((a, l) => a + l.product.price * l.cantidad, 0);
+  function precioPreview(l: LineaCarrito) {
+    const categoria = categorias.find((c) => c.id === l.product.category_id)?.name ?? null;
+    return precioNegocioPorCantidad(categoria, l.product.name, l.cantidad, Number(l.product.price));
+  }
+  const total = carrito.reduce((a, l) => a + precioPreview(l) * l.cantidad, 0);
   const unidades = carrito.reduce((a, l) => a + l.cantidad, 0);
 
   const coincidenciasCliente = useMemo(() => {
@@ -232,10 +239,10 @@ export default function InicioVentas() {
               style={{ borderBottom: i < carrito.length - 1 ? "1px solid #D9D0C2" : "none", background: filaSeleccionada === l.product.id ? "#EDE7DE" : "transparent" }}>
               <div>
                 <p className="text-sm">{l.product.code} · {l.product.name} × {l.cantidad}</p>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>Bs {l.product.price} c/u · {l.product.stock_available} disponibles</p>
+                <p className="text-xs" style={{ color: "#5B4E5E" }}>Bs {precioPreview(l).toFixed(2)} c/u{precioPreview(l) < Number(l.product.price) ? ` (− Bs ${(Number(l.product.price) - precioPreview(l)).toFixed(2)} c/u)` : ""} · {l.product.stock_available} disponibles</p>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-serif text-sm">Bs {(l.product.price * l.cantidad).toFixed(2)}</span>
+                <span className="font-serif text-sm">Bs {(precioPreview(l) * l.cantidad).toFixed(2)}</span>
                 <button onClick={(e) => { e.stopPropagation(); cambiarCantidad(l.product.id, -1); }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
                   <Minus size={13} />
                 </button>

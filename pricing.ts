@@ -78,13 +78,27 @@ export function agruparPorProducto(reglas: PricingRule[], lineas: LineaPedido[])
   }
   for (const g of grupos.values()) {
     const base = g.subtotalSinDescuento / g.cantidadTotal;
-    g.precioUnitarioFinal = precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
+    const porNombre = precioNegocioPorCantidad(null, g.nombre, g.cantidadTotal, base);
+    g.precioUnitarioFinal = porNombre < base ? porNombre : precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
     g.subtotalConDescuento = g.precioUnitarioFinal * g.cantidadTotal;
     g.descuento = g.subtotalSinDescuento - g.subtotalConDescuento;
     // Se conservan las líneas reales y sus IDs. La UI puede resumir fechas,
     // pero las operaciones +/-/eliminar deben apuntar a filas reales de order_items.
   }
   return Array.from(grupos.values());
+}
+
+export function descuentoNegocioPorCantidad(categoryName: string | null | undefined, productName: string | null | undefined, cantidad: number): number {
+  const texto = `${categoryName ?? ""} ${productName ?? ""}`.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const grupoA = ["arete", "dije", "pulsera", "set", "collar"].some((x) => texto.includes(x));
+  const grupoB = ["anillo", "cadena"].some((x) => texto.includes(x));
+  if (grupoA) return cantidad >= 6 ? 2 : cantidad >= 3 ? 1 : 0;
+  if (grupoB) return cantidad >= 12 ? 2 : cantidad >= 6 ? 1 : 0;
+  return 0;
+}
+
+export function precioNegocioPorCantidad(categoryName: string | null | undefined, productName: string | null | undefined, cantidad: number, base: number): number {
+  return Math.max(0, base - descuentoNegocioPorCantidad(categoryName, productName, cantidad));
 }
 export function precioUnitario(
   reglas: PricingRule[],

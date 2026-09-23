@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Check, X, Clock } from "lucide-react";
+import { Check, X, Clock, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import type { CatalogSubmission } from "../lib/types";
+import type { CatalogSubmission, Customer } from "../lib/types";
 
 interface ItemPedido {
   id: string;
@@ -19,9 +19,13 @@ interface PedidoConItems extends CatalogSubmission {
 export default function PedidosCatalogo() {
   const [pedidos, setPedidos] = useState<PedidoConItems[]>([]);
   const [procesando, setProcesando] = useState<string | null>(null);
+  const [clientes, setClientes] = useState<Customer[]>([]);
+  const [clienteManual, setClienteManual] = useState<Record<string, string>>({});
+  const [busquedaCliente, setBusquedaCliente] = useState<Record<string, string>>({});
 
   useEffect(() => {
     cargar();
+    supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
   }, []);
 
   async function cargar() {
@@ -55,25 +59,37 @@ export default function PedidosCatalogo() {
     );
   }
 
+  function normalizarTelefono(v: string) { return (v ?? "").replace(/\D/g, "").replace(/^591/, ""); }
+
+  function clienteAutomatico(pedido: PedidoConItems) {
+    const tel = normalizarTelefono(pedido.customer_phone);
+    return clientes.find((c) => normalizarTelefono(c.phone) === tel) ?? null;
+  }
+
   async function aceptar(pedido: PedidoConItems) {
     setProcesando(pedido.id);
-    // Busca o crea el cliente por teléfono
-    let { data: cliente } = await supabase.from("customers").select("id").eq("phone", pedido.customer_phone).is("deleted_at", null).maybeSingle();
-    if (!cliente) {
-      const { data: nuevo } = await supabase.from("customers").insert({ name: pedido.customer_name, phone: pedido.customer_phone }).select("id").single();
-      cliente = nuevo;
-    }
-    if (!cliente) { setProcesando(null); return; }
+    try {
+      let cliente: { id: string } | null = null;
+      const manualId = clienteManual[pedido.id];
+      if (manualId) cliente = { id: manualId };
+      if (!cliente) {
+        const existente = clienteAutomatico(pedido);
+        if (existente) cliente = { id: existente.id };
+      }
+      if (!cliente) {
+        const { data: nuevo, error: errNuevo } = await supabase.from("customers").insert({ name: pedido.customer_name, phone: pedido.customer_phone }).select("id").single();
+        if (errNuevo) throw new Error(errNuevo.message);
+        cliente = nuevo;
+      }
+      if (!cliente) throw new Error("No se pudo determinar el cliente.");
 
-    const items = pedido.items.map((it) => ({ catalog_product_id: it.catalog_product_id, quantity: it.cantidadAAsignar }));
-    const { error } = await supabase.rpc("accept_catalog_submission", {
-      p_submission_id: pedido.id,
-      p_customer_id: cliente.id,
-      p_items: items,
-    });
-    if (error) alert(error.message);
-    setProcesando(null);
-    cargar();
+      const items = pedido.items.map((it) => ({ catalog_product_id: it.catalog_product_id, quantity: it.cantidadAAsignar }));
+      const { error } = await supabase.rpc("accept_catalog_submission", { p_submission_id: pedido.id, p_customer_id: cliente.id, p_items: items });
+      if (error) throw new Error(error.message);
+      await cargar();
+    } catch (err: any) {
+      alert(`No se pudo aceptar el pedido: ${err.message}`);
+    } finally { setProcesando(null); }
   }
 
   async function rechazar(pedido: PedidoConItems) {
@@ -116,6 +132,18 @@ export default function PedidosCatalogo() {
                   </div>
                 </div>
               ))}
+            </div>
+            <div className="mb-3 p-3 rounded" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+              {clienteAutomatico(p) && !clienteManual[p.id] && <p className="text-xs mb-2" style={{ color: "#4F6F52" }}>Teléfono reconocido: se asignará a {clienteAutomatico(p)!.name} ({clienteAutomatico(p)!.phone}).</p>}
+              <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>O asignar manualmente a otro cliente:</p>
+              <div className="relative">
+                <Search size={13} className="absolute left-2 top-2.5" />
+                <input value={busquedaCliente[p.id] ?? ""} onChange={(e) => setBusquedaCliente((x) => ({ ...x, [p.id]: e.target.value }))} placeholder="Buscar nombre o teléfono" className="w-full pl-7 pr-2 py-2 rounded text-xs outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+              </div>
+              {(busquedaCliente[p.id] ?? "").trim() && <div className="max-h-28 overflow-y-auto mt-1 rounded" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                {clientes.filter((c) => { const q=(busquedaCliente[p.id] ?? "").toLowerCase(); return c.name.toLowerCase().includes(q) || c.phone.includes(q); }).slice(0,6).map((c) => <button key={c.id} type="button" onClick={() => { setClienteManual((x) => ({...x,[p.id]:c.id})); setBusquedaCliente((x) => ({...x,[p.id]:`${c.name} (${c.phone})`})); }} className="block w-full text-left px-2 py-1.5 text-xs">{c.name} ({c.phone})</button>)}
+              </div>}
+              {clienteManual[p.id] && <p className="text-xs mt-1">Cliente elegido: {clientes.find((c) => c.id === clienteManual[p.id])?.name}</p>}
             </div>
             <div className="flex gap-2">
               <button onClick={() => aceptar(p)} disabled={procesando === p.id} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#4F6F52", color: "#F7F3EC" }}>

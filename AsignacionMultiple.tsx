@@ -3,7 +3,7 @@ import { Share2, Search, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
 import type { Customer, Product, Category } from "../lib/types";
-import { loadPricingRules, precioUnitario, type PricingRule } from "../lib/pricing";
+import { loadPricingRules, precioNegocioPorCantidad, type PricingRule } from "../lib/pricing";
 
 interface Preparacion {
   product: Product;
@@ -113,7 +113,8 @@ export default function AsignacionMultiple() {
   function descuentoPreview(prep: Preparacion, clienteId: string) {
     const nueva = Number(prep.cantidades[clienteId] ?? 0);
     const acumulada = Number(cantidadesExistentes[prep.product.id]?.[clienteId] ?? 0) + nueva;
-    const final = precioUnitario(reglas, prep.product.category_id, acumulada, Number(prep.product.price));
+    const categoria = categorias.find((c) => c.id === prep.product.category_id)?.name ?? null;
+    const final = precioNegocioPorCantidad(categoria, prep.product.name, acumulada, Number(prep.product.price));
     return { acumulada, descuento: Math.max(0, Number(prep.product.price) - final), final };
   }
 
