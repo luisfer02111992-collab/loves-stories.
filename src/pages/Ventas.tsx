@@ -556,9 +556,8 @@ export default function Ventas() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(43,30,46,0.85)" }}>
             <div className="flex flex-col items-center">
               <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 302, fontFamily: "monospace" }} className="p-2 text-xs shadow-md">
-                <p className="text-center font-bold" style={{ fontSize: "1.08rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
+                <p className="text-center font-bold ticket-brand" style={{ fontSize: "1.08rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
                 {telefonoNegocio && <p className="text-center">CEL: {telefonoNegocio}</p>}
-                <p className="text-center">Recibo — Pedido #{v.order_number}</p>
                 <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
                 <p>Fecha cierre: {new Date(v.closed_at).toLocaleDateString("es-BO")}</p>
                 <p>Hora cierre: {new Date(v.closed_at).toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</p>
@@ -572,16 +571,15 @@ export default function Ventas() {
                 {t.grupos.map((g) => (
                   <div key={g.product_id}>
                     <div className="flex justify-between"><span>{g.cantidadTotal}  {g.codigo}  {g.nombre}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
-                    <div className="flex justify-between"><span>Precio unit.: Bs {g.precioUnitarioFinal.toFixed(2)}</span><span>Desc.: Bs {g.descuento.toFixed(2)}</span></div>
                   </div>
                 ))}
                 <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                <div className="flex justify-between"><span>N.º DE ARTÍCULOS</span><span>{t.grupos.reduce((a, g) => a + g.cantidadTotal, 0)}</span></div>
+                <div><span>N.º DE ARTÍCULOS: {t.grupos.reduce((a, g) => a + g.cantidadTotal, 0)}</span></div>
                 <div className="flex justify-between"><span>SUBTOTAL</span><span>Bs {t.grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0).toFixed(2)}</span></div>
                 <div className="flex justify-between"><span>DESCUENTO</span><span>Bs {t.grupos.reduce((a, g) => a + g.descuento, 0).toFixed(2)}</span></div>
                 <div className="flex justify-between font-bold"><span>TOTAL</span><span>Bs {t.bruta.toFixed(2)}</span></div>
                 <p className="text-center" style={{ marginTop: 8 }}>GRACIAS POR SU COMPRA</p>
-                <p className="text-center font-bold" style={{ fontSize: "1rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
+                <p className="text-center font-bold ticket-brand" style={{ fontSize: "1rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
               </div>
               <div className="flex gap-2 mt-3">
                 <button onClick={() => imprimirTicket()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
