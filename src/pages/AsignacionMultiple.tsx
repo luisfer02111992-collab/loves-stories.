@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Share2, Search, Plus, Trash2 } from "lucide-react";
+import { Share2, Search, Plus, Minus, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
-import type { Customer, Product } from "../lib/types";
+import type { Customer, Product, Category } from "../lib/types";
+import { loadPricingRules, precioUnitario, type PricingRule } from "../lib/pricing";
 
 interface Preparacion {
   product: Product;
@@ -23,9 +24,15 @@ export default function AsignacionMultiple() {
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [preparaciones, setPreparaciones] = useState<Preparacion[]>([]);
   const [confirmando, setConfirmando] = useState(false);
+  const [preparacionSeleccionada, setPreparacionSeleccionada] = useState<string | null>(null);
+  const [categorias, setCategorias] = useState<Category[]>([]);
+  const [reglas, setReglas] = useState<PricingRule[]>([]);
+  const [cantidadesExistentes, setCantidadesExistentes] = useState<Record<string, Record<string, number>>>({});
 
   useEffect(() => {
     cargarProductos();
+    loadPricingRules().then(setReglas);
+    supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
     supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => {
       setClientes((data as Customer[]) ?? []);
     });
@@ -40,19 +47,33 @@ export default function AsignacionMultiple() {
   const coincidencias = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
     if (!q) return [];
-    const idsYaPreparados = new Set(preparaciones.map((p) => p.product.id));
-    return productos.filter((p) => !idsYaPreparados.has(p.id) && (p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q))).slice(0, 8);
+    return productos.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)).slice(0, 8);
   }, [busqueda, productos, preparaciones]);
 
   let totalPreparadoAhora = 0;
   for (const key in cantidades) totalPreparadoAhora += Number(cantidades[key]) || 0;
   const restanteAhora = (producto?.stock_available ?? 0) - totalPreparadoAhora;
 
-  function elegirProducto(p: Product) {
+  async function elegirProducto(p: Product) {
     setProductoId(p.id);
     setBusqueda(`${p.code} · ${p.name}`);
     setMostrarLista(false);
-    setCantidades({});
+    const ya = preparaciones.find((x) => x.product.id === p.id);
+    setCantidades(ya ? { ...ya.cantidades } : {});
+    setPreparacionSeleccionada(ya ? p.id : null);
+
+    // Cantidad del mismo producto que cada cliente ya tiene en su pedido abierto.
+    const { data: ordenes } = await supabase.from("orders").select("id, customer_id").in("status", ["open", "reopened"]);
+    const ids = (ordenes ?? []).map((o: any) => o.id);
+    const mapa: Record<string, number> = {};
+    if (ids.length) {
+      const { data: lineas } = await supabase.from("order_items").select("order_id, quantity").in("order_id", ids).eq("product_id", p.id);
+      for (const l of lineas ?? []) {
+        const o: any = (ordenes ?? []).find((x: any) => x.id === (l as any).order_id);
+        if (o?.customer_id) mapa[o.customer_id] = (mapa[o.customer_id] ?? 0) + Number((l as any).quantity ?? 0);
+      }
+    }
+    setCantidadesExistentes((prev) => ({ ...prev, [p.id]: mapa }));
   }
 
   // Agrega el producto actual (con sus cantidades) a la lista temporal de
@@ -61,15 +82,55 @@ export default function AsignacionMultiple() {
     if (!producto || totalPreparadoAhora === 0 || restanteAhora < 0) return;
     const cants: Record<string, number> = {};
     Object.entries(cantidades).forEach(([id, c]) => { if (Number(c) > 0) cants[id] = Number(c); });
-    setPreparaciones((prev) => [...prev, { product: producto, cantidades: cants }]);
+    setPreparaciones((prev) => {
+      const idx = prev.findIndex((x) => x.product.id === producto.id);
+      if (idx < 0) return [...prev, { product: producto, cantidades: cants }];
+      const copia = [...prev];
+      copia[idx] = { product: producto, cantidades: cants };
+      return copia;
+    });
     setBusqueda("");
     setProductoId("");
     setCantidades({});
+    setPreparacionSeleccionada(null);
   }
 
   function quitarPreparacion(productId: string) {
     setPreparaciones((prev) => prev.filter((p) => p.product.id !== productId));
   }
+
+  function ajustarPreparacion(productId: string, clienteId: string, delta: number) {
+    setPreparaciones((prev) => prev.map((p) => {
+      if (p.product.id !== productId) return p;
+      const actual = Number(p.cantidades[clienteId] ?? 0);
+      const siguiente = Math.max(0, actual + delta);
+      const c = { ...p.cantidades, [clienteId]: siguiente };
+      if (siguiente === 0) delete c[clienteId];
+      return { ...p, cantidades: c };
+    }));
+  }
+
+  function descuentoPreview(prep: Preparacion, clienteId: string) {
+    const nueva = Number(prep.cantidades[clienteId] ?? 0);
+    const acumulada = Number(cantidadesExistentes[prep.product.id]?.[clienteId] ?? 0) + nueva;
+    const final = precioUnitario(reglas, prep.product.category_id, acumulada, Number(prep.product.price));
+    return { acumulada, descuento: Math.max(0, Number(prep.product.price) - final), final };
+  }
+
+  useEffect(() => {
+    function teclado(e: KeyboardEvent) {
+      const activo = document.activeElement as HTMLElement | null;
+      const escribiendo = activo && (activo.tagName === "INPUT" || activo.tagName === "TEXTAREA" || activo.tagName === "SELECT");
+      if ((e.key === "Delete" || e.key === "Backspace") && !escribiendo && preparacionSeleccionada) {
+        e.preventDefault(); quitarPreparacion(preparacionSeleccionada); setPreparacionSeleccionada(null);
+      }
+      if (e.key === "Enter" && !escribiendo && preparaciones.length > 0) {
+        e.preventDefault(); confirmarTodo();
+      }
+    }
+    window.addEventListener("keydown", teclado);
+    return () => window.removeEventListener("keydown", teclado);
+  }, [preparacionSeleccionada, preparaciones, confirmando]);
 
   const totalGeneral = preparaciones.reduce((a, p) => a + Object.values(p.cantidades).reduce((x, y) => x + y, 0), 0);
 
@@ -132,6 +193,12 @@ export default function AsignacionMultiple() {
               value={busqueda}
               onChange={(e) => { setBusqueda(e.target.value); setMostrarLista(true); setProductoId(""); }}
               onFocus={() => setMostrarLista(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !producto && coincidencias.length > 0) {
+                  e.preventDefault();
+                  elegirProducto(coincidencias[0]);
+                }
+              }}
               placeholder="Ej: 8169 o Anillo…"
               className="flex-1 text-sm outline-none bg-transparent"
             />
@@ -176,16 +243,27 @@ export default function AsignacionMultiple() {
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           {preparaciones.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Todavía no preparaste ningún producto.</p>}
           {preparaciones.map((prep, i) => (
-            <div key={prep.product.id} className="px-3.5 py-2.5" style={{ borderBottom: i < preparaciones.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+            <div key={prep.product.id} onClick={() => setPreparacionSeleccionada(prep.product.id)} className="px-3.5 py-2.5 cursor-pointer"
+              style={{ borderBottom: i < preparaciones.length - 1 ? "1px solid #D9D0C2" : "none", outline: preparacionSeleccionada === prep.product.id ? "2px solid #A9873D" : "none" }}>
               <div className="flex items-center justify-between">
                 <p className="text-sm">{prep.product.code} · {prep.product.name}</p>
-                <button onClick={() => quitarPreparacion(prep.product.id)} className="p-1 rounded" style={{ color: "#7A2540" }} title="Quitar de la lista">
+                <button onClick={(e) => { e.stopPropagation(); quitarPreparacion(prep.product.id); }} className="p-1 rounded" style={{ color: "#7A2540" }} title="Quitar de la lista">
                   <Trash2 size={14} />
                 </button>
               </div>
-              <p className="text-xs" style={{ color: "#5B4E5E" }}>
-                {Object.entries(prep.cantidades).map(([id, c]) => `${nombreCliente(id)}: ${c}`).join(" · ")}
-              </p>
+              {Object.entries(prep.cantidades).map(([id, c]) => {
+                const pr = descuentoPreview(prep, id);
+                return (
+                  <div key={id} className="flex items-center justify-between gap-2 py-1 text-xs">
+                    <span>{nombreCliente(id)}: {c} un. · Bs {pr.final.toFixed(2)} c/u {pr.descuento > 0 ? `(− Bs ${pr.descuento.toFixed(2)} c/u; acum. ${pr.acumulada})` : ""}</span>
+                    <span className="flex items-center gap-1">
+                      <button type="button" onClick={(e) => { e.stopPropagation(); ajustarPreparacion(prep.product.id, id, -1); }} className="p-1 rounded" style={{ background: "#EDE7DE" }}><Minus size={12}/></button>
+                      <button type="button" onClick={(e) => { e.stopPropagation(); ajustarPreparacion(prep.product.id, id, 1); }} className="p-1 rounded" style={{ background: "#EDE7DE" }}><Plus size={12}/></button>
+                    </span>
+                  </div>
+                );
+              })}
+              <button type="button" onClick={() => elegirProducto(prep.product)} className="text-xs mt-1 underline" style={{ color: "#5B4E5E" }}>Editar cantidades por cliente</button>
             </div>
           ))}
         </div>

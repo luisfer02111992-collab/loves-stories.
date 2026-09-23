@@ -1,0 +1,16 @@
+LOVES STORIES — CORRECCIONES CHATGPT 2
+
+1. Pedido abierto: corregida disminución/eliminación. La función SQL ya no intenta dejar quantity=0 antes de borrar la fila (violaba CHECK quantity > 0). Devuelve stock exacto.
+2. Clientes.tsx ahora muestra cualquier error real de Supabase al disminuir/eliminar, en vez de ocultarlo.
+3. Asignar a varios: Enter sobre búsqueda selecciona el primer producto coincidente.
+4. Preasignación: fila seleccionable, Supr/Delete, botones +/− y opción de volver a editar cantidades por cliente.
+5. El mismo código puede volver a abrirse/editarse sin borrar la preasignación.
+6. Enter fuera de campos de edición confirma todas las preasignaciones.
+7. Descuento visible en preasignación por cliente, considerando cantidad acumulada del mismo producto en pedido abierto.
+8. Reglas exactas: Aretes/Dijes/Pulseras/Sets/Collares: 3-5 => -Bs1/u; 6+ => -Bs2/u. Anillos/Cadenas: 6-11 => -Bs1/u; 12+ => -Bs2/u.
+9. Total servidor usa las mismas reglas por mismo producto.
+10. Antes de cerrar, Clientes.tsx compara total del servidor con total mostrado. Si difieren, NO cierra ni consume depósitos.
+11. El SQL no borra pedidos, pagos, productos ni historial. Desactiva reglas de precio anteriores y crea el juego vigente indicado por el negocio.
+
+SQL A EJECUTAR UNA SOLA VEZ:
+supabase_migration_CORRECCIONES_CHATGPT_2.sql

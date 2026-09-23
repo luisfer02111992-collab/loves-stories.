@@ -218,8 +218,9 @@ export default function Clientes() {
   }
 
   async function quitarUnidad(itemId: string) {
-    await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
-    if (seleccionado) cargarPedido(seleccionado.id);
+    const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
+    if (error) { alert(`No se pudo disminuir: ${error.message}`); return; }
+    if (seleccionado) await cargarPedido(seleccionado.id);
   }
 
   async function aumentarUnidad(productId: string) {
@@ -234,10 +235,11 @@ export default function Clientes() {
   async function quitarProductoCompleto(g: GrupoProducto) {
     if (!confirm(`¿Quitar "${g.nombre}" completo (${g.cantidadTotal} unidades) de este pedido? Se devuelve todo al inventario.`)) return;
     for (const d of g.detalle) {
-      await supabase.rpc("remove_order_item_unit", { p_order_item_id: d.id, p_quantity: d.cantidad });
+      const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: d.id, p_quantity: d.cantidad });
+      if (error) { alert(`No se pudo eliminar el producto: ${error.message}`); return; }
     }
     setProductoSeleccionado(null);
-    if (seleccionado) cargarPedido(seleccionado.id);
+    if (seleccionado) await cargarPedido(seleccionado.id);
   }
 
   // Eliminar un depósito registrado por error: pide confirmación, deja
@@ -264,6 +266,15 @@ export default function Clientes() {
   async function confirmarCierre() {
     if (!ordenId || !seleccionado || cerrando) return;
     setCerrando(true);
+    // Seguridad financiera: el total que cerrará Supabase debe coincidir con
+    // el total que ve el usuario. Si no coincide, no consumimos depósitos.
+    const { data: totalServidor, error: errorTotal } = await supabase.rpc("calcular_total_pedido", { p_order_id: ordenId });
+    if (errorTotal) { alert(errorTotal.message); setCerrando(false); return; }
+    if (Math.abs(Number(totalServidor ?? 0) - total) > 0.01) {
+      alert(`No se cerró el pedido porque el total del servidor (Bs ${Number(totalServidor ?? 0).toFixed(2)}) no coincide con el total mostrado (Bs ${total.toFixed(2)}). Actualiza la página y vuelve a revisar.`);
+      setCerrando(false);
+      return;
+    }
     const { error } = await supabase.rpc("close_order", { p_order_id: ordenId });
     if (error) {
       alert(error.message);
