@@ -36,6 +36,7 @@ export default function Clientes() {
   const [disponible, setDisponible] = useState(0);
   const [reglas, setReglas] = useState<PricingRule[]>([]);
   const [nombreNegocio, setNombreNegocio] = useState("Loves Stories");
+  const [telefonoNegocio, setTelefonoNegocio] = useState("");
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoTelefono, setNuevoTelefono] = useState("");
   const [mostrarNuevo, setMostrarNuevo] = useState(false);
@@ -61,8 +62,9 @@ export default function Clientes() {
   useEffect(() => {
     cargarClientes();
     loadPricingRules().then(setReglas);
-    supabase.from("app_settings").select("business_name").eq("id", 1).single().then(({ data }) => {
+    supabase.from("app_settings").select("business_name, whatsapp_number").eq("id", 1).single().then(({ data }) => {
       if (data?.business_name) setNombreNegocio(data.business_name);
+      setTelefonoNegocio(data?.whatsapp_number ?? "");
     });
     cargarInactivos();
   }, []);
@@ -694,7 +696,8 @@ export default function Clientes() {
             {mostrarRecibo && (
               <div className="flex flex-col items-center mb-3">
                 <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 302, fontFamily: "monospace" }} className="p-2 text-xs shadow-md">
-                  <p className="text-center font-bold" style={{ fontSize: "1rem" }}>{nombreNegocio}</p>
+                  <p className="text-center font-bold" style={{ fontSize: "1.08rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
+                  {telefonoNegocio && <p className="text-center">CEL: {telefonoNegocio}</p>}
                   <p className="text-center">Detalle de pedido</p>
                   <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
                   <p>Cliente: {seleccionado.name}</p>
@@ -706,6 +709,8 @@ export default function Clientes() {
                   <div className="flex justify-between font-bold"><span>Total</span><span>Bs {total.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span>Pagado</span><span>Bs {depositado.toFixed(2)}</span></div>
                   <div className="flex justify-between font-bold"><span>{saldoAFavor > 0 ? "Saldo a favor" : "Saldo"}</span><span>Bs {(saldoAFavor > 0 ? saldoAFavor : saldoPendiente).toFixed(2)}</span></div>
+                  <p className="text-center" style={{ marginTop: 8 }}>GRACIAS POR SU COMPRA</p>
+                  <p className="text-center font-bold" style={{ fontSize: "1rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
                 </div>
                 <div className="flex gap-2 mt-3">
                   <button onClick={() => imprimirTicket()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>

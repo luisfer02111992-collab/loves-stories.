@@ -1,0 +1,6 @@
+LOVES STORIES — CORRECCIÓN 15
+
+- Ticket térmico: el nombre del negocio se muestra en cursiva elegante arriba y abajo.
+- Ticket térmico: debajo del nombre se muestra el número de WhatsApp sincronizado en Configuración (app_settings.whatsapp_number).
+- No se modifica el mecanismo de impresión 80 mm de la Corrección 14.
+- No requiere SQL nuevo.

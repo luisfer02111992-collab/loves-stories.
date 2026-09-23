@@ -35,6 +35,8 @@ export default function Ventas() {
   const [pagos, setPagos] = useState<Record<string, number>>({});
   const [banner, setBanner] = useState<{ orderId: string; original: number; anterior: number; nuevo: number; pagado: number; diferencia: number } | null>(null);
   const [reciboVenta, setReciboVenta] = useState<string | null>(null);
+  const [nombreNegocio, setNombreNegocio] = useState("Loves Stories");
+  const [telefonoNegocio, setTelefonoNegocio] = useState("");
   const [mostrarDevolucion, setMostrarDevolucion] = useState<string | null>(null);
   const [devItemId, setDevItemId] = useState("");
   const [devCantidad, setDevCantidad] = useState(1);
@@ -45,6 +47,10 @@ export default function Ventas() {
 
   useEffect(() => {
     loadPricingRules().then(setReglas);
+    supabase.from("app_settings").select("business_name, whatsapp_number").eq("id", 1).single().then(({ data }) => {
+      if (data?.business_name) setNombreNegocio(data.business_name);
+      setTelefonoNegocio(data?.whatsapp_number ?? "");
+    });
     supabase.from("sellers").select("id, name").then(({ data }) => {
       const mapa: Record<string, string> = {};
       (data ?? []).forEach((v: any) => (mapa[v.id] = v.name));
@@ -546,7 +552,8 @@ export default function Ventas() {
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(43,30,46,0.85)" }}>
             <div className="flex flex-col items-center">
               <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 302, fontFamily: "monospace" }} className="p-2 text-xs shadow-md">
-                <p className="text-center font-bold" style={{ fontSize: "1rem" }}>Loves Stories</p>
+                <p className="text-center font-bold" style={{ fontSize: "1.08rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
+                {telefonoNegocio && <p className="text-center">CEL: {telefonoNegocio}</p>}
                 <p className="text-center">Recibo — Pedido #{v.order_number}</p>
                 <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
                 <p>Cliente: {v.cliente}</p>
@@ -559,6 +566,8 @@ export default function Ventas() {
                 {t.devolucionProducto > 0 && (
                   <div className="flex justify-between"><span>Devuelto</span><span>Bs {t.devolucionProducto.toFixed(2)}</span></div>
                 )}
+                <p className="text-center" style={{ marginTop: 8 }}>GRACIAS POR SU COMPRA</p>
+                <p className="text-center font-bold" style={{ fontSize: "1rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
               </div>
               <div className="flex gap-2 mt-3">
                 <button onClick={() => imprimirTicket()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
