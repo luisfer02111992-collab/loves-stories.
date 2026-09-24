@@ -1,0 +1,11 @@
+LOVE'S STORIES 1.1 - CORRECCIÓN 35 - RESPALDO AUTOMÁTICO
+
+- Respaldo privado automático cada 15 minutos mientras un administrador usa el sistema.
+- Al pulsar Cerrar sesión, se intenta guardar un respaldo antes de salir.
+- Si el respaldo de cierre falla, se avisa y se pregunta si desea salir igualmente.
+- Conserva automáticamente los 30 respaldos más recientes en el bucket privado "respaldos".
+- El botón de descarga manual se mantiene como copia adicional para PC.
+- Restaurar continúa siendo una acción manual protegida.
+- Cerrar la X del navegador no se usa como único mecanismo: los navegadores no garantizan completar operaciones de red durante el cierre.
+
+IMPORTANTE: ejecutar SEGURIDAD_RESPALDO_AUTOMATICO_35.sql una sola vez antes de probar.

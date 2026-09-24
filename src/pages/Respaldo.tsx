@@ -1,24 +1,8 @@
 import React, { useRef, useState } from "react";
 import { Download, Upload, ShieldCheck, AlertTriangle } from "lucide-react";
 import { supabase } from "../lib/supabase";
+import { BACKUP_TABLES as TABLES, buildBackup } from "../lib/backup";
 
-const TABLES = [
-  "app_settings","categories","purchase_batches","products","price_history","pricing_rules",
-  "customers","sellers","sales_sessions","orders","order_items","order_item_history","pdf_versions",
-  "inventory_movements","payments","returns","return_items","catalog_products","catalog_reservations",
-  "catalog_submissions","catalog_submission_items","audit_log","login_log"
-] as const;
-const DELETE_ORDER = [...TABLES].reverse().filter(t => t !== "app_settings");
-
-async function allRows(table:string){
-  const out:any[]=[]; let from=0; const step=1000;
-  while(true){
-    const {data,error}=await supabase.from(table).select("*").range(from,from+step-1);
-    if(error) throw new Error(`${table}: ${error.message}`);
-    out.push(...(data||[])); if(!data || data.length<step) break; from+=step;
-  }
-  return out;
-}
 function downloadJson(data:any,name:string){
   const blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"});
   const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=name; a.click(); URL.revokeObjectURL(url);
@@ -33,10 +17,9 @@ export default function Respaldo(){
   async function descargar(){
     setBusy(true); setMsg("Preparando respaldo…");
     try{
-      const tables:Record<string,any[]>={};
-      for(const t of TABLES){ tables[t]=await allRows(t); setMsg(`Copiando ${t}…`); }
-      const now=new Date(); const stamp=now.toISOString().replace(/[:.]/g,"-");
-      downloadJson({format:"loves-stories-backup",version:"1.1",created_at:now.toISOString(),tables},`LOVE-STORIES-RESPALDO-${stamp}.json`);
+      const backup=await buildBackup();
+      const stamp=backup.created_at.replace(/[:.]/g,"-");
+      downloadJson(backup,`LOVE-STORIES-RESPALDO-${stamp}.json`);
       setMsg("✓ Respaldo descargado. Guárdalo en una carpeta segura y, si puedes, en una segunda unidad.");
     }catch(e:any){setMsg(`Error: ${e.message}`)}finally{setBusy(false)}
   }
@@ -66,7 +49,7 @@ export default function Respaldo(){
   }
   return <div className="p-4 mb-5" style={{background:'#F7F3EC',border:'1px solid #D9D0C2'}}>
     <div className="flex items-center gap-2 mb-2"><ShieldCheck size={18}/><p className="font-serif text-base">Respaldo de Loves Stories</p></div>
-    <p className="text-xs mb-3" style={{color:'#5B4E5E'}}>Descarga una copia de los datos del negocio. No incluye contraseñas de usuarios ni claves de Supabase. La restauración está reservada para el administrador y pide una confirmación especial.</p>
+    <p className="text-xs mb-3" style={{color:'#5B4E5E'}}>El sistema guarda automáticamente una copia privada cada 15 minutos y antes de cerrar sesión. Este botón permite además descargar una copia a tu PC. No incluye contraseñas ni claves de Supabase.</p>
     <div className="flex gap-2 flex-wrap">
       <button disabled={busy} onClick={descargar} className="px-4 py-2 rounded text-sm flex items-center gap-2" style={{background:'#9C7A3C',color:'white'}}><Download size={15}/>{busy?'Procesando…':'Descargar respaldo'}</button>
       <button disabled={busy} onClick={()=>input.current?.click()} className="px-4 py-2 rounded text-sm flex items-center gap-2" style={{background:'#7A2540',color:'white'}}><Upload size={15}/>Restaurar respaldo</button>

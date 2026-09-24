@@ -9,6 +9,7 @@ import { useAuth } from "../hooks/useAuth";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { supabase } from "../lib/supabase";
 import { canAccess, type PermissionKey } from "../lib/permissions";
+import { saveAutomaticBackup } from "../lib/backup";
 
 const SECCIONES = [
   { permission: "asignar" as PermissionKey, to: "/", label: "Asignar / Vender", icon: ScanLine, roles: ["admin", "employee"] },
@@ -39,6 +40,28 @@ export default function Layout() {
   const [primario, setPrimario] = useState("#9C7A3C");
   const [estiloBarra, setEstiloBarra] = useState("solido");
   const [visualTheme, setVisualTheme] = useState("rosa_elegante");
+
+  useEffect(() => {
+    if (profile?.role !== "admin") return;
+    const run = async () => {
+      try { await saveAutomaticBackup("periodico"); } catch (e) { console.warn("Respaldo automático:", e); }
+    };
+    const last = localStorage.getItem("loves_last_auto_backup");
+    if (!last || Date.now() - new Date(last).getTime() >= 15 * 60 * 1000) run();
+    const timer = window.setInterval(run, 15 * 60 * 1000);
+    return () => window.clearInterval(timer);
+  }, [profile?.role]);
+
+  async function cerrarSesionSeguro() {
+    if (profile?.role === "admin") {
+      try { await saveAutomaticBackup("cerrar_sesion"); }
+      catch (e:any) {
+        const salir = window.confirm(`No se pudo completar el respaldo automático: ${e?.message || e}. ¿Deseas cerrar sesión de todas formas?`);
+        if (!salir) return;
+      }
+    }
+    await signOut();
+  }
 
   useEffect(() => {
     cargarTema();
@@ -106,7 +129,7 @@ export default function Layout() {
           <span className="text-xs" style={{ color: textoBarra }}>
             {profile?.full_name || "Usuario"} · {rol === "admin" ? "Administrador" : "Empleado"}
           </span>
-          <button onClick={signOut} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md" style={{ background: "#7A2540", color: "#F7F3EC" }}>
+          <button onClick={cerrarSesionSeguro} className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md" style={{ background: "#7A2540", color: "#F7F3EC" }}>
             <LogOut size={13} /> Cerrar sesión
           </button>
         </div>
