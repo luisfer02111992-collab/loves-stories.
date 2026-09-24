@@ -8,32 +8,33 @@ import {
 import { useAuth } from "../hooks/useAuth";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { supabase } from "../lib/supabase";
+import { canAccess, type PermissionKey } from "../lib/permissions";
 
 const SECCIONES = [
-  { to: "/", label: "Asignar / Vender", icon: ScanLine, roles: ["admin", "employee"] },
-  { to: "/resumen", label: "Resumen", icon: LayoutDashboard, roles: ["admin", "employee"] },
-  { to: "/clientes", label: "Clientes", icon: Users, roles: ["admin", "employee"] },
-  { to: "/reportes-dia", label: "Reportes del día", icon: Send, roles: ["admin", "employee"] },
-  { to: "/productos", label: "Productos", icon: Tag, roles: ["admin", "employee"] },
-  { to: "/inventario", label: "Inventario", icon: Boxes, roles: ["admin", "employee"] },
-  { to: "/compras", label: "Compras", icon: Truck, roles: ["admin"] },
-  { to: "/asignacion-multiple", label: "Asignar a varios", icon: Share2, roles: ["admin", "employee"] },
-  { to: "/catalogo", label: "Catálogo", icon: ShoppingBag, roles: ["admin", "employee"] },
-  { to: "/pedidos-catalogo", label: "Pedidos del catálogo", icon: Inbox, roles: ["admin", "employee"] },
-  { to: "/ventas", label: "Ventas", icon: Receipt, roles: ["admin", "employee"] },
-  { to: "/historial-clientes", label: "Historial clientes", icon: History, roles: ["admin", "employee"] },
-  { to: "/cierre-caja", label: "Cierre de caja", icon: Calculator, roles: ["admin"] },
-  { to: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
-  { to: "/vendedores", label: "Vendedores", icon: UserCog, roles: ["admin"] },
-  { to: "/reporte-vendedores", label: "Reporte de vendedores", icon: BadgePercent, roles: ["admin"] },
-  { to: "/configuracion", label: "Configuración", icon: Settings, roles: ["admin"] },
+  { permission: "asignar" as PermissionKey, to: "/", label: "Asignar / Vender", icon: ScanLine, roles: ["admin", "employee"] },
+  { permission: "resumen" as PermissionKey, to: "/resumen", label: "Resumen", icon: LayoutDashboard, roles: ["admin", "employee"] },
+  { permission: "clientes" as PermissionKey, to: "/clientes", label: "Clientes", icon: Users, roles: ["admin", "employee"] },
+  { permission: "reportes_dia" as PermissionKey, to: "/reportes-dia", label: "Reportes del día", icon: Send, roles: ["admin", "employee"] },
+  { permission: "productos" as PermissionKey, to: "/productos", label: "Productos", icon: Tag, roles: ["admin", "employee"] },
+  { permission: "inventario" as PermissionKey, to: "/inventario", label: "Inventario", icon: Boxes, roles: ["admin", "employee"] },
+  { permission: "compras" as PermissionKey, to: "/compras", label: "Compras", icon: Truck, roles: ["admin"] },
+  { permission: "asignacion_multiple" as PermissionKey, to: "/asignacion-multiple", label: "Asignar a varios", icon: Share2, roles: ["admin", "employee"] },
+  { permission: "catalogo" as PermissionKey, to: "/catalogo", label: "Catálogo", icon: ShoppingBag, roles: ["admin", "employee"] },
+  { permission: "pedidos_catalogo" as PermissionKey, to: "/pedidos-catalogo", label: "Pedidos del catálogo", icon: Inbox, roles: ["admin", "employee"] },
+  { permission: "ventas" as PermissionKey, to: "/ventas", label: "Ventas", icon: Receipt, roles: ["admin", "employee"] },
+  { permission: "historial_clientes" as PermissionKey, to: "/historial-clientes", label: "Historial clientes", icon: History, roles: ["admin", "employee"] },
+  { permission: "cierre_caja" as PermissionKey, to: "/cierre-caja", label: "Cierre de caja", icon: Calculator, roles: ["admin"] },
+  { permission: "reportes" as PermissionKey, to: "/reportes", label: "Reportes", icon: BarChart3, roles: ["admin"] },
+  { permission: "vendedores" as PermissionKey, to: "/vendedores", label: "Vendedores", icon: UserCog, roles: ["admin"] },
+  { permission: "reporte_vendedores" as PermissionKey, to: "/reporte-vendedores", label: "Reporte de vendedores", icon: BadgePercent, roles: ["admin"] },
+  { permission: "configuracion" as PermissionKey, to: "/configuracion", label: "Configuración", icon: Settings, roles: ["admin"] },
 ];
 
 export default function Layout() {
   const { profile, signOut } = useAuth();
   const { vendedores, vendedorActivoId, vendedorActivoNombre, iniciarSesion, finalizarSesion } = useSellerSession();
   const rol = profile?.role ?? "employee";
-  const secciones = SECCIONES.filter((s) => s.roles.includes(rol));
+  const secciones = SECCIONES.filter((s) => s.roles.includes(rol) && canAccess(rol, profile?.permissions, s.permission));
   const [nombre, setNombre] = useState("Loves Stories");
   const [primario, setPrimario] = useState("#9C7A3C");
   const [estiloBarra, setEstiloBarra] = useState("solido");

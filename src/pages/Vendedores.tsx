@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Pencil, Power } from "lucide-react";
+import { Plus, Pencil, Trash2, RotateCcw } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { Seller } from "../lib/types";
 
@@ -8,6 +8,7 @@ export default function Vendedores() {
   const [mostrarNuevo, setMostrarNuevo] = useState(false);
   const [nombre, setNombre] = useState("");
   const [editando, setEditando] = useState<string | null>(null);
+  const [nombreEdit, setNombreEdit] = useState("");
   const [tipoComision, setTipoComision] = useState<"none" | "percentage" | "fixed">("none");
   const [valorComision, setValorComision] = useState(0);
 
@@ -31,18 +32,26 @@ export default function Vendedores() {
 
   function empezarEditar(v: Seller) {
     setEditando(v.id);
+    setNombreEdit(v.name);
     setTipoComision(v.commission_type);
     setValorComision(v.commission_value);
   }
 
   async function guardarComision(id: string) {
-    await supabase.from("sellers").update({ commission_type: tipoComision, commission_value: tipoComision === "none" ? 0 : valorComision, updated_at: new Date().toISOString() }).eq("id", id);
+    if (!nombreEdit.trim()) return alert("El nombre es obligatorio.");
+    await supabase.from("sellers").update({ name: nombreEdit.trim(), commission_type: tipoComision, commission_value: tipoComision === "none" ? 0 : valorComision, updated_at: new Date().toISOString() }).eq("id", id);
     setEditando(null);
     cargar();
   }
 
-  async function cambiarActivo(v: Seller) {
-    await supabase.from("sellers").update({ active: !v.active, updated_at: new Date().toISOString() }).eq("id", v.id);
+  async function eliminar(v: Seller) {
+    if (!confirm(`¿Eliminar a ${v.name} de los vendedores disponibles?\n\nSus ventas históricas se conservarán. El vendedor quedará inactivo.`)) return;
+    await supabase.from("sellers").update({ active: false, updated_at: new Date().toISOString() }).eq("id", v.id);
+    cargar();
+  }
+
+  async function reactivar(v: Seller) {
+    await supabase.from("sellers").update({ active: true, updated_at: new Date().toISOString() }).eq("id", v.id);
     cargar();
   }
 
@@ -78,16 +87,26 @@ export default function Vendedores() {
               </div>
               <div className="flex gap-1.5">
                 <button onClick={() => empezarEditar(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                  <Pencil size={12} /> Comisión
+                  <Pencil size={12} /> Editar
                 </button>
-                <button onClick={() => cambiarActivo(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: v.active ? "#F4E3E6" : "#E4EBE1", color: v.active ? "#7A2540" : "#4F6F52" }}>
-                  <Power size={12} /> {v.active ? "Desactivar" : "Activar"}
-                </button>
+                {v.active ? (
+                  <button onClick={() => eliminar(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
+                    <Trash2 size={12} /> Eliminar
+                  </button>
+                ) : (
+                  <button onClick={() => reactivar(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#E4EBE1", color: "#4F6F52" }}>
+                    <RotateCcw size={12} /> Reactivar
+                  </button>
+                )}
               </div>
             </div>
 
             {editando === v.id && (
               <div className="mt-3 p-3 rounded flex items-end gap-2 flex-wrap" style={{ background: "#EDE7DE" }}>
+                <div className="min-w-48 flex-1">
+                  <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Nombre</p>
+                  <input value={nombreEdit} onChange={(e) => setNombreEdit(e.target.value)} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+                </div>
                 <div>
                   <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Tipo de comisión</p>
                   <select value={tipoComision} onChange={(e) => setTipoComision(e.target.value as any)} className="px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>

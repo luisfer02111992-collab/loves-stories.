@@ -1,0 +1,16 @@
+LOVES STORIES — CORRECCIÓN 21
+
+1. VENDEDORES
+- Editar ahora permite cambiar nombre y comisión.
+- Eliminar desactiva al vendedor para no romper ventas/reportes históricos.
+- Un vendedor eliminado puede reactivarse.
+
+2. USUARIOS Y PERMISOS
+- Al crear un usuario Vendedor aparece una lista de secciones a las que puede acceder.
+- El administrador tiene acceso completo.
+- En Usuarios del sistema aparece botón Permisos para modificar posteriormente el acceso de un vendedor.
+- El menú oculta secciones no autorizadas y las rutas también validan el permiso.
+
+3. SQL
+- Ejecutar supabase_migration_CORRECCIONES_CHATGPT_21.sql una sola vez antes de usar los permisos.
+- No elimina información existente.

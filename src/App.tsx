@@ -23,11 +23,20 @@ import Vendedores from "./pages/Vendedores";
 import ReporteVendedores from "./pages/ReporteVendedores";
 import CierreCaja from "./pages/CierreCaja";
 import HistorialClientes from "./pages/HistorialClientes";
+import { canAccess, type PermissionKey } from "./lib/permissions";
 
 function Privado({ children }: { children: React.ReactNode }) {
   const { loading, userId } = useAuth();
   if (loading) return <div className="p-6 text-sm">Cargando…</div>;
   if (!userId) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
+
+function ConPermiso({ permiso, children }: { permiso: PermissionKey; children: React.ReactNode }) {
+  const { profile } = useAuth();
+  if (!profile) return null;
+  if (!canAccess(profile.role, profile.permissions, permiso)) return <div className="p-6 text-sm">No tienes permiso para acceder a esta sección.</div>;
   return <>{children}</>;
 }
 
@@ -79,56 +88,46 @@ function AppRoutes() {
           </Privado>
         }
       >
-        <Route index element={<InicioVentas />} />
-        <Route path="resumen" element={<Dashboard />} />
-        <Route path="clientes" element={<Clientes />} />
-        <Route path="reportes-dia" element={<ReportesDelDia />} />
-        <Route path="productos" element={<Productos />} />
-        <Route path="inventario" element={<Inventario />} />
+        <Route index element={<ConPermiso permiso="asignar"><InicioVentas /></ConPermiso>} />
+        <Route path="resumen" element={<ConPermiso permiso="resumen"><Dashboard /></ConPermiso>} />
+        <Route path="clientes" element={<ConPermiso permiso="clientes"><Clientes /></ConPermiso>} />
+        <Route path="reportes-dia" element={<ConPermiso permiso="reportes_dia"><ReportesDelDia /></ConPermiso>} />
+        <Route path="productos" element={<ConPermiso permiso="productos"><Productos /></ConPermiso>} />
+        <Route path="inventario" element={<ConPermiso permiso="inventario"><Inventario /></ConPermiso>} />
         <Route
           path="compras"
           element={
-            <SoloAdmin>
-              <Compras />
-            </SoloAdmin>
+            <ConPermiso permiso="compras"><Compras /></ConPermiso>
           }
         />
-        <Route path="asignacion-multiple" element={<AsignacionMultiple />} />
-        <Route path="catalogo" element={<Catalogo />} />
-        <Route path="pedidos-catalogo" element={<PedidosCatalogo />} />
-        <Route path="ventas" element={<Ventas />} />
-        <Route path="cierre-caja" element={<SoloAdmin><CierreCaja /></SoloAdmin>} />
-        <Route path="historial-clientes" element={<HistorialClientes />} />
+        <Route path="asignacion-multiple" element={<ConPermiso permiso="asignacion_multiple"><AsignacionMultiple /></ConPermiso>} />
+        <Route path="catalogo" element={<ConPermiso permiso="catalogo"><Catalogo /></ConPermiso>} />
+        <Route path="pedidos-catalogo" element={<ConPermiso permiso="pedidos_catalogo"><PedidosCatalogo /></ConPermiso>} />
+        <Route path="ventas" element={<ConPermiso permiso="ventas"><Ventas /></ConPermiso>} />
+        <Route path="cierre-caja" element={<ConPermiso permiso="cierre_caja"><CierreCaja /></ConPermiso>} />
+        <Route path="historial-clientes" element={<ConPermiso permiso="historial_clientes"><HistorialClientes /></ConPermiso>} />
         <Route
           path="vendedores"
           element={
-            <SoloAdmin>
-              <Vendedores />
-            </SoloAdmin>
+            <ConPermiso permiso="vendedores"><Vendedores /></ConPermiso>
           }
         />
         <Route
           path="reporte-vendedores"
           element={
-            <SoloAdmin>
-              <ReporteVendedores />
-            </SoloAdmin>
+            <ConPermiso permiso="reporte_vendedores"><ReporteVendedores /></ConPermiso>
           }
         />
         <Route
           path="reportes"
           element={
-            <SoloAdmin>
-              <Reportes />
-            </SoloAdmin>
+            <ConPermiso permiso="reportes"><Reportes /></ConPermiso>
           }
         />
         <Route
           path="configuracion"
           element={
-            <SoloAdmin>
-              <Configuracion />
-            </SoloAdmin>
+            <ConPermiso permiso="configuracion"><Configuracion /></ConPermiso>
           }
         />
       </Route>

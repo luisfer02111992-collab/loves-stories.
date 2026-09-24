@@ -5,6 +5,7 @@ export interface Profile {
   full_name: string;
   role: Role;
   active: boolean;
+  permissions?: string[] | null;
   created_at: string;
 }
 

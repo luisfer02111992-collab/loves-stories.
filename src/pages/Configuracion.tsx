@@ -3,6 +3,7 @@ import { Pencil, MessageCircle, Palette, ShieldCheck, Mail, KeyRound } from "luc
 import { supabase, supabaseSignUpClient } from "../lib/supabase";
 import type { Profile } from "../lib/types";
 import { imprimirPruebaTermica } from "../lib/print";
+import { EMPLOYEE_DEFAULT_PERMISSIONS, PERMISSION_OPTIONS } from "../lib/permissions";
 
 const PRESETS = [
   { key: "clasico", label: "Clásico dorado", primario: "#9C7A3C", acento: "#4F6F52" },
@@ -38,6 +39,9 @@ export default function Configuracion() {
   const [nuevoCorreo, setNuevoCorreo] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
   const [nuevoRol, setNuevoRol] = useState<"employee" | "admin">("employee");
+  const [nuevosPermisos, setNuevosPermisos] = useState<string[]>([...EMPLOYEE_DEFAULT_PERMISSIONS]);
+  const [editandoUsuario, setEditandoUsuario] = useState<string | null>(null);
+  const [permisosEdit, setPermisosEdit] = useState<string[]>([]);
   const [creando, setCreando] = useState(false);
   const [mensaje, setMensaje] = useState<string | null>(null);
 
@@ -213,12 +217,29 @@ export default function Configuracion() {
     if (data.user) {
       // El trigger de la base de datos ya creó el perfil con rol "employee";
       // aquí solo ajustamos nombre y rol si el administrador eligió "admin".
-      await supabase.from("profiles").update({ full_name: nuevoNombre, role: nuevoRol }).eq("id", data.user.id);
+      await supabase.from("profiles").update({ full_name: nuevoNombre, role: nuevoRol, permissions: nuevoRol === "admin" ? [] : nuevosPermisos }).eq("id", data.user.id);
     }
+    setNuevosPermisos([...EMPLOYEE_DEFAULT_PERMISSIONS]);
     setMensaje("Usuario creado. Si tu proyecto pide confirmar el correo, la persona debe revisar su bandeja de entrada antes de poder ingresar.");
     setNuevoNombre(""); setNuevoCorreo(""); setNuevaClave(""); setNuevoRol("employee");
     setCreando(false);
     cargar();
+  }
+
+  function alternarPermiso(lista: string[], setLista: (v: string[]) => void, key: string) {
+    setLista(lista.includes(key) ? lista.filter((p) => p !== key) : [...lista, key]);
+  }
+
+  function editarPermisos(u: Profile) {
+    setEditandoUsuario(u.id);
+    setPermisosEdit(u.role === "admin" ? [] : [...(u.permissions ?? EMPLOYEE_DEFAULT_PERMISSIONS)]);
+  }
+
+  async function guardarPermisos(u: Profile) {
+    const { error } = await supabase.from("profiles").update({ permissions: u.role === "admin" ? [] : permisosEdit }).eq("id", u.id);
+    if (error) return alert(`No se pudo guardar: ${error.message}`);
+    setEditandoUsuario(null);
+    await cargar();
   }
 
   return (
@@ -363,12 +384,23 @@ export default function Configuracion() {
           {usuarios.map((u, i) => (
             <div key={u.id} className="flex items-center justify-between px-3.5 py-2.5" style={{ borderBottom: i < usuarios.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <p className="text-sm">{u.full_name || "(sin nombre)"}</p>
-              <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: u.role === "admin" ? "#F6EAD2" : "#E4EBE1", color: u.role === "admin" ? "#7A5F2D" : "#4F6F52" }}>
-                {u.role === "admin" ? "Administrador" : "Vendedor"}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs px-2.5 py-1 rounded-full" style={{ background: u.role === "admin" ? "#F6EAD2" : "#E4EBE1", color: u.role === "admin" ? "#7A5F2D" : "#4F6F52" }}>
+                  {u.role === "admin" ? "Administrador" : "Vendedor"}
+                </span>
+                {u.role !== "admin" && <button type="button" onClick={() => editarPermisos(u)} className="text-xs px-2.5 py-1 rounded" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Permisos</button>}
+              </div>
             </div>
           ))}
         </div>
+        {editandoUsuario && (() => { const u = usuarios.find(x => x.id === editandoUsuario); return u ? (
+          <div className="mt-2 p-3 rounded" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+            <p className="text-sm font-semibold mb-2">Permisos de {u.full_name}</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{PERMISSION_OPTIONS.map(op => (
+              <label key={op.key} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={permisosEdit.includes(op.key)} onChange={() => alternarPermiso(permisosEdit, setPermisosEdit, op.key)} /> {op.label}</label>
+            ))}</div>
+            <div className="flex gap-2 mt-3"><button type="button" onClick={() => guardarPermisos(u)} className="text-xs px-3 py-2 rounded" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar permisos</button><button type="button" onClick={() => setEditandoUsuario(null)} className="text-xs px-3 py-2 rounded" style={{ border: "1px solid #D9D0C2" }}>Cancelar</button></div>
+          </div>) : null; })()}
 
         <p className="font-serif text-lg mb-3 mt-5">Sesiones recientes</p>
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
@@ -394,6 +426,13 @@ export default function Configuracion() {
           <option value="employee">Vendedor</option>
           <option value="admin">Administrador</option>
         </select>
+        {nuevoRol === "employee" && <div className="mb-3 p-3 rounded" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+          <p className="text-xs font-semibold mb-2">¿A qué puede acceder?</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">{PERMISSION_OPTIONS.map(op => (
+            <label key={op.key} className="flex items-center gap-2 text-xs"><input type="checkbox" checked={nuevosPermisos.includes(op.key)} onChange={() => alternarPermiso(nuevosPermisos, setNuevosPermisos, op.key)} /> {op.label}</label>
+          ))}</div>
+        </div>}
+        {nuevoRol === "admin" && <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>El administrador tiene acceso completo.</p>}
         {mensaje && <p className="text-xs mb-2" style={{ color: "#7A5F2D" }}>{mensaje}</p>}
         <button type="submit" disabled={creando} className="w-full py-2 rounded-md text-sm" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
           {creando ? "Creando..." : "Crear usuario"}
