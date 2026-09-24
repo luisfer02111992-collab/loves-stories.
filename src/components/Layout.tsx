@@ -144,6 +144,9 @@ export default function Layout() {
         </div>
 
         <div className="p-5 flex-1 min-w-0 ls-main-content">
+          <div className="ls-global-brand-banner mb-5 rounded-2xl overflow-hidden" aria-label="LOVE’S STORIES Jewelry">
+            <img src="/loves-stories-logo.jpeg" alt="LOVE’S STORIES Jewelry" />
+          </div>
           <Outlet />
         </div>
       </div>

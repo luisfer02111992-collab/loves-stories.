@@ -99,9 +99,6 @@ export default function Dashboard() {
 
   return (
     <div>
-      <div className="ls-home-hero mb-5 rounded-2xl overflow-hidden">
-        <img src="/loves-stories-logo.jpeg" alt="LOVE'S STORIES Jewelry" className="ls-home-banner" />
-      </div>
       <p className="font-serif text-lg mb-3">Hoy</p>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard label="Ventas cerradas" value={`Bs ${ventasHoy.toLocaleString("es-BO")}`} />
