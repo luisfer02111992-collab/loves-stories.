@@ -1,0 +1,15 @@
+LOVES STORIES — CORRECCIÓN 20
+
+VENTAS > ELIMINAR VENTA
+- Agrega botón "Eliminar venta" con confirmación.
+- Si la venta pertenece a un cliente registrado: deshace el cierre y vuelve al punto anterior a "Cerrar pedido".
+  * conserva productos asignados
+  * conserva depósitos/amortizaciones previos
+  * elimina únicamente el cobro automático generado por el cierre
+  * elimina el cierre de reportes/ventas
+  * vuelve la cuenta a estado reopened
+  * no crea devolución, reembolso ni saldo a favor nuevo
+- Si es venta directa: se anula, elimina su pago y libera los productos al inventario.
+- Conserva auditoría de la anulación.
+
+SQL: ejecutar supabase_migration_CORRECCIONES_CHATGPT_20.sql una sola vez.

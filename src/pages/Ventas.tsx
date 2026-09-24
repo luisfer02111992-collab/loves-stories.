@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Calendar, Minus, Plus, Pencil, FileDown, RotateCcw, Undo2, Save, Printer, X } from "lucide-react";
+import { Calendar, Minus, Plus, Pencil, FileDown, RotateCcw, Undo2, Save, Printer, X, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "../lib/pricing";
@@ -255,6 +255,20 @@ export default function Ventas() {
     cargar();
   }
 
+  async function eliminarVenta(v: VentaCerrada) {
+    const ok = confirm(
+      `¿Eliminar la venta del pedido #${v.order_number}?\n\n` +
+      `Si es una cuenta de cliente, volverá exactamente al estado anterior al cierre: ` +
+      `pedido abierto con sus productos y depósitos previos. El cobro creado por el cierre desaparecerá.\n\n` +
+      `Si fue una venta directa, se anulará y sus productos volverán al inventario.\n\n` +
+      `Esta acción no registra devolución de dinero.`
+    );
+    if (!ok) return;
+    const { error } = await supabase.rpc("undo_closed_sale", { p_order_id: v.id });
+    if (error) { alert(`No se pudo eliminar la venta: ${error.message}`); return; }
+    await cargar();
+  }
+
   function regenerarPdf(v: VentaCerrada) {
     const t = totalesVenta(v);
     generarPdfGrande({
@@ -439,6 +453,9 @@ export default function Ventas() {
                   </button>
                   <button onClick={() => abrirDevolucion(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
                     <Undo2 size={12} /> Registrar devolución
+                  </button>
+                  <button onClick={() => eliminarVenta(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540", border: "1px solid #D8A9B5" }} title="Deshacer el cierre de esta venta">
+                    <Trash2 size={12} /> Eliminar venta
                   </button>
                   <button onClick={() => {
                     if (abierto && cambiosSinGuardar.has(v.id)) {
