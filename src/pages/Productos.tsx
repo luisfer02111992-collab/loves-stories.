@@ -163,8 +163,21 @@ export default function Productos() {
 
         <div className="flex items-center gap-2 px-3 py-2 rounded mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <Search size={14} style={{ color: "#5B4E5E" }} />
-          <input ref={buscadorRef} value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por código o descripción… (↑↓ para moverte)"
-            className="flex-1 text-sm outline-none bg-transparent" />
+          <input
+            ref={buscadorRef}
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              if (lista.length === 0) return;
+              const q = busqueda.trim().toLowerCase();
+              const exacto = lista.find((p) => p.code.trim().toLowerCase() === q);
+              setSeleccionadoId((exacto ?? lista[0]).id);
+            }}
+            placeholder="Buscar por código o descripción… (Enter para seleccionar, ↑↓ para moverte)"
+            className="flex-1 text-sm outline-none bg-transparent"
+          />
         </div>
 
         {mostrarNuevo && (

@@ -1,0 +1,7 @@
+CORRECCIÓN 28 — PRODUCTOS / ENTER EN BUSCADOR
+
+- En Productos, al escribir un código o descripción y presionar Enter, se selecciona el producto para editar.
+- Si el código coincide exactamente, se prioriza esa coincidencia.
+- Si no hay coincidencia exacta pero la búsqueda devuelve resultados, se selecciona el primer resultado visible.
+- Se conserva la navegación con flechas ↑/↓.
+- No requiere migración SQL.
