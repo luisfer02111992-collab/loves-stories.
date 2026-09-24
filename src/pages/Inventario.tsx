@@ -55,6 +55,8 @@ export default function Inventario() {
   const [nuevos, setNuevos] = useState<FilaExcel[]>([]);
   const [conError, setConError] = useState<FilaExcel[]>([]);
   const [resumenCarga, setResumenCarga] = useState<{ importados: number; conError: number; stockAgregado: number } | null>(null);
+  const [cargandoLote, setCargandoLote] = useState(false);
+  const [progresoCarga, setProgresoCarga] = useState("");
   const [pestanaStock, setPestanaStock] = useState<"disponibles" | "agotados">("disponibles");
   const [mostrarMerma, setMostrarMerma] = useState(false);
   const [mermaCodigo, setMermaCodigo] = useState("");
@@ -166,81 +168,72 @@ export default function Inventario() {
   }
 
   async function confirmarCarga() {
-    const loteLabel = `Lote ${new Date().toLocaleDateString("es-BO")}`;
-    const { data: lote, error: loteError } = await supabase
-      .from("purchase_batches")
-      .insert({
-        label: loteLabel,
-        source: "excel",
-        total_detected: (duplicados?.length ?? 0) + nuevos.length + conError.length,
-        total_ok: 0,
-        total_errors: conError.length,
-        original_data: { nuevos, duplicados, conError },
-      })
-      .select()
-      .single();
+    if (cargandoLote) return;
+    setCargandoLote(true);
+    setProgresoCarga("Creando lote...");
+    try {
+      const loteLabel = `Lote ${new Date().toLocaleDateString("es-BO")}`;
+      const { data: lote, error: loteError } = await supabase
+        .from("purchase_batches")
+        .insert({
+          label: loteLabel,
+          source: "excel",
+          total_detected: (duplicados?.length ?? 0) + nuevos.length + conError.length,
+          total_ok: 0,
+          total_errors: conError.length,
+          // Evitamos guardar el Excel completo aquí: con cientos de filas hacía lenta la confirmación.
+          original_data: { archivo: "excel", total_filas: (duplicados?.length ?? 0) + nuevos.length + conError.length },
+        })
+        .select("id")
+        .single();
 
-    if (loteError || !lote) {
-      alert(`No se pudo crear el lote: ${loteError?.message ?? "error desconocido"}`);
-      return;
-    }
+      if (loteError || !lote) throw new Error(`No se pudo crear el lote: ${loteError?.message ?? "error desconocido"}`);
 
-    let stockAgregado = 0;
-    let importados = 0;
-    const erroresGuardado: FilaExcel[] = [...conError];
-    const categoriaPorNombre = new Map(categorias.map((c) => [c.name.toLowerCase(), c.id]));
+      let stockAgregado = 0;
+      let importados = 0;
+      const erroresGuardado: FilaExcel[] = [...conError];
+      const categoriaPorNombre = new Map(categorias.map((c) => [c.name.toLowerCase(), c.id]));
 
-    // Un código eliminado anteriormente sigue existiendo en la BD por historial.
-    // Si vuelve en un Excel, se restaura en vez de intentar crear un duplicado.
-    const codigosNuevos = nuevos.map((f) => f.code);
-    const eliminadosPorCodigo = new Map<string, any>();
-    for (let i = 0; i < codigosNuevos.length; i += 100) {
-      const bloque = codigosNuevos.slice(i, i + 100);
-      if (!bloque.length) continue;
-      const { data } = await supabase.from("products").select("*").in("code", bloque);
-      for (const p of data ?? []) eliminadosPorCodigo.set(p.code, p);
-    }
-
-    for (const f of nuevos) {
-      const previo = eliminadosPorCodigo.get(f.code);
-      const payload = {
-        code: f.code,
-        name: f.name,
-        category_id: f.category ? categoriaPorNombre.get(f.category.toLowerCase()) ?? null : null,
-        cost: f.cost,
-        price: f.price,
-        stock_physical: f.quantity,
-        stock_reserved: 0,
-        image_url: f.image_url || null,
-        batch_id: lote.id,
-        active: true,
-        deleted_at: null,
-        updated_at: new Date().toISOString(),
-      };
-
-      const resultado = previo
-        ? await supabase.from("products").update(payload).eq("id", previo.id).select("id").single()
-        : await supabase.from("products").insert(payload).select("id").single();
-
-      if (resultado.error) {
-        erroresGuardado.push({ ...f, error: `Fila ${f.fila}: no se guardó (${resultado.error.message})` });
-      } else {
-        importados++;
-        stockAgregado += f.quantity;
+      // Los códigos clasificados como nuevos pueden corresponder a productos eliminados.
+      // UPSERT por código los restaura y, al procesar en bloques, evita cientos de llamadas consecutivas.
+      const TAMANO_BLOQUE = 50;
+      for (let i = 0; i < nuevos.length; i += TAMANO_BLOQUE) {
+        const bloque = nuevos.slice(i, i + TAMANO_BLOQUE);
+        setProgresoCarga(`Guardando productos ${i + 1}-${Math.min(i + bloque.length, nuevos.length)} de ${nuevos.length}...`);
+        const payloads = bloque.map((f) => ({
+          code: f.code,
+          name: f.name,
+          category_id: f.category ? categoriaPorNombre.get(f.category.toLowerCase()) ?? null : null,
+          cost: f.cost,
+          price: f.price,
+          stock_physical: f.quantity,
+          stock_reserved: 0,
+          image_url: f.image_url || null,
+          batch_id: lote.id,
+          active: true,
+          deleted_at: null,
+          updated_at: new Date().toISOString(),
+        }));
+        const { data: guardados, error } = await supabase
+          .from("products")
+          .upsert(payloads, { onConflict: "code" })
+          .select("code");
+        if (error) {
+          for (const f of bloque) erroresGuardado.push({ ...f, error: `Fila ${f.fila}: no se guardó (${error.message})` });
+        } else {
+          const codigosOk = new Set((guardados ?? []).map((x: any) => String(x.code)));
+          for (const f of bloque) {
+            if (codigosOk.has(f.code)) { importados++; stockAgregado += f.quantity; }
+            else erroresGuardado.push({ ...f, error: `Fila ${f.fila}: Supabase no confirmó el guardado` });
+          }
+        }
       }
-    }
 
-    for (const d of duplicados ?? []) {
-      if (d.decision === "omitir" || d.decision === "revisar") continue;
-      const { error: movError } = await supabase.from("inventory_movements").insert({
-        product_id: d.existente.id,
-        type: "entrada",
-        quantity_delta: d.cantidadACargar,
-        reason: "Carga manual de lote con código repetido",
-      });
-      const { error: updError } = await supabase
-        .from("products")
-        .update({
+      const revisados = (duplicados ?? []).filter((d) => d.decision === "manual");
+      for (let i = 0; i < revisados.length; i++) {
+        const d = revisados[i];
+        setProgresoCarga(`Actualizando código repetido ${i + 1} de ${revisados.length}...`);
+        const { error: updError } = await supabase.from("products").update({
           code: d.codigoACargar || d.existente.code,
           name: d.nombreACargar || d.existente.name,
           stock_physical: d.existente.stock_physical + d.cantidadACargar,
@@ -251,27 +244,36 @@ export default function Inventario() {
           active: true,
           deleted_at: null,
           updated_at: new Date().toISOString(),
-        })
-        .eq("id", d.existente.id);
-      if (movError || updError) {
-        erroresGuardado.push({ ...d, error: `Fila ${d.fila}: no se actualizó (${updError?.message ?? movError?.message})` });
-      } else {
-        stockAgregado += d.cantidadACargar;
-        importados++;
+        }).eq("id", d.existente.id).select("id").single();
+        if (updError) erroresGuardado.push({ ...d, error: `Fila ${d.fila}: no se actualizó (${updError.message})` });
+        else {
+          await supabase.from("inventory_movements").insert({ product_id: d.existente.id, type: "entrada", quantity_delta: d.cantidadACargar, reason: "Carga de lote Excel" });
+          stockAgregado += d.cantidadACargar;
+          importados++;
+        }
       }
+
+      await supabase.from("purchase_batches").update({ total_ok: importados, total_errors: erroresGuardado.length }).eq("id", lote.id);
+
+      setProgresoCarga("Verificando inventario guardado...");
+      const { data: verificados, error: verError } = await supabase.from("products").select("id,code,stock_physical").eq("batch_id", lote.id).is("deleted_at", null);
+      if (verError) throw new Error(`El lote se procesó, pero no se pudo verificar: ${verError.message}`);
+      if (importados > 0 && (verificados?.length ?? 0) === 0) throw new Error("Supabase no confirmó ningún producto del lote. No se mostrará una carga exitosa.");
+
+      setResumenCarga({ importados, conError: erroresGuardado.length, stockAgregado });
+      setConError(erroresGuardado);
+      setDuplicados(null);
+      setNuevos([]);
+      if (fileRef.current) fileRef.current.value = "";
+      await cargar();
+      setProgresoCarga(`Listo: ${importados} producto(s) guardado(s) y ${stockAgregado} unidad(es) cargadas.`);
+    } catch (e: any) {
+      const mensaje = e?.message || "Error desconocido al cargar el lote";
+      setProgresoCarga(`ERROR: ${mensaje}`);
+      alert(mensaje);
+    } finally {
+      setCargandoLote(false);
     }
-
-    await supabase.from("purchase_batches").update({
-      total_ok: importados,
-      total_errors: erroresGuardado.length,
-    }).eq("id", lote.id);
-
-    setResumenCarga({ importados, conError: erroresGuardado.length, stockAgregado });
-    setConError(erroresGuardado);
-    setDuplicados(null);
-    setNuevos([]);
-    if (fileRef.current) fileRef.current.value = "";
-    await cargar();
   }
 
   async function eliminarProductoExistente(id: string) {
@@ -494,9 +496,10 @@ export default function Inventario() {
             ))}
           </div>
           <div className="flex gap-2 mt-3">
-            <button onClick={confirmarCarga} className="text-xs px-4 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-              Confirmar carga ({nuevos.length} nuevos + revisados)
+            <button disabled={cargandoLote} onClick={confirmarCarga} className="text-xs px-4 py-2 rounded-md disabled:opacity-60" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+              {cargandoLote ? "Procesando..." : `Confirmar carga (${nuevos.length} nuevos + revisados)`}
             </button>
+            {progresoCarga && <span className="text-xs self-center" style={{ color: progresoCarga.startsWith("ERROR") ? "#7A2540" : "#4F6F52" }}>{progresoCarga}</span>}
             <button onClick={() => { setDuplicados(null); setNuevos([]); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               Cancelar
             </button>

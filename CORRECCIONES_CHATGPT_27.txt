@@ -1,0 +1,10 @@
+LOVES STORIES — CORRECCIÓN 27
+
+- Corrige Confirmar carga de Inventario para lotes grandes.
+- La carga de productos nuevos/restaurados se hace en bloques y se confirma con Supabase.
+- Muestra Procesando y progreso visible mientras guarda.
+- Si Supabase falla, muestra el error en pantalla; ya no parece que el botón no hace nada.
+- Verifica que el lote realmente tenga productos guardados antes de mostrar éxito.
+- Mantiene plantilla sin Precio total.
+- Imagen sigue siendo opcional: vacío = carga sin foto; URL = carga con foto.
+- No requiere SQL nuevo.
