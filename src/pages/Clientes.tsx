@@ -404,9 +404,22 @@ export default function Clientes() {
 
   async function eliminarCliente() {
     if (!seleccionado) return;
-    if (!confirm(`¿Eliminar a "${seleccionado.name}"? Podrás restaurarlo luego desde la Papelera.`)) return;
-    await supabase.from("customers").update({ deleted_at: new Date().toISOString() }).eq("id", seleccionado.id);
+    const nombre = seleccionado.name;
+    if (!confirm(`¿ELIMINAR POR COMPLETO a "${nombre}"?\n\nEsta acción es permanente y eliminará también sus pedidos, pagos, depósitos y movimientos asociados. Los productos de pedidos que todavía estén abiertos volverán al inventario.\n\nNo se podrá restaurar.`)) return;
+
+    const { error } = await supabase.rpc("delete_customer_completely", { p_customer_id: seleccionado.id });
+    if (error) {
+      alert(`No se pudo eliminar el cliente: ${error.message}`);
+      return;
+    }
+
+    setSeleccionado(null);
+    setOrdenId(null);
+    setItems([]);
+    setDepositos([]);
     await cargarClientes();
+    await cargarInactivos();
+    alert(`Cliente "${nombre}" eliminado por completo.`);
   }
 
   async function registrarDeposito() {

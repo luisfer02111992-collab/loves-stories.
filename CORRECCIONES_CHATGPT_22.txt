@@ -1,0 +1,8 @@
+LOVES STORIES — CORRECCIÓN 22
+
+- Clientes > Eliminar ahora elimina al cliente de forma definitiva, no lo marca como inactivo.
+- La acción requiere confirmación explícita y es irreversible.
+- Solo un administrador puede ejecutarla.
+- Elimina pedidos, pagos/depósitos y datos operativos asociados al cliente.
+- Si el cliente tenía un pedido abierto/reabierto, sus unidades reservadas se liberan al inventario.
+- Si tenía ventas ya cerradas, esas ventas desaparecen del historial financiero junto con el cliente, pero NO se repone inventario de ventas cerradas para evitar crear stock ficticio.
