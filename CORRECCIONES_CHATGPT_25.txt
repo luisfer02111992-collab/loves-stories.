@@ -1,0 +1,8 @@
+LOVES STORIES — CORRECCIÓN 25
+
+1. Corrige el error de llave foránea de la Corrección 24.
+2. Los productos fuera del inventario se DESACTIVAN del catálogo (active=false, stock=0) en lugar de borrarse físicamente.
+3. Esto conserva pedidos históricos de catálogo y evita el error catalog_submission_items_catalog_product_id_fkey.
+4. El catálogo administrativo muestra solo publicaciones activas vinculadas a productos activos.
+5. El botón X del catálogo retira la publicación sin romper historial.
+6. Conserva la plantilla Excel editable agregada en Corrección 24.

@@ -1,0 +1,5 @@
+CORRECCIÓN 24
+1. Catálogo administrativo y público ya no muestran productos que no existan en inventario activo.
+2. SQL limpia publicaciones antiguas y crea sincronización al eliminar lógicamente un producto.
+3. Inventario incorpora botón "Descargar plantilla" con Excel editable de ejemplo.
+4. La plantilla incluye Código, Descripción, Cantidad, Costo, Precio total, Precio de venta, Imagen y Categoría.

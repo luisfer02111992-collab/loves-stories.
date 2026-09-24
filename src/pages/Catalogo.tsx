@@ -22,13 +22,17 @@ export default function Catalogo() {
   }, []);
 
   async function cargar() {
-    const { data: cat } = await supabase.from("catalog_products").select("*").order("created_at");
     const { data: prod } = await supabase.from("products").select("*").is("deleted_at", null).order("name");
-    setItems((cat as CatalogProduct[]) ?? []);
-    setProductos((prod as Product[]) ?? []);
+    const inventario = (prod as Product[]) ?? [];
+    const idsInventario = new Set(inventario.map((p) => p.id));
+    const { data: cat } = await supabase.from("catalog_products").select("*").order("created_at");
+    // El catálogo nunca debe mostrar registros antiguos si el producto ya no existe en el inventario activo.
+    const catalogoValido = ((cat as CatalogProduct[]) ?? []).filter((it) => it.active && idsInventario.has(it.product_id));
+    setItems(catalogoValido);
+    setProductos(inventario);
   }
 
-  const disponiblesParaPublicar = productos.filter((p) => !items.some((it) => it.product_id === p.id));
+  const disponiblesParaPublicar = productos.filter((p) => p.stock_available > 0 && !items.some((it) => it.product_id === p.id));
   const coincidenciasProducto = useMemo(() => {
     const q = busquedaProducto.trim().toLowerCase();
     if (!q) return [];
@@ -83,7 +87,9 @@ export default function Catalogo() {
 
   async function eliminar(id: string) {
     setItems((prev) => prev.filter((it) => it.id !== id));
-    await supabase.from("catalog_products").delete().eq("id", id);
+    // No borramos físicamente: pedidos históricos pueden referenciar este registro.
+    // Lo retiramos del catálogo visible sin romper esas referencias.
+    await supabase.from("catalog_products").update({ active: false, stock_available: 0 }).eq("id", id);
   }
 
   // Usar el dominio público de producción, no la URL temporal del deployment de Vercel.

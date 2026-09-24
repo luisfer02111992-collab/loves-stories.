@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { Plus, Pencil, Trash2, RotateCcw } from "lucide-react";
+import { Plus, Pencil, Trash2 } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { Seller } from "../lib/types";
 
@@ -45,14 +45,14 @@ export default function Vendedores() {
   }
 
   async function eliminar(v: Seller) {
-    if (!confirm(`¿Eliminar a ${v.name} de los vendedores disponibles?\n\nSus ventas históricas se conservarán. El vendedor quedará inactivo.`)) return;
-    await supabase.from("sellers").update({ active: false, updated_at: new Date().toISOString() }).eq("id", v.id);
-    cargar();
-  }
-
-  async function reactivar(v: Seller) {
-    await supabase.from("sellers").update({ active: true, updated_at: new Date().toISOString() }).eq("id", v.id);
-    cargar();
+    if (!confirm(`¿ELIMINAR POR COMPLETO al vendedor "${v.name}"?\n\nEsta acción es permanente. También se eliminarán sus sesiones de vendedor. En registros históricos que aún existan, la venta quedará sin vendedor asignado.\n\nNo se podrá restaurar.`)) return;
+    const { error } = await supabase.rpc("delete_seller_completely", { p_seller_id: v.id });
+    if (error) {
+      alert(`No se pudo eliminar el vendedor: ${error.message}`);
+      return;
+    }
+    await cargar();
+    alert(`Vendedor "${v.name}" eliminado por completo.`);
   }
 
   return (
@@ -89,15 +89,9 @@ export default function Vendedores() {
                 <button onClick={() => empezarEditar(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
                   <Pencil size={12} /> Editar
                 </button>
-                {v.active ? (
-                  <button onClick={() => eliminar(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
-                    <Trash2 size={12} /> Eliminar
-                  </button>
-                ) : (
-                  <button onClick={() => reactivar(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#E4EBE1", color: "#4F6F52" }}>
-                    <RotateCcw size={12} /> Reactivar
-                  </button>
-                )}
+                <button onClick={() => eliminar(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
+                  <Trash2 size={12} /> Eliminar
+                </button>
               </div>
             </div>
 

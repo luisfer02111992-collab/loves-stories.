@@ -1,0 +1,7 @@
+CORRECCIÓN 23 — FINAL PRE-LANZAMIENTO
+
+1. Vendedores > Eliminar ahora elimina físicamente al vendedor; ya no lo marca Inactivo ni muestra Reactivar.
+2. Antes de eliminar se pide confirmación irreversible.
+3. Las sesiones del vendedor se eliminan. Si existieran ventas históricas, se conservan pero quedan sin vendedor asignado.
+4. Incluye supabase_migration_CORRECCIONES_CHATGPT_23.sql.
+5. Incluye LIMPIEZA_FINAL_PRODUCCION_1_0.sql para dejar en cero todos los datos de prueba antes del lanzamiento, conservando usuarios/perfiles, configuración, categorías y reglas de precios.

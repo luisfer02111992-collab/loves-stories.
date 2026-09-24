@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Upload, AlertTriangle, Search, Camera, Image as ImageIcon, Download } from "lucide-react";
+import { Upload, AlertTriangle, Search, Camera, Image as ImageIcon, Download, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { supabase } from "../lib/supabase";
@@ -270,6 +270,7 @@ export default function Inventario() {
       <div className="flex items-center justify-between mb-3">
         <p className="font-serif text-lg">Inventario</p>
         <div className="flex gap-2">
+          <a href="/PLANTILLA_CARGA_INVENTARIO_LOVES_STORIES.xlsx" download className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}><FileSpreadsheet size={13}/> Descargar plantilla</a>
           <button onClick={exportarInventario} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}><Download size={13}/> Exportar Excel</button>
           <button onClick={() => setMostrarMerma(true)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#F4E3E6", color: "#7A2540" }}>
             <AlertTriangle size={13} /> Registrar merma
@@ -281,8 +282,8 @@ export default function Inventario() {
         </div>
       </div>
       <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>
-        Columnas del Excel, en este orden: <strong>Código, Descripción, Cantidad, Costo (o Precio total), Precio de venta, Imagen</strong>.
-        Si no hay columna "Costo", se calcula solo dividiendo "Precio total" entre la cantidad. "Imagen" puede ser un enlace directo a la foto.
+        Usa <strong>Descargar plantilla</strong> para obtener el Excel editable de ejemplo. Columnas admitidas: <strong>Código, Descripción, Cantidad, Costo, Precio total, Precio de venta, Imagen y Categoría</strong>.
+        Puedes llenar <strong>Costo</strong> por unidad o dejarlo vacío y llenar <strong>Precio total</strong>; en ese caso el sistema calcula el costo unitario. Imagen y Categoría son opcionales.
       </p>
 
       {resumenCarga && (
