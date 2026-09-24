@@ -106,40 +106,36 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-home-hero{height:180px;min-height:180px;padding:0}.ls-home-banner{object-position:center 58%}
 }
 
+/* CORRECCIÓN 32 — diseño fiel al panel aprobado */
+.ls-global-banner {
+  width:100%; height:166px; overflow:hidden; border-radius:12px;
+  border:1px solid rgba(202,135,153,.55);
+  box-shadow:0 5px 18px rgba(117,25,58,.12);
+  background:#f8d8e1;
+}
+.ls-global-banner img { width:100%; height:100%; display:block; object-fit:fill; }
+.ls-sidebar { background:linear-gradient(180deg,#741b3e 0%,#8d3151 58%,#a94c69 100%)!important; }
+.ls-sidebar::before {
+  opacity:.12!important; background-image:url('/loves-stories-logo.jpeg')!important;
+  background-size:150% auto!important; background-position:center bottom!important; background-repeat:no-repeat!important;
+}
+.ls-sidebar-brand { border:0!important; box-shadow:none!important; border-radius:0!important; background:transparent; }
+.ls-sidebar-brand img { width:100%!important; height:auto!important; object-fit:contain!important; border-radius:0!important; }
+.ls-sidebar-nav a { color:#fff2f6!important; }
+.ls-sidebar-nav a[aria-current="page"] { background:#f7dce6!important; color:#761b3f!important; border-right-color:#d49b3b!important; }
+.ls-sidebar-nav a:hover { background:rgba(255,225,237,.16)!important; }
 
-/* CORRECCION 31 — banner de marca visible en todas las secciones */
-.ls-global-brand-banner {
-  width:100%; height:210px; min-height:210px;
-  border:1px solid rgba(214,163,60,.75);
-  background:var(--ls-card);
-  box-shadow:0 10px 28px rgba(90,24,52,.18);
+.ls-code-search {
+  background:linear-gradient(135deg,#d986a6 0%,#c65e87 52%,#b74772 100%)!important;
+  border:1px solid #d986a6;
+  box-shadow:0 4px 14px rgba(139,42,79,.12);
 }
-.ls-global-brand-banner img {
-  width:100%; height:100%; display:block; object-fit:cover; object-position:center 58%;
-}
-:root[data-ls-theme="rosa_claro"] .ls-global-brand-banner img { filter:brightness(1.08) saturate(.88); }
-:root[data-ls-theme="borgona_luxury"] .ls-global-brand-banner {
-  border-color:#d69a3c; box-shadow:0 12px 35px rgba(255,36,127,.18);
-}
-:root[data-ls-theme="borgona_luxury"] .ls-global-brand-banner img {
-  filter:saturate(1.2) brightness(.58) contrast(1.22) hue-rotate(322deg);
-}
-
-/* La barra de escaneo/asignación sigue la apariencia seleccionada. */
-:root[data-ls-theme="rosa_elegante"] .ls-main-content div[style*="background: rgb(43, 30, 46)"],
-:root[data-ls-theme="rosa_elegante"] .ls-main-content div[style*="background: #2B1E2E"] {
-  background:linear-gradient(135deg,#6f2946,#9b4868)!important;
-  border:1px solid #c77b98!important;
-}
-:root[data-ls-theme="rosa_claro"] .ls-main-content div[style*="background: rgb(43, 30, 46)"],
-:root[data-ls-theme="rosa_claro"] .ls-main-content div[style*="background: #2B1E2E"] {
-  background:linear-gradient(135deg,#f4c9d8,#e7a8bf)!important;
-  border:1px solid #dc91ad!important;
-  color:#641b35!important;
-}
-:root[data-ls-theme="borgona_luxury"] .ls-main-content div[style*="background: rgb(43, 30, 46)"],
-:root[data-ls-theme="borgona_luxury"] .ls-main-content div[style*="background: #2B1E2E"] {
-  background:linear-gradient(135deg,#4a0b24,#780f3b)!important;
-  border:1px solid #a92a5d!important;
-}
-@media (max-width:700px){ .ls-global-brand-banner{height:145px;min-height:145px}.ls-global-brand-banner img{object-position:center 58%} }
+.ls-code-search-label { color:#fff8fb!important; }
+.ls-code-search input { border:1px solid rgba(255,255,255,.65); }
+.ls-code-search-button { background:#9f3762!important; color:#fff8fb!important; border:1px solid rgba(255,255,255,.24); }
+.ls-code-search-button:hover { background:#8b294f!important; }
+:root[data-ls-theme="rosa_claro"] .ls-code-search { background:linear-gradient(135deg,#f4bfd2,#e99ab8)!important; }
+:root[data-ls-theme="rosa_claro"] .ls-code-search-button { background:#c65382!important; }
+:root[data-ls-theme="borgona_luxury"] .ls-code-search { background:linear-gradient(135deg,#7b1740,#a4265a)!important; border-color:#b53b6d; }
+:root[data-ls-theme="borgona_luxury"] .ls-code-search-button { background:#c33d78!important; }
+@media (max-width:700px){ .ls-global-banner{height:105px}.ls-global-banner img{object-fit:cover} }

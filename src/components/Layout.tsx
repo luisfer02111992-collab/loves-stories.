@@ -115,7 +115,7 @@ export default function Layout() {
       <div className="flex flex-1 min-h-0 flex-col md:flex-row">
         <div className="md:w-56 shrink-0 px-3 pt-3 pb-3 ls-sidebar" style={{ background: fondoBarra }}>
           <div className="ls-sidebar-brand hidden md:block mb-3">
-            <img src="/loves-stories-logo.jpeg" alt="LOVE'S STORIES Jewelry" />
+            <img src="/loves-stories-sidebar-brand.png" alt="LOVE'S STORIES Jewelry" />
           </div>
           <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible ls-sidebar-nav">
             {secciones.map((s) => {
@@ -144,8 +144,8 @@ export default function Layout() {
         </div>
 
         <div className="p-5 flex-1 min-w-0 ls-main-content">
-          <div className="ls-global-brand-banner mb-5 rounded-2xl overflow-hidden" aria-label="LOVE’S STORIES Jewelry">
-            <img src="/loves-stories-logo.jpeg" alt="LOVE’S STORIES Jewelry" />
+          <div className="ls-global-banner mb-5" aria-label="LOVE’S STORIES Jewelry">
+            <img src="/loves-stories-banner.png" alt="LOVE’S STORIES Jewelry — Importamos sueños, entregamos emociones" />
           </div>
           <Outlet />
         </div>

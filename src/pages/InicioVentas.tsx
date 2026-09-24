@@ -230,13 +230,13 @@ export default function InicioVentas() {
           </div>
         )}
 
-        <form onSubmit={buscarYAgregar} className="p-4 rounded-md mb-3" style={{ background: "#2B1E2E" }}>
-          <p className="text-xs mb-2 flex items-center gap-1.5" style={{ color: "#C9BFC7" }}><ScanBarcode size={14} /> Escanear o escribir código — Enter agrega a la lista</p>
+        <form onSubmit={buscarYAgregar} className="p-4 rounded-md mb-3 ls-code-search">
+          <p className="text-xs mb-2 flex items-center gap-1.5" className="ls-code-search-label"><ScanBarcode size={14} /> Escanear o escribir código — Enter agrega a la lista</p>
           <div className="flex gap-2">
             <input ref={inputRef} autoFocus value={codigo} onChange={(e) => { setCodigo(e.target.value); setNoEncontrado(false); }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} placeholder="80-50"
               className="flex-1 px-3 py-3 rounded text-lg outline-none" style={{ background: "#F7F3EC", color: "#2B1E2E" }} />
-            <button type="submit" disabled={buscando} className="px-5 rounded flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+            <button type="submit" disabled={buscando} className="px-5 rounded flex items-center gap-1.5 ls-code-search-button">
               <Plus size={16} /> Agregar
             </button>
           </div>

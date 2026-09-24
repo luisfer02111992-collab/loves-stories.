@@ -1,0 +1,5 @@
+CORRECCIÓN 32 — DISEÑO FINAL
+- Banner horizontal fiel a la referencia, visible sobre el contenido del sistema.
+- Menú lateral borgoña/rosado con identidad visual Love's Stories.
+- Buscadores de código rosa/lila integrados al tema.
+- Sin cambios SQL ni lógica de negocio.
