@@ -1,0 +1,9 @@
+CORRECCIÓN 26 - CARGA DE INVENTARIO
+
+1. Se elimina por completo "Precio total" de la plantilla y del importador.
+2. Columnas de carga: Código, Descripción, Cantidad, Costo, Precio de venta, Imagen, Categoría.
+3. Imagen es opcional: una fila se carga con Imagen vacía o con enlace de imagen.
+4. Categoría sigue siendo opcional.
+5. Se corrige el falso mensaje de éxito: ahora se cuentan como importados solamente los productos que Supabase confirmó que fueron guardados.
+6. Si un código ya existía como producto eliminado por una prueba anterior, se restaura y actualiza en lugar de fallar por código duplicado.
+7. Si Supabase rechaza una fila, el sistema muestra esa fila como error y no la suma como importada ni suma su stock.

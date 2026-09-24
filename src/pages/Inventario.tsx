@@ -12,7 +12,6 @@ interface FilaExcel {
   name: string;
   category?: string;
   quantity: number;
-  precioTotal: number;
   price: number;
   cost: number;
   image_url?: string;
@@ -110,7 +109,6 @@ export default function Inventario() {
         const name = String(buscarValor(f, "descripcion")).trim();
         const quantity = Number(buscarValor(f, "cantidad", "disponible"));
         const costoDirecto = buscarValor(f, "costo");
-        const precioTotal = Number(buscarValor(f, "precio total", "preciototal")) || 0;
         const price = Number(buscarValor(f, "precio de venta", "preciodeventa", "precioventa"));
         const image_url = String(buscarValor(f, "imagen", "imagen url", "foto")).trim();
         const category = String(buscarValor(f, "categoria")).trim();
@@ -122,16 +120,13 @@ export default function Inventario() {
         if (!name) problemas.push("falta la descripción");
         if (!Number.isFinite(quantity) || quantity < 0) problemas.push("cantidad inválida");
         if (!Number.isFinite(price) || price < 0) problemas.push("precio de venta inválido");
-
-        const cost = costoDirecto !== "" && Number.isFinite(Number(costoDirecto))
-          ? Number(costoDirecto)
-          : quantity > 0 ? Math.round((precioTotal / quantity) * 100) / 100 : 0;
+        const cost = Number(costoDirecto);
+        if (costoDirecto === "" || !Number.isFinite(cost) || cost < 0) problemas.push("costo inválido");
 
         const fila: FilaExcel = {
           fila: numeroFila,
           code, name, category,
           quantity: Number.isFinite(quantity) ? quantity : 0,
-          precioTotal,
           price: Number.isFinite(price) ? price : 0,
           cost,
           image_url: image_url || undefined,
@@ -172,71 +167,111 @@ export default function Inventario() {
 
   async function confirmarCarga() {
     const loteLabel = `Lote ${new Date().toLocaleDateString("es-BO")}`;
-    const { data: lote } = await supabase
+    const { data: lote, error: loteError } = await supabase
       .from("purchase_batches")
       .insert({
         label: loteLabel,
         source: "excel",
         total_detected: (duplicados?.length ?? 0) + nuevos.length + conError.length,
-        total_ok: nuevos.length + (duplicados?.filter((d) => d.decision !== "omitir").length ?? 0),
+        total_ok: 0,
         total_errors: conError.length,
         original_data: { nuevos, duplicados, conError },
       })
       .select()
       .single();
 
-    let stockAgregado = 0;
+    if (loteError || !lote) {
+      alert(`No se pudo crear el lote: ${loteError?.message ?? "error desconocido"}`);
+      return;
+    }
 
-    if (nuevos.length > 0) {
-      const categoriaPorNombre = new Map(categorias.map((c) => [c.name.toLowerCase(), c.id]));
-      const filas = nuevos.map((f) => ({
+    let stockAgregado = 0;
+    let importados = 0;
+    const erroresGuardado: FilaExcel[] = [...conError];
+    const categoriaPorNombre = new Map(categorias.map((c) => [c.name.toLowerCase(), c.id]));
+
+    // Un código eliminado anteriormente sigue existiendo en la BD por historial.
+    // Si vuelve en un Excel, se restaura en vez de intentar crear un duplicado.
+    const codigosNuevos = nuevos.map((f) => f.code);
+    const eliminadosPorCodigo = new Map<string, any>();
+    for (let i = 0; i < codigosNuevos.length; i += 100) {
+      const bloque = codigosNuevos.slice(i, i + 100);
+      if (!bloque.length) continue;
+      const { data } = await supabase.from("products").select("*").in("code", bloque);
+      for (const p of data ?? []) eliminadosPorCodigo.set(p.code, p);
+    }
+
+    for (const f of nuevos) {
+      const previo = eliminadosPorCodigo.get(f.code);
+      const payload = {
         code: f.code,
         name: f.name,
         category_id: f.category ? categoriaPorNombre.get(f.category.toLowerCase()) ?? null : null,
-        cost: f.cost ?? 0,
-        price: f.price ?? 0,
-        stock_physical: f.quantity ?? 0,
-        image_url: f.image_url ?? null,
-        batch_id: lote?.id ?? null,
-      }));
-      await supabase.from("products").insert(filas);
-      stockAgregado += nuevos.reduce((a, f) => a + (f.quantity ?? 0), 0);
+        cost: f.cost,
+        price: f.price,
+        stock_physical: f.quantity,
+        stock_reserved: 0,
+        image_url: f.image_url || null,
+        batch_id: lote.id,
+        active: true,
+        deleted_at: null,
+        updated_at: new Date().toISOString(),
+      };
+
+      const resultado = previo
+        ? await supabase.from("products").update(payload).eq("id", previo.id).select("id").single()
+        : await supabase.from("products").insert(payload).select("id").single();
+
+      if (resultado.error) {
+        erroresGuardado.push({ ...f, error: `Fila ${f.fila}: no se guardó (${resultado.error.message})` });
+      } else {
+        importados++;
+        stockAgregado += f.quantity;
+      }
     }
 
-    let actualizados = 0;
     for (const d of duplicados ?? []) {
       if (d.decision === "omitir" || d.decision === "revisar") continue;
-      await supabase.from("inventory_movements").insert({
+      const { error: movError } = await supabase.from("inventory_movements").insert({
         product_id: d.existente.id,
         type: "entrada",
         quantity_delta: d.cantidadACargar,
         reason: "Carga manual de lote con código repetido",
       });
-      await supabase
+      const { error: updError } = await supabase
         .from("products")
         .update({
           code: d.codigoACargar || d.existente.code,
           name: d.nombreACargar || d.existente.name,
           stock_physical: d.existente.stock_physical + d.cantidadACargar,
           price: d.precioACargar,
-          cost: d.cost || d.existente.cost,
-          image_url: d.image_url ?? d.existente.image_url,
+          cost: d.cost,
+          image_url: d.image_url || d.existente.image_url || null,
+          batch_id: lote.id,
+          active: true,
+          deleted_at: null,
           updated_at: new Date().toISOString(),
         })
         .eq("id", d.existente.id);
-      stockAgregado += d.cantidadACargar;
-      actualizados++;
+      if (movError || updError) {
+        erroresGuardado.push({ ...d, error: `Fila ${d.fila}: no se actualizó (${updError?.message ?? movError?.message})` });
+      } else {
+        stockAgregado += d.cantidadACargar;
+        importados++;
+      }
     }
 
-    setResumenCarga({
-      importados: nuevos.length + actualizados,
-      conError: conError.length,
-      stockAgregado,
-    });
+    await supabase.from("purchase_batches").update({
+      total_ok: importados,
+      total_errors: erroresGuardado.length,
+    }).eq("id", lote.id);
+
+    setResumenCarga({ importados, conError: erroresGuardado.length, stockAgregado });
+    setConError(erroresGuardado);
     setDuplicados(null);
     setNuevos([]);
     if (fileRef.current) fileRef.current.value = "";
-    cargar();
+    await cargar();
   }
 
   async function eliminarProductoExistente(id: string) {
@@ -282,8 +317,8 @@ export default function Inventario() {
         </div>
       </div>
       <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>
-        Usa <strong>Descargar plantilla</strong> para obtener el Excel editable de ejemplo. Columnas admitidas: <strong>Código, Descripción, Cantidad, Costo, Precio total, Precio de venta, Imagen y Categoría</strong>.
-        Puedes llenar <strong>Costo</strong> por unidad o dejarlo vacío y llenar <strong>Precio total</strong>; en ese caso el sistema calcula el costo unitario. Imagen y Categoría son opcionales.
+        Usa <strong>Descargar plantilla</strong> para obtener el Excel editable de ejemplo. Columnas: <strong>Código, Descripción, Cantidad, Costo, Precio de venta, Imagen y Categoría</strong>.
+        <strong>Imagen es opcional:</strong> el lote se carga normalmente con o sin foto. Si tienes una imagen, puedes colocar su enlace en la columna Imagen. Categoría también es opcional.
       </p>
 
       {resumenCarga && (
