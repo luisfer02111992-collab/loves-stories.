@@ -1,0 +1,8 @@
+LOVE'S STORIES 1.1 — CORRECCIÓN 34: RESPALDO Y RECUPERACIÓN
+
+- Configuración incluye "Respaldo y recuperación".
+- Descargar respaldo genera un JSON con los datos operativos del negocio.
+- Restaurar respaldo requiere seleccionar un JSON válido y escribir RESTAURAR.
+- No exporta ni modifica contraseñas, auth.users ni claves de Supabase.
+- La restauración conserva los perfiles de acceso del sistema.
+- Recomendación: descargar un respaldo al terminar cada jornada y conservar otra copia fuera del PC.

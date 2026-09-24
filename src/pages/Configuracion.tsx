@@ -4,6 +4,7 @@ import { supabase, supabaseSignUpClient } from "../lib/supabase";
 import type { Profile } from "../lib/types";
 import { imprimirPruebaTermica } from "../lib/print";
 import { EMPLOYEE_DEFAULT_PERMISSIONS, PERMISSION_OPTIONS } from "../lib/permissions";
+import Respaldo from "./Respaldo";
 
 const PRESETS = [
   { key: "clasico", label: "Clásico dorado", primario: "#9C7A3C", acento: "#4F6F52" },
@@ -430,6 +431,9 @@ export default function Configuracion() {
             ))}</div>
             <div className="flex gap-2 mt-3"><button type="button" onClick={() => guardarPermisos(u)} className="text-xs px-3 py-2 rounded" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar permisos</button><button type="button" onClick={() => setEditandoUsuario(null)} className="text-xs px-3 py-2 rounded" style={{ border: "1px solid #D9D0C2" }}>Cancelar</button></div>
           </div>) : null; })()}
+
+        <p className="font-serif text-lg mb-3 mt-5">Respaldo y recuperación</p>
+        <Respaldo />
 
         <p className="font-serif text-lg mb-3 mt-5">Sesiones recientes</p>
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
