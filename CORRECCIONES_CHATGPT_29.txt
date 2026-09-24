@@ -1,0 +1,6 @@
+CORRECCIÓN 29 — TEMAS VISUALES LOVE'S STORIES
+- Logo oficial visible en cabecera y página principal.
+- Configuración > Apariencia: Rosa Elegante, Rosa Claro y Borgoña Luxury.
+- El tema elegido se guarda en Supabase y puede cambiarse cuando se quiera.
+- No se modifica la lógica de clientes, inventario, ventas, pagos ni pedidos.
+- Ejecutar una sola vez supabase_migration_CORRECCIONES_CHATGPT_29.sql.

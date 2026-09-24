@@ -40,3 +40,17 @@ body {
 @media print {
   #recibo-termico { display: block !important; visibility: visible !important; color: #000 !important; background: #fff !important; }
 }
+
+/* LOVE'S STORIES — temas visuales de producción */
+:root { --ls-page:#f8edf0; --ls-card:#fffafc; --ls-border:#ead2db; --ls-ink:#4b2031; --ls-muted:#7f5968; --ls-glow:#c64c78; }
+:root[data-ls-theme="rosa_claro"] { --ls-page:#fff7f9; --ls-card:#ffffff; --ls-border:#f0ced9; --ls-ink:#641b35; --ls-muted:#8d6472; --ls-glow:#e98eae; }
+:root[data-ls-theme="borgona_luxury"] { --ls-page:#16050c; --ls-card:#2b0b18; --ls-border:#70213e; --ls-ink:#fff2f7; --ls-muted:#d6a7b8; --ls-glow:#ef4f91; }
+html[data-ls-theme] body { background:var(--ls-page); color:var(--ls-ink); }
+.ls-app-shell { background:var(--ls-page)!important; }
+.ls-home-hero { min-height:250px; display:flex; align-items:center; gap:28px; padding:22px; color:#fff; border:1px solid rgba(212,166,58,.55); background:radial-gradient(circle at 80% 20%,rgba(255,184,213,.34),transparent 25%),linear-gradient(135deg,#54263b,#a84b70 62%,#e59ab4); box-shadow:0 12px 35px rgba(90,24,52,.18); }
+:root[data-ls-theme="rosa_claro"] .ls-home-hero { color:#6f1738; background:radial-gradient(circle at 85% 15%,rgba(255,255,255,.9),transparent 25%),linear-gradient(135deg,#fff9fb,#f4c9d7 65%,#efacc2); }
+:root[data-ls-theme="borgona_luxury"] .ls-home-hero { color:#fff2f7; background:radial-gradient(circle at 82% 15%,rgba(255,55,137,.34),transparent 22%),linear-gradient(135deg,#1b050d,#4d0a27 58%,#8b1748); box-shadow:0 12px 38px rgba(84,0,34,.45); }
+.ls-home-logo { width:205px; height:205px; object-fit:cover; border-radius:20px; border:2px solid rgba(255,220,143,.78); box-shadow:0 8px 24px rgba(40,0,15,.25); }
+.ls-home-copy { text-shadow:0 2px 10px rgba(40,0,15,.24); }
+:root[data-ls-theme="borgona_luxury"] .ls-app-shell .rounded-md, :root[data-ls-theme="borgona_luxury"] .ls-app-shell .rounded-lg { border-color:var(--ls-border); }
+@media (max-width:700px){ .ls-home-hero{min-height:190px;padding:14px;gap:15px}.ls-home-logo{width:135px;height:135px}.ls-home-copy .text-4xl{font-size:1.55rem}.ls-home-copy .text-2xl{font-size:1.2rem} }

@@ -38,6 +38,7 @@ export default function Layout() {
   const [nombre, setNombre] = useState("Loves Stories");
   const [primario, setPrimario] = useState("#9C7A3C");
   const [estiloBarra, setEstiloBarra] = useState("solido");
+  const [visualTheme, setVisualTheme] = useState("rosa_elegante");
 
   useEffect(() => {
     cargarTema();
@@ -49,23 +50,32 @@ export default function Layout() {
       setNombre(data.business_name ?? "Loves Stories");
       setPrimario(data.color_primario ?? "#9C7A3C");
       setEstiloBarra(data.estilo_barra ?? "solido");
+      const tema = data.visual_theme ?? "rosa_elegante";
+      setVisualTheme(tema);
+      document.documentElement.setAttribute("data-ls-theme", tema);
       document.documentElement.style.setProperty("--ls-primary", data.color_primario ?? "#9C7A3C");
       document.documentElement.style.setProperty("--ls-accent", data.color_acento ?? "#4F6F52");
     }
   }
 
-  const fondoBarra =
+  const temaVisual = visualTheme === "borgona_luxury"
+    ? { shell: "#17050d", bar: "linear-gradient(180deg,#35091b 0%,#16040b 100%)", text: "#fff0f6", active: "#8f1747", activeText: "#fff7fb" }
+    : visualTheme === "rosa_claro"
+    ? { shell: "#fff7f9", bar: "linear-gradient(180deg,#fff5f7 0%,#f8dce5 100%)", text: "#681c36", active: "#f2bfd0", activeText: "#681c36" }
+    : { shell: "#f8edf0", bar: "linear-gradient(180deg,#54263b 0%,#8d465f 100%)", text: "#fff3f7", active: "#f6e7eb", activeText: "#54263b" };
+
+  const fondoBarra = visualTheme ? temaVisual.bar :
     estiloBarra === "degradado"
       ? `linear-gradient(135deg, #2B1E2E 0%, ${primario} 140%)`
       : estiloBarra === "claro"
       ? "#F7F3EC"
       : "#2B1E2E";
-  const textoBarra = estiloBarra === "claro" ? "#2B1E2E" : "#C9BFC7";
+  const textoBarra = visualTheme ? temaVisual.text : (estiloBarra === "claro" ? "#2B1E2E" : "#C9BFC7");
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "#EDE7DE" }}>
+    <div className="min-h-screen flex flex-col ls-app-shell" style={{ background: temaVisual.shell }}>
       <div className="flex items-center justify-between px-4 py-2.5 gap-3 flex-wrap" style={{ background: fondoBarra }}>
-        <p className="font-cursive text-2xl" style={{ color: primario }}>{nombre}</p>
+        <div className="flex items-center gap-2"><img src="/loves-stories-logo.jpeg" alt="Logo Loves Stories" className="w-9 h-9 rounded-full object-cover border border-white/40"/><p className="font-cursive text-2xl" style={{ color: visualTheme === "rosa_claro" ? "#7b173b" : "#ffd3df" }}>{nombre}</p></div>
 
         <div className="flex items-center gap-2 text-xs" style={{ color: textoBarra }}>
           <UserCheck size={13} />
@@ -114,8 +124,8 @@ export default function Layout() {
                     (isActive ? "font-semibold" : "")
                   }
                   style={({ isActive }) => ({
-                    background: isActive ? "#EDE7DE" : "transparent",
-                    color: isActive ? "#2B1E2E" : textoBarra,
+                    background: isActive ? temaVisual.active : "transparent",
+                    color: isActive ? temaVisual.activeText : textoBarra,
                     borderRight: isActive ? `3px solid ${primario}` : "3px solid transparent",
                   })}
                 >

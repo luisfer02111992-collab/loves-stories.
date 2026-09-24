@@ -26,6 +26,7 @@ export default function Configuracion() {
   const [usuarios, setUsuarios] = useState<Profile[]>([]);
   const [sesiones, setSesiones] = useState<{ full_name: string; device: string; logged_in_at: string }[]>([]);
   const [themePreset, setThemePreset] = useState("clasico");
+  const [visualTheme, setVisualTheme] = useState("rosa_elegante");
   const [colorPrimario, setColorPrimario] = useState("#9C7A3C");
   const [colorAcento, setColorAcento] = useState("#4F6F52");
   const [estiloBarra, setEstiloBarra] = useState("solido");
@@ -69,6 +70,7 @@ export default function Configuracion() {
       setWhatsapp(settings.whatsapp_number ?? "");
       setConectado(settings.whatsapp_number ?? null);
       setThemePreset(settings.theme_preset ?? "clasico");
+      setVisualTheme(settings.visual_theme ?? "rosa_elegante");
       setColorPrimario(settings.color_primario ?? "#9C7A3C");
       setColorAcento(settings.color_acento ?? "#4F6F52");
       setEstiloBarra(settings.estilo_barra ?? "solido");
@@ -92,6 +94,15 @@ export default function Configuracion() {
 
   async function guardarNombre() {
     await supabase.from("app_settings").update({ business_name: nombrePagina, updated_at: new Date().toISOString() }).eq("id", 1);
+  }
+
+  async function guardarTemaVisual(tema: string) {
+    setVisualTheme(tema);
+    document.documentElement.setAttribute("data-ls-theme", tema);
+    const { error } = await supabase.from("app_settings").update({ visual_theme: tema, updated_at: new Date().toISOString() }).eq("id", 1);
+    if (error) { alert(`No se pudo guardar el tema: ${error.message}`); return; }
+    window.dispatchEvent(new Event("loves-theme-changed"));
+    alert("Tema guardado. La apariencia se actualizará al recargar la página.");
   }
 
   async function aplicarPreset(preset: typeof PRESETS[number]) {
@@ -289,7 +300,25 @@ export default function Configuracion() {
 
         <p className="font-serif text-lg mb-3 flex items-center gap-2"><Palette size={16} style={{ color: "#5B4E5E" }} /> Apariencia del sistema</p>
         <div className="p-4 mb-5" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Estilos de diseño</p>
+          <p className="text-xs mb-2 font-semibold" style={{ color: "#5B4E5E" }}>Tema principal de LOVE'S STORIES</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+            {[
+              { key:"rosa_elegante", nombre:"Rosa Elegante", fondo:"linear-gradient(135deg,#54263b,#b95d7d)", panel:"#f8edf0", texto:"#ffd3df" },
+              { key:"rosa_claro", nombre:"Rosa Claro", fondo:"linear-gradient(135deg,#fff7f9,#f3c7d5)", panel:"#ffffff", texto:"#7b173b" },
+              { key:"borgona_luxury", nombre:"Borgoña Luxury", fondo:"linear-gradient(135deg,#18050d,#690b31)", panel:"#2a0817", texto:"#ffb5d0" },
+            ].map(t => (
+              <button type="button" key={t.key} onClick={() => guardarTemaVisual(t.key)} className="rounded-xl overflow-hidden text-left" style={{ border: visualTheme===t.key ? "3px solid #D4A63A" : "1px solid #D9D0C2", boxShadow: visualTheme===t.key ? "0 0 0 2px rgba(212,166,58,.18)" : "none" }}>
+                <div className="h-24 p-3 flex gap-2" style={{background:t.fondo}}>
+                  <img src="/loves-stories-logo.jpeg" className="h-16 w-16 rounded-lg object-cover border border-white/40" />
+                  <div className="flex-1"><div className="h-3 rounded mb-2" style={{background:t.texto,opacity:.9}}/><div className="h-2 rounded w-2/3" style={{background:t.texto,opacity:.55}}/><div className="grid grid-cols-2 gap-1 mt-3"><span className="h-5 rounded" style={{background:t.panel}}/><span className="h-5 rounded" style={{background:t.panel}}/></div></div>
+                </div>
+                <div className="px-3 py-2 flex items-center justify-between" style={{background:"#fff"}}><span className="text-sm font-semibold">{t.nombre}</span>{visualTheme===t.key && <span className="text-xs" style={{color:"#9b2450"}}>Seleccionado ✓</span>}</div>
+              </button>
+            ))}
+          </div>
+          <p className="text-xs mb-4" style={{color:"#5B4E5E"}}>Puedes cambiar de tema cuando quieras. Tu elección queda guardada para el sistema.</p>
+
+          <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Colores adicionales / personalizados</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             {PRESETS.map((p) => (
               <button key={p.key} onClick={() => aplicarPreset(p)}
