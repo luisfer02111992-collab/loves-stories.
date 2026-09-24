@@ -1,0 +1,9 @@
+LOVE'S STORIES — CORRECCIÓN 30 VISUAL
+- Implementa realmente los diseños visuales en la aplicación, no solo bocetos.
+- Logo oficial grande en el panel lateral y banner principal.
+- Rosa Elegante: fondo rosado/blush, dorado, tarjetas claras y joyería decorativa.
+- Rosa Claro: versión clara, limpia y rosada.
+- Borgoña Luxury: fondo borgoña oscuro, fucsia/dorado y tarjetas oscuras.
+- Los temas siguen siendo intercambiables desde Configuración y se actualizan sin recargar la página.
+- No modifica lógica de clientes, inventario, ventas, pagos ni pedidos.
+- No requiere SQL adicional si ya se ejecutó la migración 29.

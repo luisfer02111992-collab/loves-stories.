@@ -42,6 +42,9 @@ export default function Layout() {
 
   useEffect(() => {
     cargarTema();
+    const refrescarTema = () => cargarTema();
+    window.addEventListener("loves-theme-changed", refrescarTema);
+    return () => window.removeEventListener("loves-theme-changed", refrescarTema);
   }, []);
 
   async function cargarTema() {
@@ -110,8 +113,11 @@ export default function Layout() {
       </div>
 
       <div className="flex flex-1 min-h-0 flex-col md:flex-row">
-        <div className="md:w-52 shrink-0 px-3 pt-3 pb-3" style={{ background: fondoBarra }}>
-          <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+        <div className="md:w-56 shrink-0 px-3 pt-3 pb-3 ls-sidebar" style={{ background: fondoBarra }}>
+          <div className="ls-sidebar-brand hidden md:block mb-3">
+            <img src="/loves-stories-logo.jpeg" alt="LOVE'S STORIES Jewelry" />
+          </div>
+          <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible ls-sidebar-nav">
             {secciones.map((s) => {
               const Icon = s.icon;
               return (
@@ -137,7 +143,7 @@ export default function Layout() {
           </div>
         </div>
 
-        <div className="p-5 flex-1 min-w-0">
+        <div className="p-5 flex-1 min-w-0 ls-main-content">
           <Outlet />
         </div>
       </div>

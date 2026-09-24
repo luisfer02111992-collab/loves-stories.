@@ -54,3 +54,54 @@ html[data-ls-theme] body { background:var(--ls-page); color:var(--ls-ink); }
 .ls-home-copy { text-shadow:0 2px 10px rgba(40,0,15,.24); }
 :root[data-ls-theme="borgona_luxury"] .ls-app-shell .rounded-md, :root[data-ls-theme="borgona_luxury"] .ls-app-shell .rounded-lg { border-color:var(--ls-border); }
 @media (max-width:700px){ .ls-home-hero{min-height:190px;padding:14px;gap:15px}.ls-home-logo{width:135px;height:135px}.ls-home-copy .text-4xl{font-size:1.55rem}.ls-home-copy .text-2xl{font-size:1.2rem} }
+
+/* CORRECCIÓN 30 — apariencia real basada en los diseños aprobados */
+:root[data-ls-theme="rosa_elegante"] {
+  --ls-page:#fff4f7; --ls-card:rgba(255,255,255,.92); --ls-border:#efc5d3;
+  --ls-ink:#5b1630; --ls-muted:#8a6070; --ls-glow:#c51d61;
+}
+:root[data-ls-theme="rosa_claro"] {
+  --ls-page:#fff9fb; --ls-card:rgba(255,255,255,.96); --ls-border:#f0ced9;
+  --ls-ink:#641b35; --ls-muted:#8d6472; --ls-glow:#df6e98;
+}
+:root[data-ls-theme="borgona_luxury"] {
+  --ls-page:#16050c; --ls-card:rgba(43,11,24,.94); --ls-border:#8f2450;
+  --ls-ink:#fff2f7; --ls-muted:#e2b5c5; --ls-glow:#ff4f9b;
+}
+html[data-ls-theme="rosa_elegante"] body,
+html[data-ls-theme="rosa_claro"] body {
+  background-image:linear-gradient(rgba(255,248,250,.92),rgba(255,248,250,.92)),url('/loves-stories-logo.jpeg');
+  background-size:cover; background-attachment:fixed; background-position:center;
+}
+html[data-ls-theme="borgona_luxury"] body {
+  background-image:linear-gradient(rgba(22,5,12,.91),rgba(22,5,12,.91)),url('/loves-stories-logo.jpeg');
+  background-size:cover; background-attachment:fixed; background-position:center;
+}
+.ls-app-shell { color:var(--ls-ink); }
+.ls-main-content { background:transparent; }
+.ls-sidebar { position:relative; overflow:hidden; border-right:1px solid rgba(255,210,226,.25); }
+.ls-sidebar::before { content:""; position:absolute; inset:0; pointer-events:none; opacity:.22; background-image:url('/loves-stories-logo.jpeg'); background-size:cover; background-position:center; }
+:root[data-ls-theme="rosa_claro"] .ls-sidebar::before { opacity:.14; }
+.ls-sidebar > * { position:relative; z-index:1; }
+.ls-sidebar-brand { border-radius:14px; overflow:hidden; border:1px solid rgba(255,220,160,.65); box-shadow:0 8px 25px rgba(50,0,20,.22); }
+.ls-sidebar-brand img { width:100%; height:155px; display:block; object-fit:cover; object-position:center 58%; }
+.ls-sidebar-nav a { transition:.18s ease; }
+.ls-sidebar-nav a:hover { transform:translateX(2px); background:rgba(255,255,255,.09)!important; }
+
+.ls-home-hero { height:245px; min-height:245px; padding:0; display:block; border:1px solid rgba(214,163,60,.75); background:#f6d5df; box-shadow:0 12px 32px rgba(90,24,52,.22); }
+.ls-home-banner { width:100%; height:100%; object-fit:cover; object-position:center 58%; display:block; }
+:root[data-ls-theme="borgona_luxury"] .ls-home-banner { filter:saturate(1.18) brightness(.62) contrast(1.2) hue-rotate(322deg); }
+:root[data-ls-theme="borgona_luxury"] .ls-home-hero { border-color:#d69a3c; box-shadow:0 12px 35px rgba(255,36,127,.2); }
+:root[data-ls-theme="rosa_claro"] .ls-home-banner { filter:brightness(1.08) saturate(.88); }
+
+.ls-stat-card { background:var(--ls-card)!important; border-color:var(--ls-border)!important; box-shadow:0 5px 16px rgba(102,20,53,.08); backdrop-filter:blur(8px); }
+:root[data-ls-theme="borgona_luxury"] .ls-stat-card { box-shadow:0 5px 20px rgba(0,0,0,.25), inset 0 0 22px rgba(255,52,133,.025); }
+:root[data-ls-theme="borgona_luxury"] .ls-stat-card p { color:var(--ls-ink)!important; }
+
+/* Hace que paneles claros del dashboard adopten el tema sin tocar lógica funcional */
+:root[data-ls-theme="borgona_luxury"] .ls-main-content > div > div[style*="background: rgb(247, 243, 236)"],
+:root[data-ls-theme="borgona_luxury"] .ls-main-content > div > div[style*="background: #F7F3EC"] { background:var(--ls-card)!important; border-color:var(--ls-border)!important; color:var(--ls-ink)!important; }
+
+@media (max-width:700px){
+  .ls-home-hero{height:180px;min-height:180px;padding:0}.ls-home-banner{object-position:center 58%}
+}
