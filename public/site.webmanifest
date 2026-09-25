@@ -1,20 +1,25 @@
 {
+  "id": "/",
   "name": "Love's Stories 1.1",
   "short_name": "Love's Stories",
+  "description": "Sistema de gestión Love's Stories",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f8dce6",
   "theme_color": "#8b1744",
   "icons": [
     {
-      "src": "/android-chrome-192x192.png",
+      "src": "/android-chrome-192x192.png?v=3",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
-      "src": "/android-chrome-512x512.png",
+      "src": "/android-chrome-512x512.png?v=3",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
