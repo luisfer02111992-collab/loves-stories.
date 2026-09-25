@@ -103,12 +103,32 @@ export default function Productos() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [lista, seleccionadoId]);
 
-  // Mantiene el producto seleccionado visible cuando se navega con ↑ / ↓.
+  // Mantiene el producto seleccionado visible DENTRO de la lista cuando se navega con ↑ / ↓.
+  // No usamos scrollIntoView porque puede desplazar la página completa en vez del panel de productos.
   useEffect(() => {
     if (!seleccionadoId) return;
+
     requestAnimationFrame(() => {
-      const el = listaRef.current?.querySelector(`[data-product-id="${seleccionadoId}"]`) as HTMLElement | null;
-      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      const contenedor = listaRef.current;
+      const elemento = contenedor?.querySelector(
+        `[data-product-id="${seleccionadoId}"]`
+      ) as HTMLElement | null;
+
+      if (!contenedor || !elemento) return;
+
+      const arriba = elemento.offsetTop;
+      const abajo = arriba + elemento.offsetHeight;
+      const visibleArriba = contenedor.scrollTop;
+      const visibleAbajo = visibleArriba + contenedor.clientHeight;
+
+      if (arriba < visibleArriba) {
+        contenedor.scrollTo({ top: arriba, behavior: "auto" });
+      } else if (abajo > visibleAbajo) {
+        contenedor.scrollTo({
+          top: abajo - contenedor.clientHeight,
+          behavior: "auto",
+        });
+      }
     });
   }, [seleccionadoId]);
 

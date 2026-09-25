@@ -570,8 +570,8 @@ export default function Ventas() {
         if (!v) return null;
         const t = totalesVenta(v);
         return (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(43,30,46,0.85)" }}>
-            <div className="flex flex-col items-center">
+          <div className="fixed inset-0 z-50 overflow-y-auto p-4" style={{ background: "rgba(43,30,46,0.85)" }}>
+            <div className="min-h-full flex flex-col items-center justify-start py-4">
               <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 302, fontFamily: "monospace" }} className="p-2 text-xs shadow-md">
                 <p className="text-center font-bold ticket-brand" style={{ fontSize: "1.08rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
                 {telefonoNegocio && <p className="text-center">CEL: {telefonoNegocio}</p>}
@@ -598,7 +598,7 @@ export default function Ventas() {
                 <p className="text-center" style={{ marginTop: 8 }}>GRACIAS POR SU COMPRA</p>
                 <p className="text-center font-bold ticket-brand" style={{ fontSize: "1rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
               </div>
-              <div className="flex gap-2 mt-3">
+              <div className="sticky bottom-2 z-10 flex gap-2 mt-3 p-2 rounded-md shadow-md" style={{ background: "rgba(247,243,236,0.97)", border: "1px solid #D9D0C2" }}>
                 <button onClick={() => imprimirTicket()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                   <Printer size={13} /> Ticket térmico 80 mm
                 </button>

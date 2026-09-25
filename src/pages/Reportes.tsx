@@ -26,21 +26,109 @@ export default function Reportes(){
  async function cargarPreferencias(){const {data}=await supabase.from("app_settings").select("chart_style,report_primary_color,report_secondary_color").eq("id",1).single();setEstilo(data?.chart_style??localStorage.getItem("loves_chart_style")??"bar");setColor1(data?.report_primary_color??"#405B9B");setColor2(data?.report_secondary_color??"#8AA05A")}
  async function cargar(){
   setCargando(true); setErrorCarga("");
-  const data:any[]=[]; let from=0; const pageSize=500;
-  while(true){
-   let q=supabase.from("orders").select("id,customer_id,closed_at,total_cerrado,customers(name,phone),order_items(quantity,unit_price,discount_per_unit,products(code,name,cost))").eq("status","closed");
-   if(periodo==="rango"){q=q.gte("closed_at",`${rangoDesde}T00:00:00`).lte("closed_at",`${rangoHasta}T23:59:59.999`)}else q=q.gte("closed_at",inicioPeriodo(periodo));
-   const {data:page,error}=await q.order("closed_at").range(from,from+pageSize-1); if(error){console.error(error);setErrorCarga(error.message);break} const part=page??[]; data.push(...part); if(part.length<pageSize)break; from+=pageSize;
+  try{
+   // 1) Cargar primero las ventas cerradas. No dependemos de un join grande para encontrarlas.
+   const ordenes:any[]=[]; let from=0; const pageSize=500;
+   while(true){
+    let q=supabase.from("orders")
+      .select("id,customer_id,closed_at,total_cerrado,customers(name,phone)")
+      .eq("status","closed");
+    if(periodo==="rango"){
+      q=q.gte("closed_at",`${rangoDesde}T00:00:00`).lte("closed_at",`${rangoHasta}T23:59:59.999`);
+    }else{
+      q=q.gte("closed_at",inicioPeriodo(periodo));
+    }
+    const {data:page,error}=await q.order("closed_at",{ascending:true}).range(from,from+pageSize-1);
+    if(error) throw error;
+    const part=page??[]; ordenes.push(...part);
+    if(part.length<pageSize) break;
+    from+=pageSize;
+   }
+
+   const ids=ordenes.map((o:any)=>o.id);
+   const itemsPorOrden:Record<string,any[]>={};
+
+   // 2) Cargar el detalle por bloques. Esto evita que un join anidado grande deje fuera
+   // ventas históricas o se vuelva muy lento.
+   for(let i=0;i<ids.length;i+=100){
+    const lote=ids.slice(i,i+100);
+    const {data:its,error}=await supabase.from("order_items")
+      .select("order_id,quantity,unit_price,discount_per_unit,products(code,name,cost)")
+      .in("order_id",lote);
+    if(error) throw error;
+    (its??[]).forEach((it:any)=>{
+      (itemsPorOrden[it.order_id]??=[]).push(it);
+    });
+   }
+
+   const rows:Detalle[]=[];
+   const cli:Record<string,ClienteResumen>={};
+   const fechas:Record<string,{fecha:string;ventas:number;ganancia:number;unidades:number}>={};
+   const cats:Record<string,{cat:string;ventas:number;ganancia:number;unidades:number}>={};
+
+   ordenes.forEach((o:any)=>{
+    let ventaItems=0,costoOrden=0,unOrden=0;
+    const its=itemsPorOrden[o.id]??[];
+
+    its.forEach((it:any)=>{
+      const q=Number(it.quantity||0),pu=Number(it.unit_price||0),desc=Number(it.discount_per_unit||0),cu=Number(it.products?.cost||0);
+      const venta=q*Math.max(0,pu-desc),cost=q*cu,gan=venta-cost;
+      ventaItems+=venta;costoOrden+=cost;unOrden+=q;
+      rows.push({
+        fecha:new Date(o.closed_at).toLocaleString("es-BO"),
+        cliente:o.customers?.name??"Sin cliente",telefono:o.customers?.phone??"",
+        codigo:it.products?.code??"",producto:it.products?.name??"",cantidad:q,
+        costoUnit:cu,precioUnit:Math.max(0,pu-desc),venta,costo:cost,ganancia:gan,
+        margen:venta?gan/venta*100:0
+      });
+      const nombreProd=String(it.products?.name??"").toUpperCase();
+      const cat=nombreProd.includes("ANILLO")?"Anillos":nombreProd.includes("ARETE")?"Aretes":nombreProd.includes("PULSERA")?"Pulseras":nombreProd.includes("CADENA")?"Cadenas":nombreProd.includes("COLLAR")?"Collares":nombreProd.includes("DIJE")?"Dijes":nombreProd.includes("SET")||nombreProd.includes("JUEGO")?"Sets":"Otros";
+      if(!cats[cat])cats[cat]={cat,ventas:0,ganancia:0,unidades:0};
+      cats[cat].ventas+=venta;cats[cat].ganancia+=gan;cats[cat].unidades+=q;
+    });
+
+    // El total oficial de la venta es total_cerrado. Para las ventas históricas
+    // importadas no obligamos al reporte a depender del detalle para sumar la venta.
+    const ventaOrden=Number(o.total_cerrado??0) || ventaItems;
+
+    const k=periodo==="dia"
+      ?new Date(o.closed_at).toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"})
+      :periodo==="mes"
+      ?new Date(o.closed_at).toLocaleDateString("es-BO",{day:"2-digit"})
+      :periodo==="rango"
+      ?new Date(o.closed_at).toLocaleDateString("es-BO",{day:"2-digit",month:"2-digit",year:"2-digit"})
+      :new Date(o.closed_at).toLocaleDateString("es-BO",{month:"short"});
+
+    if(!fechas[k])fechas[k]={fecha:k,ventas:0,ganancia:0,unidades:0};
+    fechas[k].ventas+=ventaOrden;fechas[k].ganancia+=ventaOrden-costoOrden;fechas[k].unidades+=unOrden;
+
+    const id=o.customer_id??`sin-${o.id}`;
+    if(!cli[id])cli[id]={id,nombre:o.customers?.name??"Sin cliente",telefono:o.customers?.phone??"",ventas:0,unidades:0,acumulado:0,costo:0,ganancia:0,margen:0};
+    cli[id].ventas++;cli[id].unidades+=unOrden;cli[id].acumulado+=ventaOrden;cli[id].costo+=costoOrden;cli[id].ganancia+=ventaOrden-costoOrden;
+   });
+
+   Object.values(cli).forEach(x=>x.margen=x.acumulado?x.ganancia/x.acumulado*100:0);
+   setDetalle(rows);setClientes(Object.values(cli).sort((a,b)=>b.acumulado-a.acumulado));
+   setPorFecha(Object.values(fechas));setPorCategoria(Object.values(cats).sort((a,b)=>b.ventas-a.ventas));
+
+   if(ids.length){
+    let totalPagos=0;
+    for(let i=0;i<ids.length;i+=200){
+      const {data:p,error}=await supabase.from("payments").select("amount").in("order_id",ids.slice(i,i+200));
+      if(error) throw error;
+      totalPagos+=(p??[]).reduce((a:number,x:any)=>a+Number(x.amount||0),0);
+    }
+    setCobrado(totalPagos);
+   }else setCobrado(0);
+  }catch(err:any){
+   console.error(err);
+   setErrorCarga(err?.message??"Error desconocido al cargar el reporte");
+   setDetalle([]);setClientes([]);setPorFecha([]);setPorCategoria([]);setCobrado(0);
+  }finally{
+   setCargando(false);
   }
-  const rows:Detalle[]=[];const cli:Record<string,ClienteResumen>={};const fechas:Record<string,{fecha:string;ventas:number;ganancia:number;unidades:number}>={};const cats:Record<string,{cat:string;ventas:number;ganancia:number;unidades:number}>={};const ids:string[]=[];
-  data.forEach((o:any)=>{ids.push(o.id);let ventaOrden=0,costoOrden=0,unOrden=0;(o.order_items??[]).forEach((it:any)=>{const q=Number(it.quantity||0),pu=Number(it.unit_price||0),desc=Number(it.discount_per_unit||0),cu=Number(it.products?.cost||0);const venta=q*Math.max(0,pu-desc),cost=q*cu,gan=venta-cost;ventaOrden+=venta;costoOrden+=cost;unOrden+=q;rows.push({fecha:new Date(o.closed_at).toLocaleString("es-BO"),cliente:o.customers?.name??"Sin cliente",telefono:o.customers?.phone??"",codigo:it.products?.code??"",producto:it.products?.name??"",cantidad:q,costoUnit:cu,precioUnit:Math.max(0,pu-desc),venta,costo:cost,ganancia:gan,margen:venta?gan/venta*100:0});const nombreProd=String(it.products?.name??"").toUpperCase(); const cat=nombreProd.includes("ANILLO")?"Anillos":nombreProd.includes("ARETE")?"Aretes":nombreProd.includes("PULSERA")?"Pulseras":nombreProd.includes("CADENA")?"Cadenas":nombreProd.includes("COLLAR")?"Collares":nombreProd.includes("DIJE")?"Dijes":nombreProd.includes("SET")||nombreProd.includes("JUEGO")?"Sets":"Otros";if(!cats[cat])cats[cat]={cat,ventas:0,ganancia:0,unidades:0};cats[cat].ventas+=venta;cats[cat].ganancia+=gan;cats[cat].unidades+=q});
-   if(unOrden===0 && Number(o.total_cerrado||0)>0){ventaOrden=Number(o.total_cerrado||0);}
-   const k=periodo==="dia"?new Date(o.closed_at).toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"}):periodo==="mes"?new Date(o.closed_at).toLocaleDateString("es-BO",{day:"2-digit"}):periodo==="rango"?new Date(o.closed_at).toLocaleDateString("es-BO",{day:"2-digit",month:"2-digit",year:"2-digit"}):new Date(o.closed_at).toLocaleDateString("es-BO",{month:"short"});if(!fechas[k])fechas[k]={fecha:k,ventas:0,ganancia:0,unidades:0};fechas[k].ventas+=ventaOrden;fechas[k].ganancia+=ventaOrden-costoOrden;fechas[k].unidades+=unOrden;
-   const id=o.customer_id??`sin-${o.id}`;if(!cli[id])cli[id]={id,nombre:o.customers?.name??"Sin cliente",telefono:o.customers?.phone??"",ventas:0,unidades:0,acumulado:0,costo:0,ganancia:0,margen:0};cli[id].ventas++;cli[id].unidades+=unOrden;cli[id].acumulado+=ventaOrden;cli[id].costo+=costoOrden;cli[id].ganancia+=ventaOrden-costoOrden;
-  });Object.values(cli).forEach(x=>x.margen=x.acumulado?x.ganancia/x.acumulado*100:0);setDetalle(rows);setClientes(Object.values(cli).sort((a,b)=>b.acumulado-a.acumulado));setPorFecha(Object.values(fechas));setPorCategoria(Object.values(cats).sort((a,b)=>b.ventas-a.ventas));
-  if(ids.length){let totalPagos=0;for(let i=0;i<ids.length;i+=200){const {data:p}=await supabase.from("payments").select("amount").in("order_id",ids.slice(i,i+200));totalPagos+=(p??[]).reduce((a:number,x:any)=>a+Number(x.amount||0),0)}setCobrado(totalPagos)}else setCobrado(0); setCargando(false)
  }
- const ventas=useMemo(()=>detalle.reduce((a,x)=>a+x.venta,0),[detalle]),costo=useMemo(()=>detalle.reduce((a,x)=>a+x.costo,0),[detalle]),ganancia=ventas-costo,unidades=detalle.reduce((a,x)=>a+x.cantidad,0),nVentas=clientes.reduce((a,x)=>a+x.ventas,0),margen=ventas?ganancia/ventas*100:0,promedio=nVentas?ventas/nVentas:0;
+ const ventas=useMemo(()=>clientes.reduce((a,x)=>a+x.acumulado,0),[clientes]),costo=useMemo(()=>clientes.reduce((a,x)=>a+x.costo,0),[clientes]),ganancia=ventas-costo,unidades=clientes.reduce((a,x)=>a+x.unidades,0),nVentas=clientes.reduce((a,x)=>a+x.ventas,0),margen=ventas?ganancia/ventas*100:0,promedio=nVentas?ventas/nVentas:0;
  function chart(data:any[],key="ventas",nameKey="fecha"){return <ResponsiveContainer width="100%" height="100%">{estilo==="line"?<LineChart data={data}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey={nameKey}/><YAxis/><Tooltip formatter={(v:any)=>money(Number(v))}/><Line type="monotone" dataKey={key} stroke={color1} strokeWidth={3}/></LineChart>:estilo==="area"?<AreaChart data={data}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey={nameKey}/><YAxis/><Tooltip formatter={(v:any)=>money(Number(v))}/><Area type="monotone" dataKey={key} stroke={color1} fill={color1} fillOpacity={.3}/></AreaChart>:estilo==="pie"?<PieChart><Pie data={data} dataKey={key} nameKey={nameKey} cx="50%" cy="45%" outerRadius={85} label>{data.map((_:any,i:number)=><Cell key={i} fill={i%2?color2:color1}/>)}</Pie><Tooltip formatter={(v:any)=>money(Number(v))}/><Legend/></PieChart>:<BarChart data={data}><CartesianGrid strokeDasharray="3 3"/><XAxis dataKey={nameKey}/><YAxis/><Tooltip formatter={(v:any)=>money(Number(v))}/><Bar dataKey={key} fill={color1}/></BarChart>}</ResponsiveContainer>}
  function pdfGrafico(doc:jsPDF,data:any[],x:number,y:number,w:number,h:number,title:string,labelKey:string,valueKey:string){doc.setFont("helvetica","bold");doc.setFontSize(10);doc.text(title,x,y);const top=y+5;const max=Math.max(1,...data.map(d=>Number(d[valueKey]||0)));const bw=Math.max(3,(w-8)/Math.max(1,data.length));data.slice(0,18).forEach((d,i)=>{const bh=(Number(d[valueKey]||0)/max)*(h-18);const [r,g,b]=hexRgb(i%2?color2:color1);doc.setFillColor(r,g,b);doc.rect(x+4+i*bw,top+h-12-bh,Math.max(2,bw-1),bh,"F");doc.setFont("helvetica","normal");doc.setFontSize(6);doc.text(String(d[labelKey]).slice(0,7),x+4+i*bw,top+h-8,{angle:35})});doc.setDrawColor(210);doc.rect(x,top,w,h-4)}
  function exportarPdf(){
