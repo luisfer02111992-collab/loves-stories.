@@ -37,20 +37,47 @@ export async function buildBackup(){
   return {format:"loves-stories-backup",version:"1.1",created_at:now.toISOString(),tables};
 }
 
-export async function saveAutomaticBackup(reason:"periodico"|"cerrar_sesion"="periodico"){
-  const backup=await buildBackup();
-  const stamp=backup.created_at.replace(/[:.]/g,"-");
-  const path=`automaticos/${stamp}-${reason}.json`;
-  const body=new Blob([JSON.stringify({...backup,automatic:true,reason})],{type:"application/json"});
-  const {error}=await supabase.storage.from("respaldos").upload(path,body,{contentType:"application/json",upsert:false});
-  if(error) throw new Error(error.message);
+export async function saveAutomaticBackup(
+  reason: "periodico" | "cerrar_sesion" = "periodico"
+) {
+  if (reason === "cerrar_sesion") {
+    const { data, error } = await supabase.functions.invoke(
+      "backup-on-logout",
+      {
+        body: { reason: "cerrar_sesion" },
+      }
+    );
 
-  // Conserva los 30 respaldos automáticos más recientes para no crecer sin límite.
-  const {data}=await supabase.storage.from("respaldos").list("automaticos",{limit:100,sortBy:{column:"created_at",order:"desc"}});
-  if(data && data.length>30){
-    const old=data.slice(30).map(x=>`automaticos/${x.name}`);
-    if(old.length) await supabase.storage.from("respaldos").remove(old);
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (!data?.ok) {
+      throw new Error(data?.error || "No se pudo crear el respaldo");
+    }
+
+    return data.created_at;
   }
+
+  const backup = await buildBackup();
+  const stamp = backup.created_at.replace(/[:.]/g, "-");
+  const path = `automaticos/${stamp}-${reason}.json`;
+
+  const body = new Blob(
+    [JSON.stringify({ ...backup, automatic: true, reason })],
+    { type: "application/json" }
+  );
+
+  const { error } = await supabase.storage
+    .from("respaldos")
+    .upload(path, body, {
+      contentType: "application/json",
+      upsert: false,
+    });
+
+  if (error) throw new Error(error.message);
+
   localStorage.setItem("loves_last_auto_backup", backup.created_at);
+
   return backup.created_at;
 }
