@@ -52,16 +52,15 @@ export default function Layout() {
     return () => window.clearInterval(timer);
   }, [profile?.role]);
 
-  async function cerrarSesionSeguro() {
-    if (profile?.role === "admin") {
-      try { await saveAutomaticBackup("cerrar_sesion"); }
-      catch (e:any) {
-        const salir = window.confirm(`No se pudo completar el respaldo automático: ${e?.message || e}. ¿Deseas cerrar sesión de todas formas?`);
-        if (!salir) return;
-      }
-    }
-    await signOut();
+async function cerrarSesionSeguro() {
+  if (profile?.role === "admin") {
+    saveAutomaticBackup("cerrar_sesion").catch((e) => {
+      console.warn("No se pudo completar el respaldo al cerrar sesión:", e);
+    });
   }
+
+  await signOut();
+}
 
   useEffect(() => {
     cargarTema();
