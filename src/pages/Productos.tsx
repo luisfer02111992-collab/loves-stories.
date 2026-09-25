@@ -20,6 +20,7 @@ export default function Productos() {
   const [busqueda, setBusqueda] = useState("");
   const [pestanaStock, setPestanaStock] = useState<"disponibles" | "agotados">("disponibles");
   const buscadorRef = useRef<HTMLInputElement>(null);
+  const listaRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     cargar();
@@ -29,29 +30,20 @@ export default function Productos() {
   // Se ordena SIEMPRE por código (estable): editar la descripción ya no mueve
   // el producto de posición en la lista.
   async function cargar(mantenerSeleccion = false) {
-    // Cargar por páginas: Supabase devuelve como máximo 1.000 filas por consulta
-    // y el catálogo actual tiene varios miles de productos.
-    const todos: Product[] = [];
+    // Primero obtenemos el total y luego descargamos las páginas EN PARALELO.
+    // Así 5.000+ productos cargan mucho más rápido que haciendo 6 consultas una detrás de otra.
     const TAMANO_PAGINA = 1000;
-    for (let desde = 0; ; desde += TAMANO_PAGINA) {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*")
-        .is("deleted_at", null)
-        .order("code")
-        .range(desde, desde + TAMANO_PAGINA - 1);
-      if (error) {
-        console.error("Error cargando productos:", error);
-        break;
-      }
-      const pagina = (data as Product[]) ?? [];
-      todos.push(...pagina);
-      if (pagina.length < TAMANO_PAGINA) break;
-    }
+    const { count, error: countError } = await supabase.from("products").select("id", { count: "exact", head: true }).is("deleted_at", null);
+    if (countError) { console.error("Error contando productos:", countError); return; }
+    const total = count ?? 0;
+    const consultas = Array.from({ length: Math.ceil(total / TAMANO_PAGINA) }, (_, i) =>
+      supabase.from("products").select("*").is("deleted_at", null).order("code").range(i*TAMANO_PAGINA, Math.min(total-1,(i+1)*TAMANO_PAGINA-1))
+    );
+    const paginas = await Promise.all(consultas);
+    const todos: Product[] = [];
+    for (const r of paginas) { if (r.error) { console.error("Error cargando productos:", r.error); continue; } todos.push(...(((r.data as Product[]) ?? []))); }
     setProductos(todos);
-    if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
-      setSeleccionadoId(todos.length > 0 ? todos[0].id : null);
-    }
+    if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) setSeleccionadoId(todos.length ? todos[0].id : null);
   }
 
   const { disponibles, agotados, lista, unidadesDisponibles } = useMemo(() => {
@@ -110,6 +102,15 @@ export default function Productos() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [lista, seleccionadoId]);
+
+  // Mantiene el producto seleccionado visible cuando se navega con ↑ / ↓.
+  useEffect(() => {
+    if (!seleccionadoId) return;
+    requestAnimationFrame(() => {
+      const el = listaRef.current?.querySelector(`[data-product-id="${seleccionadoId}"]`) as HTMLElement | null;
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+  }, [seleccionadoId]);
 
   async function guardar() {
     if (!seleccionado || guardando) return;
@@ -276,9 +277,9 @@ export default function Productos() {
           </form>
         )}
 
-        <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        <div ref={listaRef} className="overflow-y-auto" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2", maxHeight: "62vh" }}>
           {lista.map((p, i) => (
-            <button key={p.id} onClick={() => setSeleccionadoId(p.id)} className="w-full text-left px-3.5 py-2.5 flex items-center justify-between"
+            <button key={p.id} data-product-id={p.id} onClick={() => setSeleccionadoId(p.id)} className="w-full text-left px-3.5 py-2.5 flex items-center justify-between"
               style={{ background: seleccionadoId === p.id ? "#EDE7DE" : "transparent", borderBottom: i < lista.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <span className="text-sm">{p.name}</span>
               <span className="text-xs" style={{ color: "#5B4E5E" }}>{p.code}</span>

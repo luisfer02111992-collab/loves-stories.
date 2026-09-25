@@ -70,26 +70,17 @@ export default function Inventario() {
   }, []);
 
   async function cargar() {
-    // Supabase limita por defecto cada consulta a 1.000 filas. El inventario actual
-    // supera ese límite, así que cargamos por páginas para que los conteos y las
-    // listas representen TODO el inventario.
-    const todas: Product[] = [];
+    // Carga rápida: contamos una vez y pedimos todas las páginas en paralelo.
     const TAMANO_PAGINA = 1000;
-    for (let desde = 0; ; desde += TAMANO_PAGINA) {
-      const { data, error } = await supabase
-        .from("products")
-        .select("*, purchase_batches(label)")
-        .is("deleted_at", null)
-        .order("name")
-        .range(desde, desde + TAMANO_PAGINA - 1);
-      if (error) {
-        console.error("Error cargando inventario:", error);
-        break;
-      }
-      const pagina = (data as Product[]) ?? [];
-      todas.push(...pagina);
-      if (pagina.length < TAMANO_PAGINA) break;
-    }
+    const { count, error: countError } = await supabase.from("products").select("id", { count: "exact", head: true }).is("deleted_at", null);
+    if (countError) { console.error("Error contando inventario:", countError); return; }
+    const total = count ?? 0;
+    const consultas = Array.from({ length: Math.ceil(total / TAMANO_PAGINA) }, (_, i) =>
+      supabase.from("products").select("*, purchase_batches(label)").is("deleted_at", null).order("name").range(i*TAMANO_PAGINA, Math.min(total-1,(i+1)*TAMANO_PAGINA-1))
+    );
+    const paginas = await Promise.all(consultas);
+    const todas: Product[] = [];
+    for (const r of paginas) { if (r.error) { console.error("Error cargando inventario:", r.error); continue; } todas.push(...(((r.data as Product[]) ?? []))); }
     setProductos(todas);
     if (todas.length > 0) setMermaCodigo(todas[0].code);
   }
