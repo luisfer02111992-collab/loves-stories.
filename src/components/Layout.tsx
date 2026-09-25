@@ -43,9 +43,13 @@ export default function Layout() {
 
 async function cerrarSesionSeguro() {
   if (profile?.role === "admin") {
-    saveAutomaticBackup("cerrar_sesion").catch((e) => {
-      console.warn("No se pudo completar el respaldo al cerrar sesión:", e);
-    });
+    try {
+      await saveAutomaticBackup("cerrar_sesion");
+    } catch (e) {
+      console.error("No se pudo completar el respaldo al cerrar sesión:", e);
+      alert("No se pudo guardar el respaldo. La sesión no se cerrará para evitar perder el respaldo.");
+      return;
+    }
   }
 
   await signOut();
