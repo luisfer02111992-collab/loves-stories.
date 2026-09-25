@@ -10,6 +10,8 @@ interface ItemPedido {
   name: string;
   cantidadOriginal: number;
   cantidadAAsignar: number;
+  variant_key: string | null;
+  variant_type: "ring_size" | "length_cm" | null;
 }
 
 interface PedidoConItems extends CatalogSubmission {
@@ -31,7 +33,7 @@ export default function PedidosCatalogo() {
   async function cargar() {
     const { data } = await supabase
       .from("catalog_submissions")
-      .select("*, catalog_submission_items(id, catalog_product_id, quantity, catalog_products(code, name))")
+      .select("*, catalog_submission_items(id, catalog_product_id, quantity, variant_key, catalog_products(code, name, variant_type))")
       .eq("status", "pending")
       .order("created_at", { ascending: false });
 
@@ -44,6 +46,8 @@ export default function PedidosCatalogo() {
         name: it.catalog_products?.name ?? "",
         cantidadOriginal: it.quantity,
         cantidadAAsignar: it.quantity,
+        variant_key: it.variant_key ?? null,
+        variant_type: it.catalog_products?.variant_type ?? null,
       })),
     }));
     setPedidos(lista);
@@ -83,7 +87,7 @@ export default function PedidosCatalogo() {
       }
       if (!cliente) throw new Error("No se pudo determinar el cliente.");
 
-      const items = pedido.items.map((it) => ({ catalog_product_id: it.catalog_product_id, quantity: it.cantidadAAsignar }));
+      const items = pedido.items.map((it) => ({ catalog_product_id: it.catalog_product_id, quantity: it.cantidadAAsignar, variant_key: it.variant_key }));
       const { error } = await supabase.rpc("accept_catalog_submission", { p_submission_id: pedido.id, p_customer_id: cliente.id, p_items: items });
       if (error) throw new Error(error.message);
       await cargar();
@@ -123,7 +127,7 @@ export default function PedidosCatalogo() {
             <div style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} className="rounded mb-3">
               {p.items.map((it, i) => (
                 <div key={it.id} className="flex items-center justify-between px-3 py-2" style={{ borderBottom: i < p.items.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-                  <span className="text-sm">{it.code} · {it.name}</span>
+                  <span className="text-sm">{it.code} · {it.name}{it.variant_key ? ` · ${it.variant_type==="ring_size"?"Talla "+it.variant_key:it.variant_key+" cm"}` : ""}</span>
                   <div className="flex items-center gap-2">
                     <input type="number" min={0} max={it.cantidadOriginal} value={it.cantidadAAsignar}
                       onChange={(e) => cambiarCantidad(p.id, it.id, Number(e.target.value))}

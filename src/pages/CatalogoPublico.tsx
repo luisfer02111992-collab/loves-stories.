@@ -15,6 +15,7 @@ function idDeSesion() {
 export default function CatalogoPublico() {
   const [items, setItems] = useState<CatalogProduct[]>([]);
   const [cant, setCant] = useState<Record<string, number>>({});
+  const [cantVariante, setCantVariante] = useState<Record<string, Record<string, number>>>({});
   const [nombreNegocio, setNombreNegocio] = useState("Loves Stories");
   const [whatsappNegocio, setWhatsappNegocio] = useState<string | null>(null);
   const [nombre, setNombre] = useState("");
@@ -41,16 +42,24 @@ export default function CatalogoPublico() {
 
   async function fijarCantidad(item: CatalogProduct, nueva: number) {
     nueva = Math.max(0, nueva);
-    if (nueva === 0) {
-      setCant({ ...cant, [item.id]: 0 });
-      return;
-    }
+    if (nueva === 0) { setCant({ ...cant, [item.id]: 0 }); return; }
     const { data: ok } = await supabase.rpc("catalog_reserve", { p_catalog_product_id: item.id, p_session_id: sessionId, p_quantity: nueva });
-    if (ok) {
-      setCant({ ...cant, [item.id]: nueva });
-    } else {
-      alert("Ya no hay suficiente disponible de este producto.");
+    if (ok) setCant({ ...cant, [item.id]: nueva });
+    else alert("Ya no hay suficiente disponible de este producto.");
+  }
+
+  async function fijarVariante(item: CatalogProduct, clave: string, nueva: number) {
+    nueva=Math.max(0,nueva);
+    const maximo=Number(item.variant_stock?.[clave]??0);
+    if(nueva>maximo){alert(`Solo hay ${maximo} disponibles de ${item.variant_type==="ring_size"?"talla ":""}${clave}${item.variant_type==="length_cm"?" cm":""}.`);return;}
+    const actual={...(cantVariante[item.id]??{}),[clave]:nueva};
+    const total=Object.values(actual).reduce((a,n)=>a+Number(n||0),0);
+    if(total===0){
+      setCantVariante({...cantVariante,[item.id]:actual}); setCant({...cant,[item.id]:0}); return;
     }
+    const {data:ok}=await supabase.rpc("catalog_reserve",{p_catalog_product_id:item.id,p_session_id:sessionId,p_quantity:total});
+    if(ok){setCantVariante({...cantVariante,[item.id]:actual});setCant({...cant,[item.id]:total})}
+    else alert("Ya no hay suficiente disponible de este producto.");
   }
 
   const itemsFiltrados = useMemo(() => {
@@ -65,6 +74,10 @@ export default function CatalogoPublico() {
     const exacto = items.find((p) => p.code.toLowerCase() === q);
     const elegido = exacto ?? itemsFiltrados[0];
     if (!elegido) return;
+    if (elegido.variant_type) {
+      alert(elegido.variant_type==="ring_size" ? "Elige primero la talla." : "Elige primero el largo.");
+      return;
+    }
     await fijarCantidad(elegido, (cant[elegido.id] ?? 0) + 1);
     setBusqueda("");
   }
@@ -79,7 +92,10 @@ export default function CatalogoPublico() {
     setGuardando(true);
     try {
       const codigo = `CAT-${Date.now().toString().slice(-8)}`;
-      const payload = seleccion.map((p) => ({ catalog_product_id: p.id, quantity: cant[p.id] }));
+      const payload = seleccion.flatMap((p) => {
+        if (!p.variant_type) return [{ catalog_product_id: p.id, quantity: cant[p.id], variant_key: null }];
+        return Object.entries(cantVariante[p.id]??{}).filter(([,q])=>Number(q)>0).map(([variant_key,quantity])=>({catalog_product_id:p.id,quantity:Number(quantity),variant_key}));
+      });
       const { data, error } = await supabase.rpc("submit_catalog_order", {
         p_code: codigo, p_customer_name: nombre.trim(), p_customer_phone: telefono.trim(),
         p_session_id: sessionId, p_items: payload,
@@ -94,7 +110,10 @@ export default function CatalogoPublico() {
   }
 
   function linkWhatsapp(codigo: string) {
-    const lineas = seleccion.map((p) => `Código ${p.code} x ${cant[p.id]}`);
+    const lineas = seleccion.flatMap((p) => {
+      if (!p.variant_type) return [`Código ${p.code} x ${cant[p.id]}`];
+      return Object.entries(cantVariante[p.id]??{}).filter(([,q])=>Number(q)>0).map(([k,q])=>`Código ${p.code} · ${p.variant_type==="ring_size"?"Talla "+k:k+" cm"} x ${q}`);
+    });
     const mensaje = `NUEVO PEDIDO\nCliente: ${nombre}\nTeléfono: ${telefono}\n\n${lineas.join("\n")}\n\nTotal unidades: ${totalUnidades}\nTotal: Bs ${totalBs}\nCódigo de pedido: ${codigo}`;
     const destino = whatsappNegocio ? whatsappNegocio.replace(/\D/g, "") : "";
     return `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`;
@@ -133,21 +152,35 @@ export default function CatalogoPublico() {
                 </div>
                 <p className="text-sm">{p.name}</p>
                 <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>{p.code} · Bs {p.price} · {p.stock_available} disp.</p>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => fijarCantidad(p, Math.max(0, c - 1))} className="w-9 h-9 rounded text-lg" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>−</button>
-                  <input
-                    type="number"
-                    min={0}
-                    max={p.stock_available + c}
-                    value={c}
-                    onChange={(e) => setCant({ ...cant, [p.id]: Math.max(0, Number(e.target.value)) })}
-                    onBlur={(e) => fijarCantidad(p, Number(e.target.value))}
-                    disabled={p.stock_available <= 0 && c === 0}
-                    className="w-full px-2 py-1.5 rounded text-sm text-center outline-none"
-                    style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
-                  />
-                  <button type="button" onClick={() => fijarCantidad(p, c + 1)} className="w-9 h-9 rounded text-lg" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>+</button>
-                </div>
+                {p.variant_type ? (
+                  <div>
+                    <p className="text-xs mb-1" style={{color:"#5B4E5E"}}>{p.variant_type==="ring_size"?"Elige talla":"Elige largo"}</p>
+                    <div className="flex flex-wrap gap-2">
+                      {Object.entries(p.variant_stock??{}).filter(([,q])=>Number(q)>0).map(([k,max])=>{
+                        const q=cantVariante[p.id]?.[k]??0;
+                        return <div key={k} className="rounded p-1.5" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
+                          <p className="text-xs text-center mb-1">{p.variant_type==="ring_size"?`Talla ${k}`:`${k} cm`} · {max} disp.</p>
+                          <div className="flex items-center gap-1">
+                            <button type="button" onClick={()=>fijarVariante(p,k,Math.max(0,q-1))} className="w-7 h-7 rounded" style={{background:"#F7F3EC"}}>−</button>
+                            <span className="w-6 text-center text-sm">{q}</span>
+                            <button type="button" onClick={()=>fijarVariante(p,k,q+1)} className="w-7 h-7 rounded" style={{background:"#9C7A3C",color:"#F7F3EC"}}>+</button>
+                          </div>
+                        </div>
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => fijarCantidad(p, Math.max(0, c - 1))} className="w-9 h-9 rounded text-lg" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>−</button>
+                    <input type="number" min={0} max={p.stock_available + c} value={c}
+                      onChange={(e) => setCant({ ...cant, [p.id]: Math.max(0, Number(e.target.value)) })}
+                      onBlur={(e) => fijarCantidad(p, Number(e.target.value))}
+                      disabled={p.stock_available <= 0 && c === 0}
+                      className="w-full px-2 py-1.5 rounded text-sm text-center outline-none"
+                      style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+                    <button type="button" onClick={() => fijarCantidad(p, c + 1)} className="w-9 h-9 rounded text-lg" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>+</button>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -159,7 +192,12 @@ export default function CatalogoPublico() {
           <p className="text-xs mb-2 flex items-center gap-1.5" style={{ color: "#5B4E5E" }}><ShoppingBag size={13} /> Tu pedido</p>
           {seleccion.length === 0 && <p className="text-sm" style={{ color: "#5B4E5E" }}>Selecciona productos del catálogo.</p>}
           {seleccion.map((p) => (
-            <div key={p.id} className="flex justify-between text-sm py-1"><span>{p.code} × {cant[p.id]}</span><span>Bs {p.price * cant[p.id]}</span></div>
+            <div key={p.id} className="text-sm py-1">
+              <div className="flex justify-between"><span>{p.code} × {cant[p.id]}</span><span>Bs {p.price * cant[p.id]}</span></div>
+              {p.variant_type && Object.entries(cantVariante[p.id]??{}).filter(([,q])=>Number(q)>0).map(([k,q])=>
+                <p key={k} className="text-xs ml-2" style={{color:"#5B4E5E"}}>{p.variant_type==="ring_size"?`Talla ${k}`:`${k} cm`}: {q}</p>
+              )}
+            </div>
           ))}
           <div className="flex justify-between text-sm pt-2 mt-1" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>{totalUnidades} unid.</span><span className="font-serif">Bs {totalBs}</span></div>
 

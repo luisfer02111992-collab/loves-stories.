@@ -4,6 +4,25 @@ import { supabase } from "../lib/supabase";
 import { subirImagen } from "../lib/imagenes";
 import type { CatalogProduct, Product, Customer } from "../lib/types";
 
+const TALLAS_ANILLO = ["5","6","7","8","9","10","11","12","13"];
+const LARGOS_CM = ["40","45","50","55","60","65","70","75","80"];
+
+function tipoVariante(nombre: string): "ring_size" | "length_cm" | null {
+  const n = (nombre || "").toLowerCase();
+  if (n.includes("anillo")) return "ring_size";
+  if (n.includes("cadena") || n.includes("collar")) return "length_cm";
+  return null;
+}
+function opcionesVariante(tipo: "ring_size" | "length_cm" | null) {
+  return tipo === "ring_size" ? TALLAS_ANILLO : tipo === "length_cm" ? LARGOS_CM : [];
+}
+function sumaVariantes(stock: Record<string, number> | null | undefined) {
+  return Object.values(stock ?? {}).reduce((a, n) => a + Math.max(0, Number(n) || 0), 0);
+}
+function etiquetaVariante(tipo: "ring_size" | "length_cm" | null, valor: string) {
+  return tipo === "ring_size" ? `Talla ${valor}` : tipo === "length_cm" ? `${valor} cm` : valor;
+}
+
 export default function Catalogo() {
   const [items, setItems] = useState<CatalogProduct[]>([]);
   const [productos, setProductos] = useState<Product[]>([]);
@@ -15,6 +34,7 @@ export default function Catalogo() {
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [mostrarListaCliente, setMostrarListaCliente] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [variantesPendientes, setVariantesPendientes] = useState<Record<string, number>>({});
 
   useEffect(() => {
     cargar();
@@ -43,25 +63,38 @@ export default function Catalogo() {
   function elegirProducto(p: Product) {
     setPendiente(p.id);
     setBusquedaProducto(`${p.code} · ${p.name}`);
+    setVariantesPendientes({});
     setMostrarListaProducto(false);
   }
 
   async function publicar() {
     const producto = productos.find((p) => p.id === pendiente);
     if (!producto) return;
-    await supabase.from("catalog_products").insert({
+    const tipo = tipoVariante(producto.name);
+    const totalVariantes = sumaVariantes(variantesPendientes);
+    if (tipo && totalVariantes <= 0) {
+      alert(tipo === "ring_size" ? "Indica al menos una talla disponible." : "Indica al menos un largo disponible.");
+      return;
+    }
+    if (tipo && totalVariantes > producto.stock_available) {
+      alert(`La suma de variantes (${totalVariantes}) no puede superar las ${producto.stock_available} unidades disponibles.`);
+      return;
+    }
+    const stockCatalogo = tipo ? totalVariantes : producto.stock_available;
+    const { error } = await supabase.from("catalog_products").insert({
       product_id: producto.id,
       code: producto.code,
       name: producto.name,
       price: producto.price,
       image_url: producto.image_url,
-      // Nunca stock_physical: el límite real de disponibilidad es stock_available
-      // (físico menos lo ya reservado/asignado). Supabase además lo vuelve a
-      // recortar por su cuenta con un trigger si llegara a exceder el stock real.
-      stock_available: producto.stock_available,
+      stock_available: stockCatalogo,
+      variant_type: tipo,
+      variant_stock: tipo ? variantesPendientes : {},
     });
+    if (error) { alert(`No se pudo publicar: ${error.message}`); return; }
     setPendiente("");
     setBusquedaProducto("");
+    setVariantesPendientes({});
     cargar();
   }
 
@@ -74,6 +107,26 @@ export default function Catalogo() {
     const limitada = Math.min(Math.max(0, cantidad), maximo);
     await supabase.from("catalog_products").update({ stock_available: limitada }).eq("id", id);
     cargar();
+  }
+
+
+  function actualizarVarianteLocal(id: string, clave: string, cantidad: number, maximo: number) {
+    setItems((prev) => prev.map((it) => {
+      if (it.id !== id) return it;
+      const nuevo = { ...(it.variant_stock ?? {}), [clave]: Math.max(0, Number(cantidad) || 0) };
+      const suma = sumaVariantes(nuevo);
+      if (suma > maximo) return it;
+      return { ...it, variant_stock: nuevo, stock_available: suma };
+    }));
+  }
+
+  async function guardarVariantes(item: CatalogProduct, maximo: number) {
+    const limpio = Object.fromEntries(Object.entries(item.variant_stock ?? {}).filter(([,n]) => Number(n) > 0).map(([k,n]) => [k, Number(n)]));
+    const total = sumaVariantes(limpio);
+    if (total > maximo) { alert(`La suma de variantes no puede superar ${maximo}.`); await cargar(); return; }
+    const { error } = await supabase.from("catalog_products").update({ variant_stock: limpio, stock_available: total }).eq("id", item.id);
+    if (error) alert(`No se pudieron guardar las variantes: ${error.message}`);
+    await cargar();
   }
 
   async function subirImagenCatalogo(id: string, file: File) {
@@ -165,6 +218,34 @@ export default function Catalogo() {
             <Upload size={14} /> Publicar
           </button>
         </div>
+        {pendiente && (() => {
+          const prod = productos.find((p) => p.id === pendiente);
+          const tipo = prod ? tipoVariante(prod.name) : null;
+          if (!prod || !tipo) return null;
+          const opciones = opcionesVariante(tipo);
+          const total = sumaVariantes(variantesPendientes);
+          return <div className="mt-3 p-3 rounded-md" style={{background:"#FFF",border:"1px solid #D9D0C2"}}>
+            <p className="text-xs font-medium mb-2">
+              {tipo==="ring_size" ? "Cantidad disponible por talla" : "Cantidad disponible por largo"}
+              <span style={{color:"#5B4E5E"}}> · {total}/{prod.stock_available} unidades</span>
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {opciones.map(op => <label key={op} className="text-xs flex items-center gap-1 px-2 py-1 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>
+                <span>{etiquetaVariante(tipo,op)}</span>
+                <input type="number" min={0} max={prod.stock_available} value={variantesPendientes[op]??0}
+                  onChange={e=>{
+                    const n=Math.max(0,Number(e.target.value)||0);
+                    const nuevo={...variantesPendientes,[op]:n};
+                    if(sumaVariantes(nuevo)<=prod.stock_available) setVariantesPendientes(nuevo);
+                  }}
+                  className="w-12 px-1 py-1 text-center rounded outline-none" style={{border:"1px solid #D9D0C2"}} />
+              </label>)}
+            </div>
+            <p className="text-xs mt-2" style={{color: total===prod.stock_available?"#4F6F52":"#7A5F2D"}}>
+              Solo estas variantes aparecerán en el catálogo público. No es obligatorio publicar todo el stock.
+            </p>
+          </div>;
+        })()}
         {mostrarListaProducto && coincidenciasProducto.length > 0 && (
           <div className="absolute left-4 right-4 mt-1 rounded-md z-10 shadow-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
             {coincidenciasProducto.map((p) => (
@@ -199,17 +280,33 @@ export default function Catalogo() {
                   <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && subirImagenCatalogo(p.id, e.target.files[0])} />
                 </label>
               )}
-              <p className="text-xs" style={{ color: "#5B4E5E" }}>Cant. (máx. {productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available})</p>
-              <input
-                type="number"
-                min={0}
-                max={productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available}
-                value={p.stock_available}
-                onChange={(e) => actualizarCantidadLocal(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
-                onBlur={(e) => guardarCantidad(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
-                className="w-16 px-2 py-1.5 rounded text-sm text-center outline-none"
-                style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
-              />
+              {p.variant_type ? (
+                <div className="flex flex-wrap items-center justify-end gap-1 max-w-xl">
+                  {opcionesVariante(p.variant_type).map((op) => {
+                    const maximo = productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available;
+                    return <label key={op} className="text-xs flex items-center gap-1 px-1.5 py-1 rounded" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
+                      <span>{etiquetaVariante(p.variant_type,op)}</span>
+                      <input type="number" min={0} value={p.variant_stock?.[op]??0}
+                        onChange={(e)=>actualizarVarianteLocal(p.id,op,Number(e.target.value),maximo)}
+                        onBlur={()=>guardarVariantes(p,maximo)}
+                        className="w-11 px-1 py-1 rounded text-center outline-none" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}} />
+                    </label>;
+                  })}
+                  <span className="text-xs" style={{color:"#5B4E5E"}}>Total {sumaVariantes(p.variant_stock)}</span>
+                </div>
+              ) : <>
+                <p className="text-xs" style={{ color: "#5B4E5E" }}>Cant. (máx. {productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available})</p>
+                <input
+                  type="number"
+                  min={0}
+                  max={productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available}
+                  value={p.stock_available}
+                  onChange={(e) => actualizarCantidadLocal(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
+                  onBlur={(e) => guardarCantidad(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
+                  className="w-16 px-2 py-1.5 rounded text-sm text-center outline-none"
+                  style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
+                />
+              </>}
               <button onClick={() => eliminar(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }}><X size={13} /></button>
             </div>
           </div>
