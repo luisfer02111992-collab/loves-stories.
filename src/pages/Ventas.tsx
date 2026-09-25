@@ -171,10 +171,30 @@ export default function Ventas() {
   }, [ventas, reglas, devoluciones, pagos]);
 
   // La edición es un borrador: + / - y productos nuevos NO tocan inventario ni dinero hasta Guardar cambios.
-  function ajustarVentaDirecta(orderId: string, productId: string, delta: number, codigo="", nombre="") {
-    const venta=ventas.find(v=>v.id===orderId); const actual=venta?.items.filter(i=>i.product_id===productId).reduce((a,i)=>a+i.cantidad,0)??0;
+  async function ajustarVentaDirecta(orderId: string, productId: string, delta: number, codigo="", nombre="") {
+    const venta=ventas.find(v=>v.id===orderId);
+    const actual=venta?.items.filter(i=>i.product_id===productId).reduce((a,i)=>a+i.cantidad,0)??0;
     const previo=cambiosPendientes[orderId]?.[productId]?.delta??0;
+
+    // No permitir quitar más unidades de las que existen en el pedido.
     if(actual+previo+delta<0) return;
+
+    // Al pulsar + solo preparamos el borrador, pero comprobamos el stock REAL disponible.
+    // El inventario no se descuenta todavía: eso ocurre únicamente al Guardar cambios.
+    if(delta>0){
+      const {data:producto,error}=await supabase.from("products")
+        .select("stock_available")
+        .eq("id",productId)
+        .single();
+      if(error){alert(`No se pudo verificar el inventario: ${error.message}`);return;}
+      const disponible=Number(producto?.stock_available??0);
+      const aumentoPendiente=Math.max(0,previo);
+      if(aumentoPendiente+delta>disponible){
+        alert(`Stock insuficiente. Solo hay ${disponible} unidad${disponible===1?"":"es"} disponible${disponible===1?"":"s"} en inventario.`);
+        return;
+      }
+    }
+
     setCambiosPendientes(prev=>({...prev,[orderId]:{...(prev[orderId]??{}),[productId]:{delta:previo+delta,codigo,nombre}}}));
     setCambiosSinGuardar(prev=>new Set(prev).add(orderId));
   }
@@ -192,11 +212,34 @@ export default function Ventas() {
   async function guardarCambios(orderId: string) {
     const cambios=Object.entries(cambiosPendientes[orderId]??{}).filter(([,x])=>x.delta!==0).map(([product_id,x])=>({product_id,delta:x.delta}));
     if(!cambios.length){setEditando(null);return;}
+
+    // Última comprobación de stock justo antes de confirmar.
+    const positivos=cambios.filter(x=>x.delta>0);
+    if(positivos.length){
+      const {data:stock,error:stockError}=await supabase.from("products")
+        .select("id,code,stock_available")
+        .in("id",positivos.map(x=>x.product_id));
+      if(stockError){alert(`No se pudo verificar el inventario: ${stockError.message}`);return;}
+      for(const cambio of positivos){
+        const p=(stock??[]).find((x:any)=>x.id===cambio.product_id);
+        const disponible=Number(p?.stock_available??0);
+        if(cambio.delta>disponible){
+          alert(`No se puede guardar. ${p?.code??"El producto"} tiene ${disponible} unidad${disponible===1?"":"es"} disponible${disponible===1?"":"s"} y estás intentando agregar ${cambio.delta}.`);
+          return;
+        }
+      }
+    }
+
+    // Esta RPC confirma en una sola operación la corrección del pedido y su inventario.
+    // + descuenta inventario; - devuelve unidades al inventario.
     const {error}=await supabase.rpc("save_closed_sale_corrections",{p_order_id:orderId,p_changes:cambios});
     if(error){alert(`No se pudieron guardar los cambios: ${error.message}`);return;}
+
     setCambiosPendientes(prev=>{const n={...prev};delete n[orderId];return n});
     setCambiosSinGuardar(prev=>{const n=new Set(prev);n.delete(orderId);return n});
-    setEditando(null); await cargar();
+    setEditando(null);
+    await cargar();
+    alert("Modificación guardada. El pedido y el inventario fueron actualizados.");
   }
 
   function cancelarCambios(orderId:string){
@@ -480,9 +523,9 @@ export default function Ventas() {
                         <span className="text-sm font-serif">Bs {g.subtotalConDescuento.toFixed(2)}</span>
                         {abierto && (
                           <div className="flex items-center gap-1">
-                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, -1, g.codigo, g.nombre)} title="Disminuir 1; devuelve stock y dinero" className="p-1 rounded" style={{ color: "#7A2540", border: "1px solid #D9D0C2" }}><Minus size={13} /></button>
+                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, -1, g.codigo, g.nombre)} title="Disminuir 1; se devolverá al inventario al Guardar" className="p-1 rounded" style={{ color: "#7A2540", border: "1px solid #D9D0C2" }}><Minus size={13} /></button>
                             <span className="text-xs min-w-5 text-center">{g.cantidadTotal + (cambiosPendientes[v.id]?.[g.product_id]?.delta ?? 0)}</span>
-                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, 1, g.codigo, g.nombre)} title="Aumentar 1; descuenta stock y registra cobro" className="p-1 rounded" style={{ color: "#4F6F52", border: "1px solid #D9D0C2" }}><Plus size={13} /></button>
+                            <button onClick={() => ajustarVentaDirecta(v.id, g.product_id, 1, g.codigo, g.nombre)} title="Aumentar 1; se descontará del inventario al Guardar" className="p-1 rounded" style={{ color: "#4F6F52", border: "1px solid #D9D0C2" }}><Plus size={13} /></button>
                           </div>
                         )}
                       </div>
@@ -495,7 +538,7 @@ export default function Ventas() {
               {abierto && t && <div className="p-3 mb-2 rounded" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
                 <p className="text-xs mb-2" style={{color:"#5B4E5E"}}>Usa − / + o agrega otro producto. Nada se modifica hasta pulsar <strong>Guardar cambios</strong>.</p>
                 <div className="flex flex-wrap gap-2 items-end"><div><p className="text-xs mb-1">Código de otro producto</p><input value={codigoNuevo} onChange={e=>setCodigoNuevo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();agregarItem(v.id)}}} className="px-2 py-1.5 rounded text-sm" placeholder="Código"/></div><div><p className="text-xs mb-1">Cantidad</p><input type="number" min={1} value={cantidadNueva} onChange={e=>setCantidadNueva(Math.max(1,Number(e.target.value)))} className="w-20 px-2 py-1.5 rounded text-sm"/></div><button onClick={()=>agregarItem(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#4F6F52",color:"white"}}><Plus size={12} className="inline"/> Agregar</button><button onClick={()=>guardarCambios(v.id)} className="text-xs px-3 py-2 rounded flex items-center gap-1" style={{background:"#9C7A3C",color:"white"}}><Save size={12}/> Guardar cambios</button><button onClick={()=>cancelarCambios(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>Cancelar</button></div>
-                {Object.entries(cambiosPendientes[v.id]??{}).filter(([,x])=>x.delta>0 && !t.grupos.some(g=>g.product_id===pid)).map(([pid,x])=><p key={pid} className="text-xs mt-2" style={{color:"#4F6F52"}}>+ {x.delta} × {x.codigo} · {x.nombre}</p>)}
+                {Object.entries(cambiosPendientes[v.id]??{}).filter(([pid,x])=>x.delta>0 && !t.grupos.some(g=>g.product_id===pid)).map(([pid,x])=><p key={pid} className="text-xs mt-2" style={{color:"#4F6F52"}}>+ {x.delta} × {x.codigo} · {x.nombre}</p>)}
               </div>}
 
               {mostrarDevolucion === v.id && (

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, FileDown, FileSpreadsheet, Users, Search } from "lucide-react";
 import { jsPDF } from "jspdf";
 import ExcelJS from "exceljs";
@@ -18,17 +18,19 @@ function hexRgb(hex:string){const h=hex.replace("#","");return [parseInt(h.slice
 export default function Reportes(){
  const [periodo,setPeriodo]=useState<Periodo>("mes"),[vista,setVista]=useState<"general"|"clientes">("general");
  const hoy=new Date().toISOString().slice(0,10); const [desde,setDesde]=useState("2025-10-19"),[hasta,setHasta]=useState(hoy);
- const [rangoDesde,setRangoDesde]=useState("2025-10-19"),[rangoHasta,setRangoHasta]=useState(hoy),[cargando,setCargando]=useState(false),[errorCarga,setErrorCarga]=useState("");
+ const [rangoDesde,setRangoDesde]=useState("2025-10-19"),[rangoHasta,setRangoHasta]=useState(hoy),[cargando,setCargando]=useState(false),[cargandoDetalle,setCargandoDetalle]=useState(false),[errorCarga,setErrorCarga]=useState("");
  const [detalle,setDetalle]=useState<Detalle[]>([]),[clientes,setClientes]=useState<ClienteResumen[]>([]),[porFecha,setPorFecha]=useState<any[]>([]),[porCategoria,setPorCategoria]=useState<any[]>([]);
  const [estilo,setEstilo]=useState("bar"),[color1,setColor1]=useState("#405B9B"),[color2,setColor2]=useState("#8AA05A"),[cobrado,setCobrado]=useState(0);
+ const cargaId=useRef(0);
  useEffect(()=>{cargar()},[periodo,rangoDesde,rangoHasta]);
  useEffect(()=>{cargarPreferencias();const f=()=>cargarPreferencias();window.addEventListener("loves-chart-style-changed",f);return()=>window.removeEventListener("loves-chart-style-changed",f)},[]);
  async function cargarPreferencias(){const {data}=await supabase.from("app_settings").select("chart_style,report_primary_color,report_secondary_color").eq("id",1).single();setEstilo(data?.chart_style??localStorage.getItem("loves_chart_style")??"bar");setColor1(data?.report_primary_color??"#405B9B");setColor2(data?.report_secondary_color??"#8AA05A")}
  async function cargar(){
-  setCargando(true); setErrorCarga("");
+  const miCarga=++cargaId.current;
+  setCargando(true); setCargandoDetalle(false); setErrorCarga("");
   try{
-   // 1) Cargar primero las ventas cerradas. No dependemos de un join grande para encontrarlas.
-   const ordenes:any[]=[]; let from=0; const pageSize=500;
+   // FASE 1: solo cabeceras de venta. Es liviana y permite mostrar el resultado casi de inmediato.
+   const ordenes:any[]=[]; let from=0; const pageSize=1000;
    while(true){
     let q=supabase.from("orders")
       .select("id,customer_id,closed_at,total_cerrado,customers(name,phone)")
@@ -40,25 +42,61 @@ export default function Reportes(){
     }
     const {data:page,error}=await q.order("closed_at",{ascending:true}).range(from,from+pageSize-1);
     if(error) throw error;
+    if(miCarga!==cargaId.current) return;
     const part=page??[]; ordenes.push(...part);
     if(part.length<pageSize) break;
     from+=pageSize;
    }
 
+   if(miCarga!==cargaId.current) return;
+
+   // Mostrar YA ventas, número de ventas, promedio y gráfico por fecha.
+   const cliBase:Record<string,ClienteResumen>={};
+   const fechasBase:Record<string,{fecha:string;ventas:number;ganancia:number;unidades:number}>={};
+   ordenes.forEach((o:any)=>{
+    const ventaOrden=Number(o.total_cerrado??0);
+    const k=periodo==="dia"
+      ?new Date(o.closed_at).toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"})
+      :periodo==="mes"
+      ?new Date(o.closed_at).toLocaleDateString("es-BO",{day:"2-digit"})
+      :periodo==="rango"
+      ?new Date(o.closed_at).toLocaleDateString("es-BO",{day:"2-digit",month:"2-digit",year:"2-digit"})
+      :new Date(o.closed_at).toLocaleDateString("es-BO",{month:"short"});
+    if(!fechasBase[k])fechasBase[k]={fecha:k,ventas:0,ganancia:0,unidades:0};
+    fechasBase[k].ventas+=ventaOrden;
+    const id=o.customer_id??`sin-${o.id}`;
+    if(!cliBase[id])cliBase[id]={id,nombre:o.customers?.name??"Sin cliente",telefono:o.customers?.phone??"",ventas:0,unidades:0,acumulado:0,costo:0,ganancia:0,margen:0};
+    cliBase[id].ventas++; cliBase[id].acumulado+=ventaOrden;
+   });
+   setClientes(Object.values(cliBase).sort((a,b)=>b.acumulado-a.acumulado));
+   setPorFecha(Object.values(fechasBase));
+   setDetalle([]); setPorCategoria([]); setCobrado(0);
+   setCargando(false);
+
+   if(!ordenes.length){setCargandoDetalle(false);return;}
+
+   // FASE 2: detalle pesado en segundo plano. El usuario ya puede ver el resultado principal.
+   setCargandoDetalle(true);
    const ids=ordenes.map((o:any)=>o.id);
    const itemsPorOrden:Record<string,any[]>={};
 
-   // 2) Cargar el detalle por bloques. Esto evita que un join anidado grande deje fuera
-   // ventas históricas o se vuelva muy lento.
-   for(let i=0;i<ids.length;i+=100){
-    const lote=ids.slice(i,i+100);
-    const {data:its,error}=await supabase.from("order_items")
-      .select("order_id,quantity,unit_price,products(code,name,cost)")
-      .in("order_id",lote);
-    if(error) throw error;
-    (its??[]).forEach((it:any)=>{
-      (itemsPorOrden[it.order_id]??=[]).push(it);
-    });
+   // Lotes pequeños para no chocar con el límite de filas de Supabase.
+   const lotes:string[][]=[];
+   for(let i=0;i<ids.length;i+=20) lotes.push(ids.slice(i,i+20));
+
+   // Procesar varios lotes a la vez, sin lanzar decenas de peticiones simultáneas.
+   for(let i=0;i<lotes.length;i+=6){
+    const grupo=lotes.slice(i,i+6);
+    const resultados=await Promise.all(grupo.map(lote=>
+      supabase.from("order_items")
+        .select("order_id,quantity,unit_price,products(code,name,cost)")
+        .in("order_id",lote)
+    ));
+    if(miCarga!==cargaId.current) return;
+    for(const res of resultados){
+      if(res.error) throw res.error;
+      (res.data??[]).forEach((it:any)=>{(itemsPorOrden[it.order_id]??=[]).push(it)});
+    }
    }
 
    const rows:Detalle[]=[];
@@ -67,30 +105,20 @@ export default function Reportes(){
    const cats:Record<string,{cat:string;ventas:number;ganancia:number;unidades:number}>={};
 
    ordenes.forEach((o:any)=>{
-    let ventaItems=0,costoOrden=0,unOrden=0;
+    let costoOrden=0,unOrden=0;
     const its=itemsPorOrden[o.id]??[];
-
     its.forEach((it:any)=>{
-      const q=Number(it.quantity||0),pu=Number(it.unit_price||0),desc=0,cu=Number(it.products?.cost||0);
-      const venta=q*Math.max(0,pu-desc),cost=q*cu,gan=venta-cost;
-      ventaItems+=venta;costoOrden+=cost;unOrden+=q;
-      rows.push({
-        fecha:new Date(o.closed_at).toLocaleString("es-BO"),
-        cliente:o.customers?.name??"Sin cliente",telefono:o.customers?.phone??"",
-        codigo:it.products?.code??"",producto:it.products?.name??"",cantidad:q,
-        costoUnit:cu,precioUnit:Math.max(0,pu-desc),venta,costo:cost,ganancia:gan,
-        margen:venta?gan/venta*100:0
-      });
+      const q=Number(it.quantity||0),pu=Number(it.unit_price||0),cu=Number(it.products?.cost||0);
+      const venta=q*pu,cost=q*cu,gan=venta-cost;
+      costoOrden+=cost;unOrden+=q;
+      rows.push({fecha:new Date(o.closed_at).toLocaleString("es-BO"),cliente:o.customers?.name??"Sin cliente",telefono:o.customers?.phone??"",codigo:it.products?.code??"",producto:it.products?.name??"",cantidad:q,costoUnit:cu,precioUnit:pu,venta,costo:cost,ganancia:gan,margen:venta?gan/venta*100:0});
       const nombreProd=String(it.products?.name??"").toUpperCase();
       const cat=nombreProd.includes("ANILLO")?"Anillos":nombreProd.includes("ARETE")?"Aretes":nombreProd.includes("PULSERA")?"Pulseras":nombreProd.includes("CADENA")?"Cadenas":nombreProd.includes("COLLAR")?"Collares":nombreProd.includes("DIJE")?"Dijes":nombreProd.includes("SET")||nombreProd.includes("JUEGO")?"Sets":"Otros";
       if(!cats[cat])cats[cat]={cat,ventas:0,ganancia:0,unidades:0};
       cats[cat].ventas+=venta;cats[cat].ganancia+=gan;cats[cat].unidades+=q;
     });
 
-    // El total oficial de la venta es total_cerrado. Para las ventas históricas
-    // importadas no obligamos al reporte a depender del detalle para sumar la venta.
-    const ventaOrden=Number(o.total_cerrado??0) || ventaItems;
-
+    const ventaOrden=Number(o.total_cerrado??0);
     const k=periodo==="dia"
       ?new Date(o.closed_at).toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"})
       :periodo==="mes"
@@ -98,7 +126,6 @@ export default function Reportes(){
       :periodo==="rango"
       ?new Date(o.closed_at).toLocaleDateString("es-BO",{day:"2-digit",month:"2-digit",year:"2-digit"})
       :new Date(o.closed_at).toLocaleDateString("es-BO",{month:"short"});
-
     if(!fechas[k])fechas[k]={fecha:k,ventas:0,ganancia:0,unidades:0};
     fechas[k].ventas+=ventaOrden;fechas[k].ganancia+=ventaOrden-costoOrden;fechas[k].unidades+=unOrden;
 
@@ -108,24 +135,23 @@ export default function Reportes(){
    });
 
    Object.values(cli).forEach(x=>x.margen=x.acumulado?x.ganancia/x.acumulado*100:0);
+   if(miCarga!==cargaId.current) return;
    setDetalle(rows);setClientes(Object.values(cli).sort((a,b)=>b.acumulado-a.acumulado));
    setPorFecha(Object.values(fechas));setPorCategoria(Object.values(cats).sort((a,b)=>b.ventas-a.ventas));
 
-   if(ids.length){
-    let totalPagos=0;
-    for(let i=0;i<ids.length;i+=200){
-      const {data:p,error}=await supabase.from("payments").select("amount").in("order_id",ids.slice(i,i+200));
-      if(error) throw error;
-      totalPagos+=(p??[]).reduce((a:number,x:any)=>a+Number(x.amount||0),0);
-    }
-    setCobrado(totalPagos);
-   }else setCobrado(0);
+   // Pagos también en paralelo por bloques.
+   let totalPagos=0;
+   const pagosReq=[];
+   for(let i=0;i<ids.length;i+=200) pagosReq.push(supabase.from("payments").select("amount").in("order_id",ids.slice(i,i+200)));
+   const pagosRes=await Promise.all(pagosReq);
+   if(miCarga!==cargaId.current) return;
+   for(const p of pagosRes){if(p.error) throw p.error; totalPagos+=(p.data??[]).reduce((a:number,x:any)=>a+Number(x.amount||0),0)}
+   setCobrado(totalPagos);
   }catch(err:any){
    console.error(err);
-   setErrorCarga(err?.message??"Error desconocido al cargar el reporte");
-   setDetalle([]);setClientes([]);setPorFecha([]);setPorCategoria([]);setCobrado(0);
+   if(miCarga===cargaId.current) setErrorCarga(err?.message??"Error desconocido al cargar el reporte");
   }finally{
-   setCargando(false);
+   if(miCarga===cargaId.current){setCargando(false);setCargandoDetalle(false)}
   }
  }
  const ventas=useMemo(()=>clientes.reduce((a,x)=>a+x.acumulado,0),[clientes]),costo=useMemo(()=>clientes.reduce((a,x)=>a+x.costo,0),[clientes]),ganancia=ventas-costo,unidades=clientes.reduce((a,x)=>a+x.unidades,0),nVentas=clientes.reduce((a,x)=>a+x.ventas,0),margen=ventas?ganancia/ventas*100:0,promedio=nVentas?ventas/nVentas:0;
@@ -154,6 +180,7 @@ export default function Reportes(){
   <div className="flex flex-wrap items-center justify-between gap-2 mb-4"><div className="flex gap-2"><button onClick={()=>setVista('general')} className="px-3 py-2 rounded-md text-sm flex gap-2 items-center" style={{background:vista==='general'?color1:'#F7F3EC',color:vista==='general'?'white':'#2B1E2E'}}><BarChart3 size={15}/>Reporte de ventas</button><button onClick={()=>setVista('clientes')} className="px-3 py-2 rounded-md text-sm flex gap-2 items-center" style={{background:vista==='clientes'?color1:'#F7F3EC',color:vista==='clientes'?'white':'#2B1E2E'}}><Users size={15}/>Ventas por cliente</button></div><div className="flex flex-wrap gap-2"><button onClick={exportarPdf} className="text-xs px-3 py-2 rounded-md flex gap-1 items-center text-white" style={{background:color1}}><FileDown size={14}/>Informe PDF</button><button onClick={exportarExcel} className="text-xs px-3 py-2 rounded-md flex gap-1 items-center text-white" style={{background:color2}}><FileSpreadsheet size={14}/>Informe Excel</button>{(['dia','mes','anio'] as Periodo[]).map(p=><button key={p} onClick={()=>setPeriodo(p)} className="text-xs px-3 py-2 rounded-md" style={{background:periodo===p?color1:'#F7F3EC',color:periodo===p?'white':'#5B4E5E'}}>{p==='dia'?'Día':p==='mes'?'Mes':'Año'}</button>)}<button onClick={()=>setPeriodo('rango')} className="text-xs px-3 py-2 rounded-md" style={{background:periodo==='rango'?color1:'#F7F3EC',color:periodo==='rango'?'white':'#5B4E5E'}}>Rango</button></div></div>
   {periodo==='rango'&&<div className="flex flex-wrap items-end gap-3 mb-4 p-3 rounded-lg bg-white border"><label className="text-xs">Desde<input type="date" value={desde} onChange={e=>setDesde(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();if(desde&&hasta&&hasta>=desde){setRangoDesde(desde);setRangoHasta(hasta)}}}} className="block mt-1 px-3 py-2 rounded border"/></label><label className="text-xs">Hasta<input type="date" value={hasta} min={desde} onChange={e=>setHasta(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();if(desde&&hasta&&hasta>=desde){setRangoDesde(desde);setRangoHasta(hasta)}}}} className="block mt-1 px-3 py-2 rounded border"/></label><button disabled={cargando||!desde||!hasta||hasta<desde} onClick={()=>{setRangoDesde(desde);setRangoHasta(hasta)}} className="px-4 py-2 rounded-md text-sm flex items-center gap-2 text-white disabled:opacity-50" style={{background:color1}}><Search size={15}/>{cargando?'Buscando…':'Buscar'}</button><span className="text-xs text-gray-500 pb-2">Mostrando: {tituloPeriodo(periodo,rangoDesde,rangoHasta)}</span></div>}
   {errorCarga&&<div className="mb-3 p-3 rounded border text-sm" style={{background:'#FDECEC',color:'#7A2540'}}>No se pudo cargar el reporte: {errorCarga}</div>}
+  {cargandoDetalle&&<div className="mb-3 px-3 py-2 rounded border text-xs" style={{background:"#F7F3EC",color:"#5B4E5E"}}>Ventas encontradas. Calculando productos, costos y ganancias en segundo plano…</div>}
   {vista==='general'?<><div className="rounded-lg p-5 mb-4 bg-white" style={{border:`1px solid ${color1}44`}}><div className="flex justify-between items-end mb-4"><div><h2 className="font-serif text-xl" style={{color:color1}}>Resumen de ventas</h2><p className="text-xs text-gray-500">{tituloPeriodo(periodo,rangoDesde,rangoHasta)}</p></div></div><div className="grid grid-cols-2 lg:grid-cols-4 gap-4"><StatCard label="Ventas totales" value={money(ventas)} accent={color1}/><StatCard label="Ganancia" value={money(ganancia)} accent={color2}/><StatCard label="Margen de utilidad" value={`${margen.toFixed(2)}%`}/><StatCard label="Venta promedio" value={money(promedio)}/><StatCard label="Número de ventas" value={num(nVentas)}/><StatCard label="Cantidad de productos" value={num(unidades)}/><StatCard label="Costo mercadería" value={money(costo)}/><StatCard label="Cobrado" value={money(cobrado)}/></div></div><div className="grid lg:grid-cols-2 gap-4 mb-4"><section className="bg-white rounded-lg p-4 border"><h3 className="font-serif text-lg mb-3" style={{color:color1}}>Ventas por {periodo==='dia'?'hora':periodo==='anio'?'mes':'día'}</h3><div className="h-72">{chart(porFecha)}</div></section><section className="bg-white rounded-lg p-4 border"><h3 className="font-serif text-lg mb-3" style={{color:color1}}>Ventas por categoría</h3><div className="h-72">{chart(porCategoria,'ventas','cat')}</div></section></div><div className="bg-white rounded-lg overflow-auto border"><table className="w-full text-xs"><thead><tr style={{background:color1,color:'white'}}>{['Fecha','Cliente','Teléfono','Código','Producto','Cant.','Venta','Costo','Ganancia','Margen'].map(h=><th className="px-3 py-2 text-left" key={h}>{h}</th>)}</tr></thead><tbody>{detalle.map((d,i)=><tr key={i} className="border-b"><td className="px-3 py-2">{d.fecha}</td><td>{d.cliente}</td><td>{d.telefono}</td><td>{d.codigo}</td><td>{d.producto}</td><td>{d.cantidad}</td><td>{money(d.venta)}</td><td>{money(d.costo)}</td><td>{money(d.ganancia)}</td><td>{d.margen.toFixed(1)}%</td></tr>)}</tbody></table></div></>:<div className="rounded-lg overflow-hidden bg-white border"><div className="p-5" style={{borderBottom:`3px solid ${color1}`}}><h2 className="font-serif text-xl" style={{color:color1}}>Reporte de ventas por cliente</h2><p className="text-xs text-gray-500">{tituloPeriodo(periodo,rangoDesde,rangoHasta)}</p></div><div className="overflow-x-auto"><table className="w-full text-sm"><thead><tr style={{background:color1,color:'white'}}>{['Cliente','Teléfono','Nº ventas','Unidades','Ventas acumuladas','Costo acumulado','Ganancia','Margen'].map(h=><th key={h} className="text-left px-4 py-3">{h}</th>)}</tr></thead><tbody>{clientes.map((c,i)=><tr key={c.id} style={{background:i%2?`${color2}12`:'white'}} className="border-b"><td className="px-4 py-3 font-medium">{c.nombre}</td><td>{c.telefono}</td><td>{c.ventas}</td><td>{c.unidades}</td><td>{money(c.acumulado)}</td><td>{money(c.costo)}</td><td>{money(c.ganancia)}</td><td>{c.margen.toFixed(2)}%</td></tr>)}</tbody></table></div></div>}
  </div>
 }
