@@ -41,17 +41,6 @@ export default function Layout() {
   const [estiloBarra, setEstiloBarra] = useState("solido");
   const [visualTheme, setVisualTheme] = useState("rosa_elegante");
 
-  useEffect(() => {
-    if (profile?.role !== "admin") return;
-    const run = async () => {
-      try { await saveAutomaticBackup("periodico"); } catch (e) { console.warn("Respaldo automático:", e); }
-    };
-    const last = localStorage.getItem("loves_last_auto_backup");
-    if (!last || Date.now() - new Date(last).getTime() >= 15 * 60 * 1000) run();
-    const timer = window.setInterval(run, 15 * 60 * 1000);
-    return () => window.clearInterval(timer);
-  }, [profile?.role]);
-
 async function cerrarSesionSeguro() {
   if (profile?.role === "admin") {
     saveAutomaticBackup("cerrar_sesion").catch((e) => {
