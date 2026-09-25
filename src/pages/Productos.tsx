@@ -103,32 +103,12 @@ export default function Productos() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [lista, seleccionadoId]);
 
-  // Mantiene el producto seleccionado visible DENTRO de la lista cuando se navega con ↑ / ↓.
-  // No usamos scrollIntoView porque puede desplazar la página completa en vez del panel de productos.
+  // Mantiene el producto seleccionado visible cuando se navega con ↑ / ↓.
   useEffect(() => {
     if (!seleccionadoId) return;
-
     requestAnimationFrame(() => {
-      const contenedor = listaRef.current;
-      const elemento = contenedor?.querySelector(
-        `[data-product-id="${seleccionadoId}"]`
-      ) as HTMLElement | null;
-
-      if (!contenedor || !elemento) return;
-
-      const arriba = elemento.offsetTop;
-      const abajo = arriba + elemento.offsetHeight;
-      const visibleArriba = contenedor.scrollTop;
-      const visibleAbajo = visibleArriba + contenedor.clientHeight;
-
-      if (arriba < visibleArriba) {
-        contenedor.scrollTo({ top: arriba, behavior: "auto" });
-      } else if (abajo > visibleAbajo) {
-        contenedor.scrollTo({
-          top: abajo - contenedor.clientHeight,
-          behavior: "auto",
-        });
-      }
+      const el = listaRef.current?.querySelector(`[data-product-id="${seleccionadoId}"]`) as HTMLElement | null;
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     });
   }, [seleccionadoId]);
 
@@ -267,12 +247,12 @@ export default function Productos() {
               <div className="flex gap-2 mb-2">
                 <div className="w-1/2">
                   <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Costo (Bs)</p>
-                  <input type="number" value={nuevo.cost} onChange={(e) => setNuevo({ ...nuevo, cost: Number(e.target.value) })}
+                  <input type="number" step="0.01" inputMode="decimal" value={nuevo.cost} onChange={(e) => setNuevo({ ...nuevo, cost: Number(e.target.value) })}
                     className="w-full px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
                 </div>
                 <div className="w-1/2">
                   <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Precio de venta (Bs)</p>
-                  <input type="number" value={nuevo.price} onChange={(e) => setNuevo({ ...nuevo, price: Number(e.target.value) })}
+                  <input type="number" step="0.01" inputMode="decimal" value={nuevo.price} onChange={(e) => setNuevo({ ...nuevo, price: Number(e.target.value) })}
                     className="w-full px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
                 </div>
               </div>
@@ -356,10 +336,10 @@ export default function Productos() {
                 {verPrecios ? (
                   <>
                     <Campo label="Costo (Bs)">
-                      <input type="number" value={form.cost ?? 0} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} className="w-full bg-transparent outline-none" />
+                      <input type="number" step="0.01" inputMode="decimal" value={form.cost ?? 0} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} className="w-full bg-transparent outline-none" />
                     </Campo>
                     <Campo label="Precio de venta (Bs)">
-                      <input type="number" value={form.price ?? 0} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} className="w-full bg-transparent outline-none" />
+                      <input type="number" step="0.01" inputMode="decimal" value={form.price ?? 0} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} className="w-full bg-transparent outline-none" />
                     </Campo>
                   </>
                 ) : (

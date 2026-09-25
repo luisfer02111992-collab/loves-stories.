@@ -106,15 +106,42 @@ export default function Clientes() {
   }, [seleccionado]);
 
   async function cargarClientes() {
-    const [{ data }, { data: abiertas }] = await Promise.all([
+    // Una cuenta solo se considera abierta cuando tiene actividad REAL:
+    // 1) al menos un producto asignado en un pedido open/reopened, o
+    // 2) al menos un depósito con saldo todavía disponible.
+    // Un pedido vacío por sí solo NO mantiene al cliente en Cuentas abiertas.
+    const [{ data }, { data: ordenesAbiertas }, { data: pagos }] = await Promise.all([
       supabase.from("customers").select("*").is("deleted_at", null).order("name"),
-      supabase.from("orders").select("customer_id").in("status", ["open", "reopened"])
+      supabase
+        .from("orders")
+        .select("id, customer_id, order_items(id)")
+        .in("status", ["open", "reopened"]),
+      supabase
+        .from("payments")
+        .select("customer_id, amount, applied_amount, method")
     ]);
-    const lista=(data as Customer[]) ?? [];
-    const ids=new Set<string>((abiertas ?? []).map((o:any)=>o.customer_id).filter(Boolean));
-    setClientes(lista); setClientesAbiertos(ids);
-    const visibles=lista.filter(c=>pestanaClientes==="abiertas"?ids.has(c.id):!ids.has(c.id));
-    if (!seleccionado || !visibles.some(c=>c.id===seleccionado.id)) setSeleccionado(visibles[0] ?? null);
+
+    const lista = (data as Customer[]) ?? [];
+    const ids = new Set<string>();
+
+    for (const o of ordenesAbiertas ?? []) {
+      if ((o as any).customer_id && (((o as any).order_items ?? []).length > 0)) {
+        ids.add((o as any).customer_id);
+      }
+    }
+
+    for (const p of pagos ?? []) {
+      const pago = p as any;
+      if (!pago.customer_id) continue;
+      if (pago.method === "cierre_pedido" || pago.method === "devolucion_sobrante") continue;
+      const saldoDisponible = Math.max(0, Number(pago.amount ?? 0) - Number(pago.applied_amount ?? 0));
+      if (saldoDisponible > 0.0001) ids.add(pago.customer_id);
+    }
+
+    setClientes(lista);
+    setClientesAbiertos(ids);
+    const visibles = lista.filter(c => pestanaClientes === "abiertas" ? ids.has(c.id) : !ids.has(c.id));
+    if (!seleccionado || !visibles.some(c => c.id === seleccionado.id)) setSeleccionado(visibles[0] ?? null);
   }
 
   async function cargarInactivos() {
@@ -253,7 +280,10 @@ export default function Clientes() {
   async function quitarUnidad(itemId: string) {
     const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
     if (error) { alert(`No se pudo disminuir: ${error.message}`); return; }
-    if (seleccionado) await cargarPedido(seleccionado.id);
+    if (seleccionado) {
+      await cargarPedido(seleccionado.id);
+      await cargarClientes();
+    }
   }
 
   async function aumentarUnidad(productId: string) {
@@ -272,7 +302,10 @@ export default function Clientes() {
       if (error) { alert(`No se pudo eliminar el producto: ${error.message}`); return; }
     }
     setProductoSeleccionado(null);
-    if (seleccionado) await cargarPedido(seleccionado.id);
+    if (seleccionado) {
+      await cargarPedido(seleccionado.id);
+      await cargarClientes();
+    }
   }
 
   // Eliminar un depósito registrado por error: pide confirmación, deja
@@ -293,7 +326,10 @@ export default function Clientes() {
     });
     await supabase.from("payments").delete().eq("id", d.id);
     setDepositoSeleccionado(null);
-    if (seleccionado) cargarPedido(seleccionado.id);
+    if (seleccionado) {
+      await cargarPedido(seleccionado.id);
+      await cargarClientes();
+    }
   }
 
   async function confirmarCierre() {
