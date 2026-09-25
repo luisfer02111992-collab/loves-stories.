@@ -61,12 +61,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => sub.subscription.unsubscribe();
   }, []);
 
-  async function signOut() {
-    await supabase.auth.signOut();
-    setUserId(null);
-    setProfile(null);
-    setRecovery(false);
+async function signOut() {
+  setUserId(null);
+  setProfile(null);
+  setRecovery(false);
+
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch (error) {
+    console.error("Error al cerrar sesión:", error);
   }
+}
 
   return (
     <AuthContext.Provider value={{ loading, userId, profile, recovery, signOut }}>
