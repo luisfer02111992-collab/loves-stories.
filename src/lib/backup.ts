@@ -21,7 +21,18 @@ export async function readAllRows(table: string) {
 
 export async function buildBackup(){
   const tables:Record<string,any[]>={};
-  for(const t of BACKUP_TABLES) tables[t]=await readAllRows(t);
+
+  const results = await Promise.all(
+    BACKUP_TABLES.map(async (t) => {
+      const rows = await readAllRows(t);
+      return [t, rows] as const;
+    })
+  );
+
+  for (const [table, rows] of results) {
+    tables[table] = rows;
+  }
+
   const now=new Date();
   return {format:"loves-stories-backup",version:"1.1",created_at:now.toISOString(),tables};
 }
