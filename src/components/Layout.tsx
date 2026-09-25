@@ -53,6 +53,12 @@ export default function Layout() {
   }, [profile?.role]);
 
 async function cerrarSesionSeguro() {
+  if (profile?.role === "admin") {
+    saveAutomaticBackup("cerrar_sesion").catch((e) => {
+      console.warn("No se pudo completar el respaldo al cerrar sesión:", e);
+    });
+  }
+
   await signOut();
 }
 
