@@ -434,15 +434,17 @@ export default function Ventas() {
 
       <div className="flex flex-col gap-3">
         {ventas.map((v) => {
-          const t = totalesVenta(v);
           const abierto = editando === v.id;
+          const t = abierto || mostrarDevolucion === v.id ? totalesVenta(v) : null;
           const devs = (devoluciones[v.id] ?? []).filter(d=>d.type === "producto");
           return (
             <div key={v.id} className="p-4 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               <div className="flex items-center justify-between mb-2">
                 <div>
                   <p className="text-sm font-medium">Pedido #{v.order_number} · {v.cliente}</p>
-                  <p className="text-xs" style={{ color: "#5B4E5E" }}>{v.telefono} · cerrado {new Date(v.closed_at).toLocaleString("es-BO")}</p>
+                  <p className="text-xs" style={{ color: "#5B4E5E" }}>
+                    Fecha: {new Date(v.closed_at).toLocaleDateString("es-BO")} · Hora: {new Date(v.closed_at).toLocaleTimeString("es-BO",{hour:"2-digit",minute:"2-digit"})}
+                  </p>
                 </div>
                 <div className="flex gap-1.5">
                   <button onClick={() => regenerarPdf(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
@@ -469,7 +471,7 @@ export default function Ventas() {
                 </div>
               </div>
 
-              <div style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} className="rounded mb-2">
+              {abierto && t && <div style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} className="rounded mb-2">
                 {t.grupos.map((g, i) => (
                   <div key={g.product_id} className="px-3 py-2" style={{ borderBottom: i < t.grupos.length - 1 ? "1px solid #D9D0C2" : "none" }}>
                     <div className="flex items-center justify-between">
@@ -488,9 +490,9 @@ export default function Ventas() {
                     <p className="text-xs" style={{ color: "#5B4E5E" }}>{g.detalle.map((d) => `${d.cantidad} un. — ${d.fecha}${d.vendedorNombre ? ` (${d.vendedorNombre})` : ""}`).join(" · ")}</p>
                   </div>
                 ))}
-              </div>
+              </div>}
 
-              {abierto && <div className="p-3 mb-2 rounded" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
+              {abierto && t && <div className="p-3 mb-2 rounded" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
                 <p className="text-xs mb-2" style={{color:"#5B4E5E"}}>Usa − / + o agrega otro producto. Nada se modifica hasta pulsar <strong>Guardar cambios</strong>.</p>
                 <div className="flex flex-wrap gap-2 items-end"><div><p className="text-xs mb-1">Código de otro producto</p><input value={codigoNuevo} onChange={e=>setCodigoNuevo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();agregarItem(v.id)}}} className="px-2 py-1.5 rounded text-sm" placeholder="Código"/></div><div><p className="text-xs mb-1">Cantidad</p><input type="number" min={1} value={cantidadNueva} onChange={e=>setCantidadNueva(Math.max(1,Number(e.target.value)))} className="w-20 px-2 py-1.5 rounded text-sm"/></div><button onClick={()=>agregarItem(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#4F6F52",color:"white"}}><Plus size={12} className="inline"/> Agregar</button><button onClick={()=>guardarCambios(v.id)} className="text-xs px-3 py-2 rounded flex items-center gap-1" style={{background:"#9C7A3C",color:"white"}}><Save size={12}/> Guardar cambios</button><button onClick={()=>cancelarCambios(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>Cancelar</button></div>
                 {Object.entries(cambiosPendientes[v.id]??{}).filter(([,x])=>x.delta>0 && !t.grupos.some(g=>g.product_id===pid)).map(([pid,x])=><p key={pid} className="text-xs mt-2" style={{color:"#4F6F52"}}>+ {x.delta} × {x.codigo} · {x.nombre}</p>)}
@@ -553,12 +555,12 @@ export default function Ventas() {
                 </div>
               )}
 
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-2" style={{ borderTop: "1px solid #D9D0C2" }}>
+              {abierto && t && <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs pt-2" style={{ borderTop: "1px solid #D9D0C2" }}>
                 <span style={{ color: "#5B4E5E" }}>Bruta: Bs {t.bruta.toFixed(2)}</span>
                 <span style={{ color: "#7A2540" }}>Dev. producto: Bs {t.devolucionProducto.toFixed(2)}</span>
                 <span style={{ color: "#4F6F52" }}>Neta: Bs {t.neta.toFixed(2)}</span>
                 <span className="font-serif">Cobro neto: Bs {t.cobroNeto.toFixed(2)}</span>
-              </div>
+              </div>}
             </div>
           );
         })}
