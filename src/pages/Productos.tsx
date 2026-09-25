@@ -18,6 +18,7 @@ export default function Productos() {
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [busqueda, setBusqueda] = useState("");
+  const [pestanaStock, setPestanaStock] = useState<"disponibles" | "agotados">("disponibles");
   const buscadorRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -28,21 +29,55 @@ export default function Productos() {
   // Se ordena SIEMPRE por código (estable): editar la descripción ya no mueve
   // el producto de posición en la lista.
   async function cargar(mantenerSeleccion = false) {
-    const { data } = await supabase.from("products").select("*").is("deleted_at", null).order("code");
-    const lista = (data as Product[]) ?? [];
-    setProductos(lista);
-    if (!mantenerSeleccion || !lista.some((p) => p.id === seleccionadoId)) {
-      setSeleccionadoId(lista.length > 0 ? lista[0].id : null);
+    // Cargar por páginas: Supabase devuelve como máximo 1.000 filas por consulta
+    // y el catálogo actual tiene varios miles de productos.
+    const todos: Product[] = [];
+    const TAMANO_PAGINA = 1000;
+    for (let desde = 0; ; desde += TAMANO_PAGINA) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .is("deleted_at", null)
+        .order("code")
+        .range(desde, desde + TAMANO_PAGINA - 1);
+      if (error) {
+        console.error("Error cargando productos:", error);
+        break;
+      }
+      const pagina = (data as Product[]) ?? [];
+      todos.push(...pagina);
+      if (pagina.length < TAMANO_PAGINA) break;
+    }
+    setProductos(todos);
+    if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
+      setSeleccionadoId(todos.length > 0 ? todos[0].id : null);
     }
   }
 
-  const lista = useMemo(() => {
+  const { disponibles, agotados, lista, unidadesDisponibles } = useMemo(() => {
     const q = busqueda.trim().toLowerCase();
-    if (!q) return productos;
-    return productos.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
-  }, [productos, busqueda]);
+    const coincide = (p: Product) => !q || p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
+    const disponibles = productos.filter((p) => Number(p.stock_available ?? p.stock_physical ?? 0) > 0 && coincide(p));
+    const agotados = productos.filter((p) => Number(p.stock_available ?? p.stock_physical ?? 0) <= 0 && coincide(p));
+    return {
+      disponibles,
+      agotados,
+      lista: pestanaStock === "disponibles" ? disponibles : agotados,
+      unidadesDisponibles: disponibles.reduce((total, p) => total + Number(p.stock_available ?? p.stock_physical ?? 0), 0),
+    };
+  }, [productos, busqueda, pestanaStock]);
 
-  const seleccionado = lista.find((p) => p.id === seleccionadoId) ?? productos.find((p) => p.id === seleccionadoId) ?? null;
+  const seleccionado = lista.find((p) => p.id === seleccionadoId) ?? null;
+
+  // Al cambiar entre Disponibles/Agotados o al filtrar, mantener la selección
+  // dentro de la carpeta visible para no mostrar a la derecha un producto oculto.
+  useEffect(() => {
+    if (lista.length === 0) {
+      setSeleccionadoId(null);
+      return;
+    }
+    if (!lista.some((p) => p.id === seleccionadoId)) setSeleccionadoId(lista[0].id);
+  }, [lista, seleccionadoId]);
 
   useEffect(() => {
     if (seleccionado) {
@@ -178,6 +213,17 @@ export default function Productos() {
             placeholder="Buscar por código o descripción… (Enter para seleccionar, ↑↓ para moverte)"
             className="flex-1 text-sm outline-none bg-transparent"
           />
+        </div>
+
+        <div className="flex gap-1.5 mb-3">
+          <button type="button" onClick={() => setPestanaStock("disponibles")} className="text-xs px-3 py-1.5 rounded-md"
+            style={{ background: pestanaStock === "disponibles" ? "#4F6F52" : "#F7F3EC", color: pestanaStock === "disponibles" ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
+            Disponibles ({disponibles.length} productos · {unidadesDisponibles} unidades)
+          </button>
+          <button type="button" onClick={() => setPestanaStock("agotados")} className="text-xs px-3 py-1.5 rounded-md"
+            style={{ background: pestanaStock === "agotados" ? "#7A2540" : "#F7F3EC", color: pestanaStock === "agotados" ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
+            Agotados ({agotados.length} productos)
+          </button>
         </div>
 
         {mostrarNuevo && (

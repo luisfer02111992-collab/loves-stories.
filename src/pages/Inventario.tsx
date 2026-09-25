@@ -70,9 +70,28 @@ export default function Inventario() {
   }, []);
 
   async function cargar() {
-    const { data } = await supabase.from("products").select("*, purchase_batches(label)").is("deleted_at", null).order("name");
-    setProductos((data as Product[]) ?? []);
-    if (data && data.length > 0) setMermaCodigo((data[0] as Product).code);
+    // Supabase limita por defecto cada consulta a 1.000 filas. El inventario actual
+    // supera ese límite, así que cargamos por páginas para que los conteos y las
+    // listas representen TODO el inventario.
+    const todas: Product[] = [];
+    const TAMANO_PAGINA = 1000;
+    for (let desde = 0; ; desde += TAMANO_PAGINA) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*, purchase_batches(label)")
+        .is("deleted_at", null)
+        .order("name")
+        .range(desde, desde + TAMANO_PAGINA - 1);
+      if (error) {
+        console.error("Error cargando inventario:", error);
+        break;
+      }
+      const pagina = (data as Product[]) ?? [];
+      todas.push(...pagina);
+      if (pagina.length < TAMANO_PAGINA) break;
+    }
+    setProductos(todas);
+    if (todas.length > 0) setMermaCodigo(todas[0].code);
   }
 
   async function exportarInventario() {
@@ -301,6 +320,8 @@ export default function Inventario() {
   const disponibles = listaPorLote.filter((p) => p.stock_available > 0 && coincideBusqueda(p));
   const agotados = listaPorLote.filter((p) => p.stock_available <= 0 && coincideBusqueda(p));
   const lista = pestanaStock === "disponibles" ? disponibles : agotados;
+  const unidadesDisponibles = disponibles.reduce((total, p) => total + Number(p.stock_available || 0), 0);
+  const unidadesAgotadas = agotados.reduce((total, p) => total + Number(p.stock_available || 0), 0);
 
   return (
     <div>
@@ -518,11 +539,11 @@ export default function Inventario() {
       <div className="flex gap-1.5 mb-3">
         <button onClick={() => setPestanaStock("disponibles")} className="text-xs px-3 py-1.5 rounded-md"
           style={{ background: pestanaStock === "disponibles" ? "#4F6F52" : "#F7F3EC", color: pestanaStock === "disponibles" ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
-          Disponibles ({disponibles.length})
+          Disponibles ({disponibles.length} productos · {unidadesDisponibles} unidades)
         </button>
         <button onClick={() => setPestanaStock("agotados")} className="text-xs px-3 py-1.5 rounded-md"
           style={{ background: pestanaStock === "agotados" ? "#7A2540" : "#F7F3EC", color: pestanaStock === "agotados" ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
-          Agotados ({agotados.length})
+          Agotados ({agotados.length} productos · {unidadesAgotadas} unidades)
         </button>
       </div>
 

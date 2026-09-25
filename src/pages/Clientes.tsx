@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, Wallet, Printer, Bell } from "lucide-react";
+import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, Wallet, Printer, Bell, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { useAuth } from "../hooks/useAuth";
@@ -58,6 +58,24 @@ export default function Clientes() {
   const [editandoPrecio, setEditandoPrecio] = useState<string | null>(null);
   const [precioManual, setPrecioManual] = useState(0);
   const [guardandoPrecio, setGuardandoPrecio] = useState(false);
+  const [busquedaCliente, setBusquedaCliente] = useState("");
+  const [indiceBusqueda, setIndiceBusqueda] = useState(0);
+
+  const clientesVisibles = useMemo(() => {
+    const q = busquedaCliente.trim().toLowerCase();
+    const base = q ? clientes : clientes.filter(c => pestanaClientes === "abiertas" ? clientesAbiertos.has(c.id) : !clientesAbiertos.has(c.id));
+    if (!q) return base;
+    return base.filter(c => (c.name ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q));
+  }, [clientes, clientesAbiertos, pestanaClientes, busquedaCliente]);
+
+  function tecladoBusquedaCliente(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!clientesVisibles.length) return;
+    if (e.key === "ArrowDown") { e.preventDefault(); setIndiceBusqueda(i => Math.min(i + 1, clientesVisibles.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setIndiceBusqueda(i => Math.max(i - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); setSeleccionado(clientesVisibles[Math.min(indiceBusqueda, clientesVisibles.length - 1)]); }
+  }
+
+  useEffect(() => { setIndiceBusqueda(0); }, [busquedaCliente, pestanaClientes]);
 
   useEffect(() => {
     cargarClientes();
@@ -460,9 +478,13 @@ export default function Clientes() {
           <button onClick={()=>setPestanaClientes("abiertas")} className="text-xs px-3 py-2 rounded" style={{background:pestanaClientes==="abiertas"?"#9C7A3C":"#EDE7DE",color:pestanaClientes==="abiertas"?"white":"#5B4E5E"}}>Cuentas abiertas</button>
           <button onClick={()=>setPestanaClientes("cerradas")} className="text-xs px-3 py-2 rounded" style={{background:pestanaClientes==="cerradas"?"#9C7A3C":"#EDE7DE",color:pestanaClientes==="cerradas"?"white":"#5B4E5E"}}>Cuentas cerradas</button>
         </div>
+        <div className="relative mb-2">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:"#9C7A3C"}}/>
+          <input value={busquedaCliente} onChange={e=>setBusquedaCliente(e.target.value)} onKeyDown={tecladoBusquedaCliente} placeholder="Buscar cliente por nombre o teléfono..." className="w-full pl-9 pr-3 py-2 rounded text-sm outline-none" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}/>
+        </div>
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          {clientes.filter(c=>pestanaClientes==="abiertas"?clientesAbiertos.has(c.id):!clientesAbiertos.has(c.id)).map((c, i, arr) => (
-            <div key={c.id} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+          {clientesVisibles.map((c, i, arr) => (
+            <div key={c.id} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id || (busquedaCliente && i===indiceBusqueda) ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <button onClick={() => setSeleccionado(c)} className="flex-1 text-left">
                 <p className="text-sm">{c.name}</p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
@@ -472,7 +494,7 @@ export default function Clientes() {
               </a>
             </div>
           ))}
-          {clientes.filter(c=>pestanaClientes==="abiertas"?clientesAbiertos.has(c.id):!clientesAbiertos.has(c.id)).length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay clientes en esta lista.</p>}
+          {clientesVisibles.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay clientes en esta lista.</p>}
         </div>
 
         {inactivos.length > 0 && (
