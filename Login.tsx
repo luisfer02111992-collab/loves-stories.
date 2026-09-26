@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabase";
 
 export default function Login() {
   const navigate = useNavigate();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState("luis.fernandez.rojas021192@gmail.com");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [cargando, setCargando] = useState(false);
@@ -28,7 +28,14 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     setCargando(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const loginEmail = email.includes("@")
+  ? email.trim()
+  : `${email.trim().toLowerCase()}@lovesstories.local`;
+
+const { error } = await supabase.auth.signInWithPassword({
+  email: loginEmail,
+  password
+});
     setCargando(false);
     if (error) {
       setError("Usuario o contraseña incorrectos.");
@@ -100,8 +107,8 @@ export default function Login() {
         <p className="font-cursive text-4xl text-center mb-1" style={{ color: "#9C7A3C" }}>{nombreNegocio}</p>
         <p className="text-xs text-center mb-5" style={{ color: "#5B4E5E" }}>Ingresa con tu usuario y contraseña</p>
 
-        <label className="text-xs" style={{ color: "#5B4E5E" }}>Correo</label>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required
+        <label className="text-xs" style={{ color: "#5B4E5E" }}>Usuario</label>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" required
           className="w-full mb-3 mt-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
 
         <label className="text-xs" style={{ color: "#5B4E5E" }}>Contraseña</label>
