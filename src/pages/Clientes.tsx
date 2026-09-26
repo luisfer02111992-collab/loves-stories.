@@ -412,19 +412,19 @@ export default function Clientes() {
       { type: "application/pdf" }
     );
 
-    if (
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({ files: [archivo] })
-    ) {
-      await navigator.share({
-        files: [archivo],
-        text: texto,
-        title: `Pedido de ${seleccionado.name}`,
-      });
-    } else {
-      setUltimoPdf({ blob, texto });
-    }
+const urlPdf = URL.createObjectURL(blob);
+const enlace = document.createElement("a");
+enlace.href = urlPdf;
+enlace.download = `pedido_total_${seleccionado.name || "cliente"}.pdf`;
+document.body.appendChild(enlace);
+enlace.click();
+document.body.removeChild(enlace);
+URL.revokeObjectURL(urlPdf);
+
+window.open(
+  linkWhatsapp(seleccionado.phone, texto),
+  "_blank"
+);
   } finally {
     setGenerandoPdf(false);
   }
@@ -467,22 +467,21 @@ async function generarPdfPorFecha(fechaElegida: string) {
       { type: "application/pdf" }
     );
 
-    if (
-      navigator.share &&
-      navigator.canShare &&
-      navigator.canShare({ files: [archivo] })
-    ) {
-      await navigator.share({
-        files: [archivo],
-        text: `Hola ${seleccionado.name}. Te comparto tu pedido del ${fechaElegida}. Total: Bs ${totalDia.toFixed(2)}.`,
-        title: `Pedido ${fechaElegida}`,
-      });
-    } else {
-      setUltimoPdf({
-        blob,
-        texto: `Hola ${seleccionado.name}. Te comparto tu pedido del ${fechaElegida}. Total: Bs ${totalDia.toFixed(2)}.`,
-      });
-    }
+const texto = `Hola ${seleccionado.name}. Te comparto tu pedido del ${fechaElegida}. Total: Bs ${totalDia.toFixed(2)}.`;
+
+const urlPdf = URL.createObjectURL(blob);
+const enlace = document.createElement("a");
+enlace.href = urlPdf;
+enlace.download = `pedido_${fechaElegida}_${seleccionado.name || "cliente"}.pdf`;
+document.body.appendChild(enlace);
+enlace.click();
+document.body.removeChild(enlace);
+URL.revokeObjectURL(urlPdf);
+
+window.open(
+  linkWhatsapp(seleccionado.phone, texto),
+  "_blank"
+);
 
     setMostrarSelectorFecha(false);
   } finally {
@@ -817,7 +816,7 @@ async function generarPdfPorFecha(fechaElegida: string) {
                   Cerrar pedido
                 </button>
                 <button onClick={generarPdfAbierto} disabled={generandoPdf} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                  <FileDown size={15} /> {generandoPdf ? "Generando PDF..." : "PDF cliente / WhatsApp"}
+                  <FileDown size={15} /> {generandoPdf ? "Generando PDF..." : "Pedido total / WhatsApp"}
                 </button>
 <button
   type="button"
