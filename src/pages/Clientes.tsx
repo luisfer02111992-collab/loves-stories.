@@ -471,12 +471,18 @@ const texto = `Hola ${seleccionado.name}. Te comparto tu pedido del ${fechaElegi
 
 const urlPdf = URL.createObjectURL(blob);
 const enlace = document.createElement("a");
+
 enlace.href = urlPdf;
 enlace.download = `pedido_${fechaElegida}_${seleccionado.name || "cliente"}.pdf`;
+enlace.style.display = "none";
+
 document.body.appendChild(enlace);
 enlace.click();
-document.body.removeChild(enlace);
-URL.revokeObjectURL(urlPdf);
+
+setTimeout(() => {
+  document.body.removeChild(enlace);
+  URL.revokeObjectURL(urlPdf);
+}, 2000);
 
 window.open(
   linkWhatsapp(seleccionado.phone, texto),
