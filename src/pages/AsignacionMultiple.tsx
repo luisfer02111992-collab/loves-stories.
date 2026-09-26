@@ -21,6 +21,7 @@ export default function AsignacionMultiple() {
   const [busqueda, setBusqueda] = useState("");
   const [productoId, setProductoId] = useState("");
   const [mostrarLista, setMostrarLista] = useState(false);
+  const [busquedaCliente, setBusquedaCliente] = useState("");
   const [cantidades, setCantidades] = useState<Record<string, number>>({});
   const [preparaciones, setPreparaciones] = useState<Preparacion[]>([]);
   const [confirmando, setConfirmando] = useState(false);
@@ -49,7 +50,16 @@ export default function AsignacionMultiple() {
     if (!q) return [];
     return productos.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)).slice(0, 8);
   }, [busqueda, productos, preparaciones]);
+const clientesFiltrados = useMemo(() => {
+  const q = busquedaCliente.trim().toLowerCase();
 
+  if (!q) return clientes;
+
+  return clientes.filter((c) =>
+    c.name?.toLowerCase().includes(q) ||
+    c.phone?.toLowerCase().includes(q)
+  );
+}, [clientes, busquedaCliente]);
   let totalPreparadoAhora = 0;
   for (const key in cantidades) totalPreparadoAhora += Number(cantidades[key]) || 0;
   const restanteAhora = (producto?.stock_available ?? 0) - totalPreparadoAhora;
@@ -216,12 +226,22 @@ export default function AsignacionMultiple() {
 
           {producto && (
             <>
+              <div className="flex items-center gap-2 px-3 py-2 mb-2 rounded" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+  <Search size={16} style={{ color: "#5B4E5E" }} />
+  <input
+    type="text"
+    value={busquedaCliente}
+    onChange={(e) => setBusquedaCliente(e.target.value)}
+    placeholder="Buscar cliente por nombre o teléfono..."
+    className="flex-1 bg-transparent outline-none text-sm"
+  />
+</div>
               <div style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} className="rounded mb-2 max-h-56 overflow-y-auto">
                 <div className="grid grid-cols-3 px-3 py-1.5 text-xs" style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
                   <span>Cliente</span><span>Teléfono</span><span>Cantidad</span>
                 </div>
-                {clientes.map((c, i) => (
-                  <div key={c.id} className="grid grid-cols-3 px-3 py-1.5 items-center" style={{ borderBottom: i < clientes.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+                {clientesFiltrados.map((c, i) => (
+                  <div key={c.id} className="grid grid-cols-3 px-3 py-1.5 items-center" style={{ borderBottom: i < clientesFiltrados.length - 1 ? "1px solid #D9D0C2" : "none" }}>
                     <span className="text-xs">{c.name}</span>
                     <span className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</span>
                     <input type="number" min={0} value={cantidades[c.id] ?? 0} onChange={(e) => setCantidades({ ...cantidades, [c.id]: Number(e.target.value) })}
