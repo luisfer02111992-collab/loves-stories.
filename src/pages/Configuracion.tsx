@@ -217,7 +217,7 @@ export default function Configuracion() {
     setMensaje(null);
     setCreando(true);
     const { data, error } = await supabaseSignUpClient.auth.signUp({
-      email: `${nuevoUsuario.trim().toLowerCase()}@lovesstories.local`,
+      email: `${nuevoUsuario.trim().toLowerCase()}@lovesstories.com`,
       password: nuevaClave,
       options: { data: { full_name: nuevoNombre } },
     });
