@@ -108,7 +108,7 @@ const { error } = await supabase.auth.signInWithPassword({
         <p className="text-xs text-center mb-5" style={{ color: "#5B4E5E" }}>Ingresa con tu usuario y contraseña</p>
 
         <label className="text-xs" style={{ color: "#5B4E5E" }}>Correo</label>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} type="email" required
+        <input value={email} onChange={(e) => setEmail(e.target.value)} type="text" required
           className="w-full mb-3 mt-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
 
         <label className="text-xs" style={{ color: "#5B4E5E" }}>Contraseña</label>
