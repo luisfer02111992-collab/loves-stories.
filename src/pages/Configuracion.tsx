@@ -213,34 +213,49 @@ export default function Configuracion() {
   }
 
   async function crearUsuario(e: React.FormEvent) {
-    e.preventDefault();
-    setMensaje(null);
-    setCreando(true);
-    const { data, error } = await supabaseSignUpClient.auth.signUp({
-      email: `${nuevoUsuario.trim().toLowerCase()}@lovesstories.com`,
-      password: nuevaClave,
-      options: { data: { full_name: nuevoNombre } },
+  e.preventDefault();
+  setMensaje(null);
+  setCreando(true);
+
+  try {
+    const email = `${nuevoUsuario.trim().toLowerCase()}@lovesstories.com`;
+
+    const { data, error } = await supabase.functions.invoke("create-user", {
+      body: {
+        email,
+        password: nuevaClave,
+        full_name: nuevoNombre,
+        role: nuevoRol,
+        permissions:
+          nuevoRol === "admin" ? [] : nuevosPermisos,
+      },
     });
+
     if (error) {
       setMensaje(error.message);
-      setCreando(false);
       return;
     }
-    if (data.user) {
-      // El trigger de la base de datos ya creó el perfil con rol "employee";
-      // aquí solo ajustamos nombre y rol si el administrador eligió "admin".
-      await supabase.from("profiles").update({ full_name: nuevoNombre, role: nuevoRol, permissions: nuevoRol === "admin" ? [] : nuevosPermisos }).eq("id", data.user.id);
-    }
-    setNuevosPermisos([...EMPLOYEE_DEFAULT_PERMISSIONS]);
-    setMensaje("Usuario creado. Si tu proyecto pide confirmar el correo, la persona debe revisar su bandeja de entrada antes de poder ingresar.");
-    setNuevoNombre(""); setNuevoUsuario(""); setNuevaClave(""); setNuevoRol("employee");
-    setCreando(false);
-    cargar();
-  }
 
-  function alternarPermiso(lista: string[], setLista: (v: string[]) => void, key: string) {
-    setLista(lista.includes(key) ? lista.filter((p) => p !== key) : [...lista, key]);
+    if (!data?.success) {
+      setMensaje(data?.error || "No se pudo crear el usuario.");
+      return;
+    }
+
+    setMensaje(`Usuario creado correctamente. Puede ingresar como: ${nuevoUsuario.trim().toLowerCase()}`);
+
+    setNuevoNombre("");
+    setNuevoUsuario("");
+    setNuevaClave("");
+    setNuevoRol("employee");
+    setNuevosPermisos([...EMPLOYEE_DEFAULT_PERMISSIONS]);
+
+    await cargar();
+  } catch (error: any) {
+    setMensaje(error?.message || "Error al crear el usuario.");
+  } finally {
+    setCreando(false);
   }
+}
 
   function editarPermisos(u: Profile) {
     setEditandoUsuario(u.id);
