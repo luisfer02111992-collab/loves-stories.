@@ -261,7 +261,38 @@ export default function Configuracion() {
     setEditandoUsuario(u.id);
     setPermisosEdit(u.role === "admin" ? [] : [...(u.permissions ?? EMPLOYEE_DEFAULT_PERMISSIONS)]);
   }
+async function eliminarUsuario(u: Profile) {
+  const confirmar = window.confirm(
+    `¿Seguro que deseas eliminar al usuario "${u.full_name || "sin nombre"}"?\n\nEsta acción no se puede deshacer.`
+  );
 
+  if (!confirmar) return;
+
+  try {
+    const { data, error } = await supabase.functions.invoke("delete-user", {
+      body: { user_id: u.id },
+    });
+
+    if (error) {
+      alert("No se pudo eliminar el usuario: " + error.message);
+      return;
+    }
+
+    if (!data?.success) {
+      alert(data?.error || "No se pudo eliminar el usuario.");
+      return;
+    }
+
+    if (editandoUsuario === u.id) {
+      setEditandoUsuario(null);
+    }
+
+    await cargar();
+    alert("Usuario eliminado correctamente.");
+  } catch (error: any) {
+    alert(error?.message || "Error al eliminar el usuario.");
+  }
+}
   async function guardarPermisos(u: Profile) {
     const { error } = await supabase.from("profiles").update({ permissions: u.role === "admin" ? [] : permisosEdit }).eq("id", u.id);
     if (error) return alert(`No se pudo guardar: ${error.message}`);
@@ -434,7 +465,7 @@ export default function Configuracion() {
                   {u.role === "admin" ? "Administrador" : "Vendedor"}
                 </span>
                 {u.role !== "admin" && <button type="button" onClick={() => editarPermisos(u)} className="text-xs px-2.5 py-1 rounded" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Permisos</button>}
-              </div>
+             {u.role !== "admin" && <button type="button" onClick={() => eliminarUsuario(u)} className="text-xs px-2.5 py-1 rounded" style={{ background: "#FDE8E8", color: "#B42318", border: "1px solid #F5B7B1" }}>Eliminar</button>} </div>
             </div>
           ))}
         </div>
