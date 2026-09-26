@@ -383,38 +383,112 @@ export default function Clientes() {
   }
 
   async function generarPdfAbierto() {
-    if (!seleccionado) return;
-    setGenerandoPdf(true);
+  if (!seleccionado) return;
+
+  setGenerandoPdf(true);
+
+  try {
     const blob = await generarPdfGrande({
-      negocio: nombreNegocio, cliente: seleccionado.name, telefono: seleccionado.phone,
-      fecha: new Date().toLocaleDateString("es-BO"), titulo: "Pedido acumulado",
-      grupos, subtotalSinDescuento, descuentoTotal, total,
-      depositado, saldoPendiente, saldoAFavor, mostrarPagos: true,
+      negocio: nombreNegocio,
+      cliente: seleccionado.name,
+      telefono: seleccionado.phone,
+      fecha: new Date().toLocaleDateString("es-BO"),
+      titulo: "Pedido acumulado",
+      grupos,
+      subtotalSinDescuento,
+      descuentoTotal,
+      total,
+      depositado,
+      saldoPendiente,
+      saldoAFavor,
+      mostrarPagos: true,
     });
+
+    const texto = mensajeWhatsapp(false);
+
+    const archivo = new File(
+      [blob],
+      `pedido_acumulado_${seleccionado.name || "cliente"}.pdf`,
+      { type: "application/pdf" }
+    );
+
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [archivo] })
+    ) {
+      await navigator.share({
+        files: [archivo],
+        text: texto,
+        title: `Pedido de ${seleccionado.name}`,
+      });
+    } else {
+      setUltimoPdf({ blob, texto });
+    }
+  } finally {
     setGenerandoPdf(false);
-    setUltimoPdf({ blob, texto: mensajeWhatsapp(false) });
   }
+}
 
   // PDF por fecha: solo lo asignado ese día puntual, no todo el acumulado.
   // No modifica ni cierra el pedido.
   const fechasConAsignaciones = useMemo(() => Array.from(new Set(items.map((it) => it.fecha))).sort().reverse(), [items]);
 
-  async function generarPdfPorFecha(fechaElegida: string) {
-    if (!seleccionado) return;
-    const itemsDeEseDia = items.filter((it) => it.fecha === fechaElegida);
-    const gruposDia = agruparPorProducto(reglas, itemsDeEseDia);
-    const subDia = gruposDia.reduce((a, g) => a + g.subtotalSinDescuento, 0);
-    const totalDia = gruposDia.reduce((a, g) => a + g.subtotalConDescuento, 0);
-    setGenerandoPdf(true);
-    await generarPdfGrande({
-      negocio: nombreNegocio, cliente: seleccionado.name, telefono: seleccionado.phone,
-      fecha: fechaElegida, titulo: `Detalle del ${fechaElegida}`,
-      grupos: gruposDia, subtotalSinDescuento: subDia, descuentoTotal: subDia - totalDia, total: totalDia,
-      depositado: 0, saldoPendiente: 0, saldoAFavor: 0, mostrarPagos: false,
+async function generarPdfPorFecha(fechaElegida: string) {
+  if (!seleccionado) return;
+
+  const itemsDeEseDia = items.filter((it) => it.fecha === fechaElegida);
+  const gruposDia = agruparPorProducto(reglas, itemsDeEseDia);
+  const subDia = gruposDia.reduce((a, g) => a + g.subtotalSinDescuento, 0);
+  const totalDia = gruposDia.reduce((a, g) => a + g.subtotalConDescuento, 0);
+
+  setGenerandoPdf(true);
+
+  try {
+    const blob = await generarPdfGrande({
+      negocio: nombreNegocio,
+      cliente: seleccionado.name,
+      telefono: seleccionado.phone,
+      fecha: fechaElegida,
+      titulo: `Detalle del ${fechaElegida}`,
+      grupos: gruposDia,
+      subtotalSinDescuento: subDia,
+      descuentoTotal: subDia - totalDia,
+      total: totalDia,
+      depositado: 0,
+      saldoPendiente: 0,
+      saldoAFavor: 0,
+      mostrarPagos: false,
     });
-    setGenerandoPdf(false);
+
+    const archivo = new File(
+      [blob],
+      `pedido_${fechaElegida}_${seleccionado.name || "cliente"}.pdf`,
+      { type: "application/pdf" }
+    );
+
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [archivo] })
+    ) {
+      await navigator.share({
+        files: [archivo],
+        text: `Hola ${seleccionado.name}. Te comparto tu pedido del ${fechaElegida}. Total: Bs ${totalDia.toFixed(2)}.`,
+        title: `Pedido ${fechaElegida}`,
+      });
+    } else {
+      setUltimoPdf({
+        blob,
+        texto: `Hola ${seleccionado.name}. Te comparto tu pedido del ${fechaElegida}. Total: Bs ${totalDia.toFixed(2)}.`,
+      });
+    }
+
     setMostrarSelectorFecha(false);
+  } finally {
+    setGenerandoPdf(false);
   }
+}
 
   function mensajeWhatsapp(cerrado: boolean) {
     if (!seleccionado) return "";
@@ -745,16 +819,19 @@ export default function Clientes() {
                 <button onClick={generarPdfAbierto} disabled={generandoPdf} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                   <FileDown size={15} /> {generandoPdf ? "Generando PDF..." : "PDF cliente / WhatsApp"}
                 </button>
-                <a
-  href={linkWhatsapp(seleccionado.phone, mensajeWhatsappHoy())}
-  target="_blank"
-  rel="noreferrer"
+<button
+  type="button"
+  onClick={() => {
+    const hoy = new Date().toLocaleDateString("es-BO");
+    generarPdfPorFecha(hoy);
+  }}
+  disabled={generandoPdf}
   className="flex-1 py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2"
   style={{ background: "#25D366", color: "white" }}
 >
-  Pedido de hoy / WhatsApp
-</a>
-                <button onClick={() => setMostrarSelectorFecha((v) => !v)} disabled={fechasConAsignaciones.length === 0} className="py-2.5 px-3 rounded-md text-sm flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+  <FileDown size={15} />
+  {generandoPdf ? "Generando PDF..." : "Pedido de hoy / WhatsApp"}
+</button>                <button onClick={() => setMostrarSelectorFecha((v) => !v)} disabled={fechasConAsignaciones.length === 0} className="py-2.5 px-3 rounded-md text-sm flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
                   <FileDown size={15} /> PDF por fecha
                 </button>
                 <button onClick={() => setMostrarRecibo(true)} className="py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Ticket térmico 80 mm, sin imágenes">
