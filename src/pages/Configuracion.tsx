@@ -38,7 +38,7 @@ export default function Configuracion() {
   const [colorReporte2, setColorReporte2] = useState("#8AA05A");
 
   const [nuevoNombre, setNuevoNombre] = useState("");
-  const [nuevoCorreo, setNuevoCorreo] = useState("");
+  const [nuevoUsuario, setNuevoUsuario] = useState("");
   const [nuevaClave, setNuevaClave] = useState("");
   const [nuevoRol, setNuevoRol] = useState<"employee" | "admin">("employee");
   const [nuevosPermisos, setNuevosPermisos] = useState<string[]>([...EMPLOYEE_DEFAULT_PERMISSIONS]);
@@ -217,7 +217,7 @@ export default function Configuracion() {
     setMensaje(null);
     setCreando(true);
     const { data, error } = await supabaseSignUpClient.auth.signUp({
-      email: nuevoCorreo,
+      email: `${nuevoUsuario.trim().toLowerCase()}@lovesstories.local`,
       password: nuevaClave,
       options: { data: { full_name: nuevoNombre } },
     });
@@ -233,7 +233,7 @@ export default function Configuracion() {
     }
     setNuevosPermisos([...EMPLOYEE_DEFAULT_PERMISSIONS]);
     setMensaje("Usuario creado. Si tu proyecto pide confirmar el correo, la persona debe revisar su bandeja de entrada antes de poder ingresar.");
-    setNuevoNombre(""); setNuevoCorreo(""); setNuevaClave(""); setNuevoRol("employee");
+    setNuevoNombre(""); setNuevoUsuario(""); setNuevaClave(""); setNuevoRol("employee");
     setCreando(false);
     cargar();
   }
@@ -450,8 +450,8 @@ export default function Configuracion() {
         <p className="font-serif text-base mb-3">Crear usuario</p>
         <label className="text-xs" style={{ color: "#5B4E5E" }}>Nombre</label>
         <input value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} required className="w-full mb-2 mt-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
-        <label className="text-xs" style={{ color: "#5B4E5E" }}>Correo</label>
-        <input value={nuevoCorreo} onChange={(e) => setNuevoCorreo(e.target.value)} type="email" required className="w-full mb-2 mt-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
+        <label className="text-xs" style={{ color: "#5B4E5E" }}>Usuario</label>
+        <input value={nuevoUsuario} onChange={(e) => setNuevoUsuario(e.target.value)} type="text" required className="w-full mb-2 mt-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
         <label className="text-xs" style={{ color: "#5B4E5E" }}>Contraseña</label>
         <input value={nuevaClave} onChange={(e) => setNuevaClave(e.target.value)} type="password" required minLength={6} className="w-full mb-2 mt-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
         <label className="text-xs" style={{ color: "#5B4E5E" }}>Rol</label>
