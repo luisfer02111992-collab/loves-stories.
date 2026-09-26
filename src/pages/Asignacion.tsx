@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "../lib/pricing";
 import type { Customer, Product } from "../lib/types";
+import { generarPdfGrande } from "../lib/pdf";
 
 export default function Asignacion() {
   const { vendedorActivoId, vendedorActivoNombre, sesionActivaId } = useSellerSession();
@@ -168,6 +169,73 @@ export default function Asignacion() {
   const total = grupos.reduce((a, g) => a + g.subtotalConDescuento, 0);
   const unidades = grupos.reduce((a, g) => a + g.cantidadTotal, 0);
 
+  async function compartirPedidoWhatsApp() {
+  if (!clienteId) {
+    alert("Selecciona un cliente.");
+    return;
+  }
+
+  if (items.length === 0) {
+    alert("Este cliente no tiene productos asignados hoy.");
+    return;
+  }
+
+  const cliente = clientes.find((c) => c.id === clienteId);
+
+  if (!cliente) {
+    alert("No se encontró el cliente.");
+    return;
+  }
+
+  try {
+    const pdfBlob = await generarPdfGrande({
+      negocio: "LOVE'S STORIES",
+      cliente: cliente.name ?? "",
+      telefono: cliente.phone ?? "",
+      fecha: new Date().toLocaleDateString("es-BO"),
+      titulo: "Detalle del día",
+      grupos,
+      subtotalSinDescuento: grupos.reduce(
+        (a, g) => a + g.subtotalSinDescuento,
+        0
+      ),
+      descuentoTotal: grupos.reduce(
+        (a, g) => a + (g.subtotalSinDescuento - g.subtotalConDescuento),
+        0
+      ),
+      total,
+      depositado: 0,
+      saldoPendiente: total,
+      saldoAFavor: 0,
+      mostrarPagos: false,
+    });
+
+    const archivo = new File(
+      [pdfBlob],
+      `pedido-${cliente.name ?? "cliente"}.pdf`,
+      { type: "application/pdf" }
+    );
+
+    if (
+      navigator.share &&
+      navigator.canShare &&
+      navigator.canShare({ files: [archivo] })
+    ) {
+      await navigator.share({
+        files: [archivo],
+        title: `Pedido de ${cliente.name ?? "cliente"}`,
+        text: "Detalle de tu pedido de hoy.",
+      });
+    } else {
+      alert(
+        "Este dispositivo o navegador no permite adjuntar el PDF directamente. Prueba desde el celular."
+      );
+    }
+  } catch (error) {
+    console.error(error);
+    alert("No se pudo generar o compartir el PDF.");
+  }
+}
   return (
     <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-2">
@@ -185,6 +253,16 @@ export default function Asignacion() {
               {clientes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
           </div>
+          {clienteId && items.length > 0 && (
+  <button
+    type="button"
+    onClick={compartirPedidoWhatsApp}
+    className="mt-3 w-full py-2 px-3 rounded text-sm font-medium"
+    style={{ background: "#25D366", color: "white" }}
+  >
+    WhatsApp — enviar PDF de hoy
+  </button>
+)}
         </div>
 
         {!productoEncontrado ? (
