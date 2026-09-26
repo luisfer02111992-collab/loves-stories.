@@ -423,7 +423,16 @@ export default function Clientes() {
     }
     return `Hola ${seleccionado.name}. Te comparto el detalle de tu pedido en ${nombreNegocio} hasta hoy. Total: Bs ${total.toFixed(2)}. Depósitos: Bs ${depositado.toFixed(2)}. ${saldoAFavor > 0 ? `Saldo a favor: Bs ${saldoAFavor.toFixed(2)}` : `Saldo pendiente: Bs ${saldoPendiente.toFixed(2)}`}. Te adjunto el PDF que acabamos de descargar.`;
   }
+  function mensajeWhatsappHoy() {
+  if (!seleccionado) return "";
 
+  const hoy = new Date().toLocaleDateString("es-BO");
+  const itemsHoy = items.filter((it) => it.fecha === hoy);
+  const gruposHoy = agruparPorProducto(reglas, itemsHoy);
+  const totalHoy = gruposHoy.reduce((a, g) => a + g.subtotalConDescuento, 0);
+
+  return `Hola ${seleccionado.name}. Te comparto el pedido realizado hoy en ${nombreNegocio}. Total de hoy: Bs ${totalHoy.toFixed(2)}.`;
+}
   function abrirRecordatorio() {
     if (!seleccionado) return;
     const msg = `Hola ${seleccionado.name}, te escribimos de ${nombreNegocio}. Tu pedido: Bs ${total.toFixed(2)}. Pagado: Bs ${depositado.toFixed(2)}. Saldo pendiente: Bs ${saldoPendiente.toFixed(2)}. Llevas ${diasApertura} día(s) desde la apertura` +
@@ -736,6 +745,15 @@ export default function Clientes() {
                 <button onClick={generarPdfAbierto} disabled={generandoPdf} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                   <FileDown size={15} /> {generandoPdf ? "Generando PDF..." : "PDF cliente / WhatsApp"}
                 </button>
+                <a
+  href={linkWhatsapp(seleccionado.phone, mensajeWhatsappHoy())}
+  target="_blank"
+  rel="noreferrer"
+  className="flex-1 py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2"
+  style={{ background: "#25D366", color: "white" }}
+>
+  Pedido de hoy / WhatsApp
+</a>
                 <button onClick={() => setMostrarSelectorFecha((v) => !v)} disabled={fechasConAsignaciones.length === 0} className="py-2.5 px-3 rounded-md text-sm flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
                   <FileDown size={15} /> PDF por fecha
                 </button>
