@@ -30,7 +30,7 @@ export default function Login() {
     setCargando(true);
     const loginEmail = email.includes("@")
   ? email.trim()
-  : `${email.trim().toLowerCase()}@lovesstories.local`;
+  : `${email.trim().toLowerCase()}@lovesstories.com`;
 
 const { error } = await supabase.auth.signInWithPassword({
   email: loginEmail,
