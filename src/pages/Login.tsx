@@ -28,7 +28,14 @@ export default function Login() {
     e.preventDefault();
     setError(null);
     setCargando(true);
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const loginEmail = email.includes("@")
+  ? email.trim()
+  : `${email.trim().toLowerCase()}@lovesstories.local`;
+
+const { error } = await supabase.auth.signInWithPassword({
+  email: loginEmail,
+  password
+});
     setCargando(false);
     if (error) {
       setError("Usuario o contraseña incorrectos.");
