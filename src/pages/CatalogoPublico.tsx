@@ -123,57 +123,38 @@ const itemsFiltrados = useMemo(() => {
   imagenAmpliadaRef.current = imagenAmpliada;
 seleccionRef.current = seleccion.length;
 useEffect(() => {
-  // Creamos UNA sola entrada protegida.
-  window.history.pushState({ catalogoProtegido: true }, "");
+  window.history.pushState({ catalogo: true }, "");
 
   const manejarAtras = () => {
-    // Si hay una imagen ampliada, Atrás solamente la cierra.
+    // Si estamos cerrando una imagen mediante Atrás,
+    // solamente cerramos la imagen.
     if (imagenAmpliadaRef.current) {
+      imagenAmpliadaRef.current = null;
       setImagenAmpliada(null);
-
-      // Volvemos a la misma entrada protegida.
-      setTimeout(() => {
-        window.history.forward();
-      }, 0);
-
       return;
     }
 
-    // Si existe cualquier producto seleccionado,
-    // NO permitimos abandonar el catálogo sin Aceptar.
+    // Si hay algo seleccionado, SIEMPRE preguntar.
     if (seleccionRef.current > 0) {
       const salir = window.confirm(
         "¿Estás seguro de que deseas salir del catálogo? Se perderán los productos que hayas seleccionado."
       );
 
       if (!salir) {
-        // CANCELAR:
-        // vuelve a la misma entrada protegida.
-        // No crea entradas nuevas.
-        setTimeout(() => {
-          window.history.forward();
-        }, 0);
-
+        // Cancelar: permanecer en el catálogo.
+        window.history.pushState({ catalogo: true }, "");
         return;
       }
 
-      // ACEPTAR:
-      // quitamos la protección y retrocedemos realmente.
+      // Aceptar: salir inmediatamente.
       window.removeEventListener("popstate", manejarAtras);
-
-      setTimeout(() => {
-        window.history.back();
-      }, 0);
-
+      window.history.back();
       return;
     }
 
-    // Sin productos seleccionados, puede salir.
+    // Si no hay selección, salir normalmente.
     window.removeEventListener("popstate", manejarAtras);
-
-    setTimeout(() => {
-      window.history.back();
-    }, 0);
+    window.history.back();
   };
 
   window.addEventListener("popstate", manejarAtras);
@@ -265,7 +246,11 @@ useEffect(() => {
   <img
     src={p.image_url}
     alt={p.name}
-    onClick={() => setImagenAmpliada(p.image_url)}
+    onClick={() => {
+  setImagenAmpliada(p.image_url);
+  imagenAmpliadaRef.current = p.image_url;
+  window.history.pushState({ imagenCatalogo: true }, "");
+}}
     className="w-full h-full object-cover cursor-zoom-in"
   />
 ) : (
