@@ -76,7 +76,13 @@ export default function Inventario() {
     if (countError) { console.error("Error contando inventario:", countError); return; }
     const total = count ?? 0;
     const consultas = Array.from({ length: Math.ceil(total / TAMANO_PAGINA) }, (_, i) =>
-      supabase.from("products").select("*, purchase_batches(label)").is("deleted_at", null).order("name").range(i*TAMANO_PAGINA, Math.min(total-1,(i+1)*TAMANO_PAGINA-1))
+      supabase
+  .from("products")
+  .select("*, purchase_batches(label)")
+  .is("deleted_at", null)
+  .order("name")
+  .order("id")
+  .range(i * TAMANO_PAGINA, Math.min(total - 1, (i + 1) * TAMANO_PAGINA - 1))
     );
     const paginas = await Promise.all(consultas);
     const todas: Product[] = [];
