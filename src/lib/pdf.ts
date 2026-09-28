@@ -207,63 +207,8 @@ if (telefonoLimpio.length >= 7) {
 
 const tieneImagen = !!imagenCargada;
 
-    const yInicio = y;
-
-    if (imagenCargada) {
-      try {
-        doc.addImage(
-          imagenCargada.dataUrl,
-          imagenCargada.formato,
-          xFoto,
-          yInicio + 1,
-          14,
-          14,
-          undefined,
-          "FAST"
-        );
-      } catch {
-        // Si una imagen falla, la tabla continúa normalmente.
-      }
-    } else {
-      doc.setFont("helvetica", "normal");
-      doc.setFontSize(7);
-      doc.setTextColor(150, 145, 145);
-      doc.text("—", xFoto + 6, yInicio + 4.8);
-    }
-
-    doc.setTextColor(20, 20, 20);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
-    doc.text(
-      `${g.codigo} · ${g.nombre}`,
-      xProducto,
-      yInicio + 4.8,
-      { maxWidth: 56 }
-    );
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-
-    doc.text(
-      String(g.cantidadTotal),
-      xCant + 5,
-      yInicio + 4.8,
-      { align: "center" }
-    );
-
-    doc.text(
-      `Bs ${g.precioUnitarioFinal.toFixed(2)}`,
-      xPrecio,
-      yInicio + 4.8
-    );
-
-    doc.text(
-      `Bs ${g.descuento.toFixed(2)}`,
-      xDesc,
-      yInicio + 4.8
-    );
-
-   const detalle = g.detalle.length === 1
+// Preparar primero todas las fechas y vendedores
+const detalle = g.detalle.length === 1
   ? `${g.detalle[0].fecha}${g.detalle[0].vendedorNombre ? ` · ${g.detalle[0].vendedorNombre}` : " · Sin vendedor"}`
   : g.detalle
       .map(
@@ -273,40 +218,104 @@ const tieneImagen = !!imagenCargada;
       .join(" / ");
 
 doc.setFontSize(6.2);
-doc.setTextColor(100, 90, 100);
-
 const lineasDetalle = doc.splitTextToSize(detalle, 31);
 
-// La fila crece automáticamente para mostrar TODAS las fechas
+// Calcular altura necesaria SIN eliminar ninguna fecha
 const altoPorDetalle = lineasDetalle.length * 3.2 + 3;
 const altoFila = Math.max(tieneImagen ? 17 : 8, altoPorDetalle);
 
+// Comprobar página ANTES de dibujar el producto
 if (y + altoFila > 297 - margen) {
   doc.addPage();
   y = margen;
   encabezadoTabla();
 }
 
+const yInicio = y;
+
+// FOTO
+if (imagenCargada) {
+  try {
+    doc.addImage(
+      imagenCargada.dataUrl,
+      imagenCargada.formato,
+      xFoto,
+      yInicio + 1,
+      14,
+      14,
+      undefined,
+      "FAST"
+    );
+  } catch {
+    // Si la imagen falla, continúa sin foto.
+  }
+} else {
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(7);
+  doc.setTextColor(150, 145, 145);
+  doc.text("—", xFoto + 6, yInicio + 4.8);
+}
+
+// CÓDIGO / PRODUCTO
+doc.setTextColor(20, 20, 20);
+doc.setFont("helvetica", "bold");
+doc.setFontSize(7.5);
+doc.text(
+  `${g.codigo} · ${g.nombre}`,
+  xProducto,
+  yInicio + 4.8,
+  { maxWidth: 56 }
+);
+
+// CANTIDAD
+doc.setFont("helvetica", "normal");
+doc.setFontSize(7);
+doc.text(
+  String(g.cantidadTotal),
+  xCant + 5,
+  yInicio + 4.8,
+  { align: "center" }
+);
+
+// PRECIO
+doc.text(
+  `Bs ${g.precioUnitarioFinal.toFixed(2)}`,
+  xPrecio,
+  yInicio + 4.8
+);
+
+// DESCUENTO
+doc.text(
+  `Bs ${g.descuento.toFixed(2)}`,
+  xDesc,
+  yInicio + 4.8
+);
+
+// TODAS LAS FECHAS Y VENDEDORES
+doc.setFontSize(6.2);
+doc.setTextColor(100, 90, 100);
 doc.text(
   lineasDetalle,
   xDetalle,
   yInicio + 4.8
 );
-    doc.setTextColor(20, 20, 20);
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(7.5);
 
-    doc.text(
-      `Bs ${g.subtotalConDescuento.toFixed(2)}`,
-      xSubtotal,
-      yInicio + 4.8,
-      { align: "right" }
-    );
+// SUBTOTAL
+doc.setTextColor(20, 20, 20);
+doc.setFont("helvetica", "bold");
+doc.setFontSize(7.5);
+doc.text(
+  `Bs ${g.subtotalConDescuento.toFixed(2)}`,
+  xSubtotal,
+  yInicio + 4.8,
+  { align: "right" }
+);
 
-    y += altoFila;
+// Terminar fila
+y += altoFila;
 
-    doc.setDrawColor(225, 220, 215);
-    doc.line(margen, y, margen + anchoUtil, y);
+doc.setDrawColor(225, 220, 215);
+doc.line(margen, y, margen + anchoUtil, y);
   }
 
   y += 5;
