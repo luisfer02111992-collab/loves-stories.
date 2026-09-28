@@ -257,6 +257,20 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
   }
 
   return (
+  <>
+    {searchParams.get("desde") === "asignar" && (
+      <div className="mb-3">
+        <button
+          type="button"
+          onClick={() => navigate("/")}
+          className="px-4 py-2 rounded text-sm font-medium"
+          style={{ background: "#EDE7DE", color: "#2B1E2E", border: "1px solid #D9D0C2" }}
+        >
+          ← Volver a Asignar
+        </button>
+      </div>
+    )}
+
     <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-1">
         <div className="flex items-center justify-between mb-3">
@@ -442,6 +456,7 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
         )}
       </div>
     </div>
+    </>
   );
 }
 
