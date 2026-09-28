@@ -122,49 +122,58 @@ const itemsFiltrados = useMemo(() => {
   const totalBs = seleccion.reduce((a, p) => a + cant[p.id] * p.price, 0);
   imagenAmpliadaRef.current = imagenAmpliada;
 seleccionRef.current = seleccion.length;
-
 useEffect(() => {
-  // Dejamos siempre una entrada protegida delante del catálogo
+  // Creamos UNA sola entrada protegida.
   window.history.pushState({ catalogoProtegido: true }, "");
 
   const manejarAtras = () => {
-    // FOTO ABIERTA:
-    // el primer Atrás solamente cierra la foto.
+    // Si hay una imagen ampliada, Atrás solamente la cierra.
     if (imagenAmpliadaRef.current) {
       setImagenAmpliada(null);
 
-      // Restauramos inmediatamente la protección.
-      window.history.pushState({ catalogoProtegido: true }, "");
+      // Volvemos a la misma entrada protegida.
+      setTimeout(() => {
+        window.history.forward();
+      }, 0);
+
       return;
     }
 
-    // HAY PRODUCTOS SELECCIONADOS:
-    // jamás salir sin presionar Aceptar.
+    // Si existe cualquier producto seleccionado,
+    // NO permitimos abandonar el catálogo sin Aceptar.
     if (seleccionRef.current > 0) {
       const salir = window.confirm(
         "¿Estás seguro de que deseas salir del catálogo? Se perderán los productos que hayas seleccionado."
       );
 
-      if (salir) {
-        // Aceptó expresamente: quitamos el controlador y salimos.
-        window.removeEventListener("popstate", manejarAtras);
+      if (!salir) {
+        // CANCELAR:
+        // vuelve a la misma entrada protegida.
+        // No crea entradas nuevas.
+        setTimeout(() => {
+          window.history.forward();
+        }, 0);
 
-        // Retrocedemos la entrada protegida y la página del catálogo.
-        window.history.go(-2);
-      } else {
-        // Canceló: volvemos a colocar la protección.
-        // Puede presionar Atrás todas las veces que quiera
-        // y siempre volverá a aparecer este aviso.
-        window.history.pushState({ catalogoProtegido: true }, "");
+        return;
       }
+
+      // ACEPTAR:
+      // quitamos la protección y retrocedemos realmente.
+      window.removeEventListener("popstate", manejarAtras);
+
+      setTimeout(() => {
+        window.history.back();
+      }, 0);
 
       return;
     }
 
-    // NO HAY NADA SELECCIONADO:
-    // puede abandonar el catálogo normalmente.
+    // Sin productos seleccionados, puede salir.
     window.removeEventListener("popstate", manejarAtras);
-    window.history.back();
+
+    setTimeout(() => {
+      window.history.back();
+    }, 0);
   };
 
   window.addEventListener("popstate", manejarAtras);
