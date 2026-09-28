@@ -297,10 +297,21 @@ function irAProductos() {
             </div>
 
             {noEncontrado && (
-              <div className="mt-3 p-3 rounded" style={{ background: "#F4E3E6" }}>
-                <p className="text-xs" style={{ color: "#7A2540" }}>No se encontró ningún producto con ese código. Prueba la búsqueda por foto (cámara), o verifica el código.</p>
-              </div>
-            )}
+  <div className="mt-3 p-3 rounded" style={{ background: "#F4E3E6" }}>
+    <p className="text-xs mb-2" style={{ color: "#7A2540" }}>
+      No se encontró ningún producto con ese código.
+    </p>
+
+    <button
+      type="button"
+      onClick={irAProductos}
+      className="px-3 py-2 rounded text-xs font-medium"
+      style={{ background: "#9C7A3C", color: "#F7F3EC" }}
+    >
+      Crear en Productos
+    </button>
+  </div>
+)}
             {buscarFoto && (
               <div className="mt-3 p-3 rounded" style={{ background: "#F7F3EC" }}>
                 <label className="flex items-center gap-2 px-3 py-3 rounded mb-2 cursor-pointer justify-center text-sm" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C", color: "#7A5F2D" }}>
