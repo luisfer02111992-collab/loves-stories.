@@ -122,39 +122,38 @@ const itemsFiltrados = useMemo(() => {
   const totalBs = seleccion.reduce((a, p) => a + cant[p.id] * p.price, 0);
   imagenAmpliadaRef.current = imagenAmpliada;
 seleccionRef.current = seleccion.length;
-useEffect(() => {
-  window.history.pushState({ catalogo: true }, "");
+  useEffect(() => {
+  window.history.pushState({ catalogoProtegido: true }, "");
 
   const manejarAtras = () => {
-    // Si estamos cerrando una imagen mediante Atrás,
-    // solamente cerramos la imagen.
+    // Si hay una imagen abierta, Atrás solo cierra la imagen
     if (imagenAmpliadaRef.current) {
       imagenAmpliadaRef.current = null;
       setImagenAmpliada(null);
       return;
     }
 
-    // Si hay algo seleccionado, SIEMPRE preguntar.
+    // Si hay algo seleccionado, siempre preguntar
     if (seleccionRef.current > 0) {
       const salir = window.confirm(
-        "¿Estás seguro de que deseas salir del catálogo? Se perderán los productos que hayas seleccionado."
+        "¿Estás seguro de que deseas salir del catálogo? Se perderá todo lo seleccionado."
       );
 
       if (!salir) {
-        // Cancelar: permanecer en el catálogo.
-        window.history.pushState({ catalogo: true }, "");
+        // CANCELAR: seguimos dentro y dejamos nuevamente protegido el catálogo
+        window.history.pushState({ catalogoProtegido: true }, "");
         return;
       }
 
-      // Aceptar: salir inmediatamente.
+      // ACEPTAR: salir automáticamente
       window.removeEventListener("popstate", manejarAtras);
-      window.history.back();
+      window.history.go(-1);
       return;
     }
 
-    // Si no hay selección, salir normalmente.
+    // Sin selección: salir normalmente
     window.removeEventListener("popstate", manejarAtras);
-    window.history.back();
+    window.history.go(-1);
   };
 
   window.addEventListener("popstate", manejarAtras);
