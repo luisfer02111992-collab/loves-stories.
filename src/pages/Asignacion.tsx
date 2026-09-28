@@ -118,7 +118,22 @@ export default function Asignacion() {
     setNoEncontrado(false);
     inputRef.current?.focus();
   }
+function irAProductos() {
+  sessionStorage.setItem(
+    "volverAsignacion",
+    JSON.stringify({
+      origen: "asignar",
+      clienteId,
+      codigo: codigo.trim() || productoEncontrado?.code || "",
+    })
+  );
 
+  const codigoProducto = codigo.trim() || productoEncontrado?.code || "";
+
+  navigate(
+    `/productos?desde=asignar&codigo=${encodeURIComponent(codigoProducto)}`
+  );
+}
   // + / − sobre una fila ya asignada: cada click es una operación real e
   // inmediata contra Supabase (aumentar descuenta la diferencia, o sea 1
   // unidad más; disminuir devuelve 1 unidad al inventario).
