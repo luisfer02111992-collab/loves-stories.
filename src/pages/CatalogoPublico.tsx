@@ -167,7 +167,7 @@ seleccionRef.current = seleccion.length;
       // ACEPTAR:
       // esta es la ÚNICA forma de abandonar el catálogo.
       window.removeEventListener("popstate", manejarAtras);
-      window.history.back();
+      window.history.go(-2);
       return;
     }
 
