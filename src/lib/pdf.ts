@@ -114,7 +114,8 @@ export async function generarPdfGrande(datos: DatosPdfGrande): Promise<Blob> {
   const margen = 15;
   const anchoUtil = 210 - margen * 2;
   let y = margen;
-
+const logoUrl = "/logo-loves-stories.png";
+const logo = await cargarImagenComoDataUrl(logoUrl);
   function saltoDePaginaSiNecesario(alturaNecesaria: number) {
     if (y + alturaNecesaria > 297 - margen) {
       doc.addPage();
@@ -122,14 +123,28 @@ export async function generarPdfGrande(datos: DatosPdfGrande): Promise<Blob> {
     }
   }
 
- // Encabezado Love's Stories en rosa
+// Logo Love's Stories
+if (logo) {
+  doc.addImage(
+    logo.dataUrl,
+    logo.formato,
+    margen,
+    y,
+    18,
+    18,
+    undefined,
+    "FAST"
+  );
+}
+
+// Nombre Love's Stories en rosa
 doc.setFont("times", "bolditalic");
 doc.setFontSize(23);
 doc.setTextColor(214, 139, 154);
-doc.text("Love's Stories", margen, y);
+doc.text("Love's Stories", margen + 23, y + 10);
 
 doc.setTextColor(20, 20, 20);
-y += 8;
+y += 20;
   doc.setFontSize(13);
   doc.setTextColor(90, 80, 90);
   doc.text(datos.titulo, margen, y);
@@ -140,10 +155,12 @@ y += 8;
   doc.setFontSize(11);
   doc.text(`Cliente: ${datos.cliente}`, margen, y); y += 6;
 
-  if (datos.telefono && /^\d+$/.test(datos.telefono.replace(/\s/g, ""))) {
+const telefonoLimpio = (datos.telefono ?? "").replace(/\D/g, "");
+
+if (telefonoLimpio.length >= 7) {
   doc.text(`Teléfono: ${datos.telefono}`, margen, y);
   y += 6;
-  }
+}
 
   doc.text(`Fecha: ${datos.fecha}`, margen, y); y += 8;
   doc.setDrawColor(200, 195, 180);
@@ -188,14 +205,7 @@ y += 8;
       imagenCargada = await cargarImagenComoDataUrl(g.imagen);
     }
 
-    const tieneImagen = !!imagenCargada;
-    const altoFila = tieneImagen ? 17 : 8;
-
-    if (y + altoFila > 297 - margen) {
-      doc.addPage();
-      y = margen;
-      encabezadoTabla();
-    }
+const tieneImagen = !!imagenCargada;
 
     const yInicio = y;
 
@@ -253,25 +263,35 @@ y += 8;
       yInicio + 4.8
     );
 
-    const detalle = g.detalle.length === 1
-      ? `${g.detalle[0].fecha}${g.detalle[0].vendedorNombre ? ` · ${g.detalle[0].vendedorNombre}` : " · Sin vendedor"}`
-      : g.detalle
-          .map(
-            (d) =>
-              `${d.fecha}: ${d.cantidad} un.${d.vendedorNombre ? ` · ${d.vendedorNombre}` : " · Sin vendedor"}`
-          )
-          .join(" / ");
+   const detalle = g.detalle.length === 1
+  ? `${g.detalle[0].fecha}${g.detalle[0].vendedorNombre ? ` · ${g.detalle[0].vendedorNombre}` : " · Sin vendedor"}`
+  : g.detalle
+      .map(
+        (d) =>
+          `${d.fecha}: ${d.cantidad} un.${d.vendedorNombre ? ` · ${d.vendedorNombre}` : " · Sin vendedor"}`
+      )
+      .join(" / ");
 
-    doc.setFontSize(6.2);
-    doc.setTextColor(100, 90, 100);
+doc.setFontSize(6.2);
+doc.setTextColor(100, 90, 100);
 
-    const lineasDetalle = doc.splitTextToSize(detalle, 31);
-    doc.text(
-      lineasDetalle.slice(0, tieneImagen ? 3 : 1),
-      xDetalle,
-      yInicio + 4.8
-    );
+const lineasDetalle = doc.splitTextToSize(detalle, 31);
 
+// La fila crece automáticamente para mostrar TODAS las fechas
+const altoPorDetalle = lineasDetalle.length * 3.2 + 3;
+const altoFila = Math.max(tieneImagen ? 17 : 8, altoPorDetalle);
+
+if (y + altoFila > 297 - margen) {
+  doc.addPage();
+  y = margen;
+  encabezadoTabla();
+}
+
+doc.text(
+  lineasDetalle,
+  xDetalle,
+  yInicio + 4.8
+);
     doc.setTextColor(20, 20, 20);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
