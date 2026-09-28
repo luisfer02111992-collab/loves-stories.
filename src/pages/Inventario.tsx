@@ -545,17 +545,42 @@ export default function Inventario() {
       </div>
 
       <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-        <div className="grid grid-cols-4 px-3.5 py-2 text-xs" style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
-          <span>Código</span><span>Descripción</span><span>Disponible</span><span>Precio</span>
-        </div>
-        {lista.map((p, i) => (
-          <div key={p.id} className="grid grid-cols-4 px-3.5 py-2.5 text-sm items-center" style={{ borderBottom: i < lista.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-            <span style={{ color: "#5B4E5E" }}>{p.code}</span>
-            <span>{p.name}</span>
-            <span style={{ color: p.stock_available < 6 ? "#7A2540" : "#2B1E2E" }}>{p.stock_available}</span>
-            <span className="font-serif">Bs {p.price}</span>
-          </div>
-        ))}
+       <div className="grid grid-cols-5 px-3.5 py-2 text-xs" style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
+  <span>Imagen</span>
+  <span>Código</span>
+  <span>Descripción</span>
+  <span>Disponible</span>
+  <span>Precio</span>
+</div>
+
+{lista.map((p, i) => (
+  <div
+    key={p.id}
+    className="grid grid-cols-5 px-3.5 py-2.5 text-sm items-center"
+    style={{ borderBottom: i < lista.length - 1 ? "1px solid #D9D0C2" : "none" }}
+  >
+    <span>
+      {p.image_url ? (
+        <img
+          src={p.image_url}
+          alt={p.name}
+          className="w-12 h-12 rounded object-cover"
+        />
+      ) : (
+        <span className="text-xs" style={{ color: "#9C8F82" }}>
+          Sin foto
+        </span>
+      )}
+    </span>
+
+    <span style={{ color: "#5B4E5E" }}>{p.code}</span>
+    <span>{p.name}</span>
+    <span style={{ color: p.stock_available < 6 ? "#7A2540" : "#2B1E2E" }}>
+      {p.stock_available}
+    </span>
+    <span className="font-serif">Bs {p.price}</span>
+  </div>
+))}
         {lista.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Ningún producto coincide con la búsqueda.</p>}
       </div>
       {q && lista.length === 0 && ((pestanaStock === "disponibles" ? agotados : disponibles).length > 0) && (
