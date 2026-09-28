@@ -159,13 +159,14 @@ async function guardarDescripcion(id: string, descripcion: string) {
     .update({ display_description: descripcion.trim() || null })
     .eq("id", id);
 
-  if (error) {
-    console.error("Error guardando descripción:", error);
-    alert("No se pudo guardar la descripción.");
-    return;
-  }
+ if (error) {
+  console.error("Error guardando descripción:", error);
+  alert("ERROR: " + error.message);
+  return;
+}
 
-  await cargar();
+alert("Descripción guardada correctamente");
+await cargar();
 }
 
   function actualizarVarianteLocal(id: string, clave: string, cantidad: number, maximo: number) {
