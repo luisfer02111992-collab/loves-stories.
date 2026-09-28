@@ -98,10 +98,10 @@ useEffect(() => {
     if (fila && listaCarritoRef.current) {
       const contenedor = listaCarritoRef.current;
 
-      contenedor.scrollTo({
-        top: fila.offsetTop - contenedor.offsetTop,
-        behavior: "smooth",
-      });
+      fila.scrollIntoView({
+  behavior: "smooth",
+  block: "nearest",
+});
     }
   });
 }, [filaSeleccionada, carrito]);
