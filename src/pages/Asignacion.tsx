@@ -337,7 +337,22 @@ function irAProductos() {
               </button>
               <button type="button" onClick={cancelarBusqueda} className="px-4 rounded text-sm" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
             </div>
-            {productoEncontrado.stock_available < 1 && <p className="text-xs mt-2" style={{ color: "#7A2540" }}>Sin stock disponible.</p>}
+            {productoEncontrado.stock_available < 1 && (
+  <div className="mt-3 p-3 rounded" style={{ background: "#F4E3E6" }}>
+    <p className="text-xs mb-2" style={{ color: "#7A2540" }}>
+      Sin stock disponible.
+    </p>
+
+    <button
+      type="button"
+      onClick={irAProductos}
+      className="px-3 py-2 rounded text-xs font-medium"
+      style={{ background: "#9C7A3C", color: "#F7F3EC" }}
+    >
+      Editar stock en Productos
+    </button>
+  </div>
+)}
           </form>
         )}
 
