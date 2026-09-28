@@ -23,6 +23,7 @@ export default function CatalogoPublico() {
   const [enviado, setEnviado] = useState<string | null>(null);
   const [busqueda, setBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
+  const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
   const sessionId = useMemo(() => idDeSesion(), []);
 
   useEffect(() => {
@@ -148,7 +149,16 @@ export default function CatalogoPublico() {
             return (
               <div key={p.id} className="p-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
                 <div className="flex items-center justify-center h-32 rounded mb-2 overflow-hidden" style={{ background: "#EDE7DE" }}>
-                  {p.image_url ? <img src={p.image_url} alt={p.name} className="w-full h-full object-cover" /> : <span className="text-3xl">🖼️</span>}
+                  {p.image_url ? (
+  <img
+    src={p.image_url}
+    alt={p.name}
+    onClick={() => setImagenAmpliada(p.image_url)}
+    className="w-full h-full object-cover cursor-zoom-in"
+  />
+) : (
+  <span className="text-3xl">🖼️</span>
+)}
                 </div>
                 <p className="text-sm">{p.name}</p>
                 <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>{p.code} · Bs {p.price} · {p.stock_available} disp.</p>
@@ -218,6 +228,29 @@ export default function CatalogoPublico() {
           </button>
         </form>
       </div>
+      {imagenAmpliada && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    style={{ background: "rgba(0,0,0,0.85)" }}
+    onClick={() => setImagenAmpliada(null)}
+  >
+    <button
+      type="button"
+      onClick={() => setImagenAmpliada(null)}
+      className="absolute top-4 right-4 w-10 h-10 rounded-full text-2xl flex items-center justify-center"
+      style={{ background: "#F7F3EC", color: "#5B4E5E" }}
+    >
+      ×
+    </button>
+
+    <img
+      src={imagenAmpliada}
+      alt="Imagen ampliada"
+      className="max-w-full max-h-[90vh] object-contain rounded-lg"
+      onClick={(e) => e.stopPropagation()}
+    />
+  </div>
+)}
     </div>
   );
 }
