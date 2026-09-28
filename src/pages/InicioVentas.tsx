@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Minus, Trash2, Search, ScanBarcode, UserPlus, ShoppingCart, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
 import type { Customer, Product, Category } from "../lib/types";
@@ -15,11 +16,14 @@ interface LineaCarrito {
 // cliente existente, creando uno nuevo, o como venta directa sin cliente) se
 // realiza la asignación real contra Supabase, de una sola vez.
 export default function InicioVentas() {
+  const navigate = useNavigate();
   const { vendedorActivoId, vendedorActivoNombre, sesionActivaId } = useSellerSession();
   const [codigo, setCodigo] = useState("");
   const [buscando, setBuscando] = useState(false);
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
+  const [productoSinStock, setProductoSinStock] = useState<Product | null>(null);
+  const [productoSinStock, setProductoSinStock] = useState<Product | null>(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -53,10 +57,9 @@ export default function InicioVentas() {
     }
     const p = producto as Product;
     if (p.stock_available < 1) {
-      alert("Ese producto no tiene stock disponible.");
-      setCodigo("");
-      return;
-    }
+  setProductoSinStock(p);
+  return;
+}
     setCarrito((prev) => {
       const existente = prev.find((l) => l.product.id === p.id);
       if (existente) {
@@ -245,6 +248,34 @@ export default function InicioVentas() {
               <p className="text-xs" style={{ color: "#7A2540" }}>No se encontró ningún producto con ese código.</p>
             </div>
           )}
+          {productoSinStock && (
+  <div className="mt-3 p-3 rounded" style={{ background: "#F4E3E6" }}>
+    <p className="text-xs mb-2" style={{ color: "#7A2540" }}>
+      Este producto está agotado.
+    </p>
+
+    <button
+      type="button"
+      onClick={() => {
+        sessionStorage.setItem(
+          "inicioVentasPendiente",
+          JSON.stringify({
+            carrito,
+            codigo: productoSinStock.code,
+          })
+        );
+
+        navigate(
+          `/productos?desde=asignar&codigo=${encodeURIComponent(productoSinStock.code)}`
+        );
+      }}
+      className="px-3 py-2 rounded text-xs font-medium"
+      style={{ background: "#9C7A3C", color: "#F7F3EC" }}
+    >
+      Editar stock en Productos
+    </button>
+  </div>
+)}
         </form>
 
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
