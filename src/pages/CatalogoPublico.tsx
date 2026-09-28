@@ -152,6 +152,11 @@ export default function CatalogoPublico() {
                 </div>
                 <p className="text-sm">{p.name}</p>
                 <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>{p.code} · Bs {p.price} · {p.stock_available} disp.</p>
+                {p.display_description && (
+  <p className="text-xs mb-2" style={{ color: "#9C7A3C" }}>
+    {p.display_description}
+  </p>
+)}
                 {p.variant_type ? (
                   <div>
                     <p className="text-xs mb-1" style={{color:"#5B4E5E"}}>{p.variant_type==="ring_size"?"Elige talla":"Elige largo"}</p>
