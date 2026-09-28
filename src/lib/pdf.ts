@@ -137,7 +137,12 @@ export async function generarPdfGrande(datos: DatosPdfGrande): Promise<Blob> {
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.text(`Cliente: ${datos.cliente}`, margen, y); y += 6;
-  doc.text(`Teléfono: ${datos.telefono}`, margen, y); y += 6;
+
+  if (datos.telefono && /^\d+$/.test(datos.telefono.replace(/\s/g, ""))) {
+  doc.text(`Teléfono: ${datos.telefono}`, margen, y);
+  y += 6;
+  }
+
   doc.text(`Fecha: ${datos.fecha}`, margen, y); y += 8;
   doc.setDrawColor(200, 195, 180);
   doc.line(margen, y, margen + anchoUtil, y);
@@ -289,7 +294,9 @@ export async function generarPdfGrande(datos: DatosPdfGrande): Promise<Blob> {
   doc.setFontSize(11);
   doc.text("Subtotal sin descuento", margen, y); doc.text(`Bs ${datos.subtotalSinDescuento.toFixed(2)}`, margen + anchoUtil, y, { align: "right" }); y += 6;
   doc.setTextColor(79, 111, 82);
-  doc.text("Descuento por cantidad", margen, y); doc.text(`− Bs ${datos.descuentoTotal.toFixed(2)}`, margen + anchoUtil, y, { align: "right" }); y += 6;
+  doc.text("Descuento por cantidad", margen, y);
+doc.text(`Bs ${datos.descuentoTotal.toFixed(2)}`, margen + anchoUtil, y, { align: "right" });
+y += 6;
   doc.setTextColor(20, 20, 20);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(13);
