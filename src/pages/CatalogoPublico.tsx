@@ -134,7 +134,29 @@ const itemsFiltrados = useMemo(() => {
   const seleccion = items.filter((p) => (cant[p.id] ?? 0) > 0);
   const totalUnidades = seleccion.reduce((a, p) => a + cant[p.id], 0);
   const totalBs = seleccion.reduce((a, p) => a + cant[p.id] * p.price, 0);
+useEffect(() => {
+  if (seleccion.length === 0 || imagenAmpliada) return;
 
+  window.history.pushState({ protegerCatalogo: true }, "");
+
+  const manejarAtrasCatalogo = () => {
+    const salir = window.confirm(
+      "¿Estás seguro de que deseas salir del catálogo? Se perderán los productos que hayas seleccionado."
+    );
+
+    if (salir) {
+      window.history.back();
+    } else {
+      window.history.pushState({ protegerCatalogo: true }, "");
+    }
+  };
+
+  window.addEventListener("popstate", manejarAtrasCatalogo);
+
+  return () => {
+    window.removeEventListener("popstate", manejarAtrasCatalogo);
+  };
+}, [seleccion.length, imagenAmpliada]);
   async function enviarPedido(e: React.FormEvent) {
     e.preventDefault();
     if (!nombre.trim() || !telefono.trim() || seleccion.length === 0 || guardando) return;
