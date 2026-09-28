@@ -24,6 +24,7 @@ export default function CatalogoPublico() {
   const [busqueda, setBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
+  const [categoria, setCategoria] = useState("Todos");
   const sessionId = useMemo(() => idDeSesion(), []);
 
   useEffect(() => {
@@ -63,11 +64,43 @@ export default function CatalogoPublico() {
     else alert("Ya no hay suficiente disponible de este producto.");
   }
 
-  const itemsFiltrados = useMemo(() => {
-    const q = busqueda.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q));
-  }, [items, busqueda]);
+ function obtenerCategoria(nombre: string) {
+  const n = (nombre || "").toLowerCase();
+
+  if (n.includes("arete") || n.includes("aro")) return "Aretes";
+  if (n.includes("anillo")) return "Anillos";
+  if (n.includes("cadena") || n.includes("collar")) return "Collares y cadenas";
+  if (n.includes("pulsera") || n.includes("brazalete")) return "Pulseras";
+  if (n.includes("juego") || n.includes("set")) return "Juegos";
+  if (n.includes("dije") || n.includes("colgante")) return "Dijes";
+
+  return "Otros";
+}
+
+const categorias = useMemo(() => {
+  const encontradas = Array.from(
+    new Set(items.map((p) => obtenerCategoria(p.name)))
+  );
+
+  return ["Todos", ...encontradas];
+}, [items]);
+
+const itemsFiltrados = useMemo(() => {
+  const q = busqueda.trim().toLowerCase();
+
+  return items.filter((p) => {
+    const coincideBusqueda =
+      !q ||
+      p.code.toLowerCase().includes(q) ||
+      p.name.toLowerCase().includes(q);
+
+    const coincideCategoria =
+      categoria === "Todos" ||
+      obtenerCategoria(p.name) === categoria;
+
+    return coincideBusqueda && coincideCategoria;
+  });
+}, [items, busqueda, categoria]);
 
   async function agregarDesdeBusqueda() {
     const q = busqueda.trim().toLowerCase();
@@ -143,6 +176,23 @@ export default function CatalogoPublico() {
             <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); agregarDesdeBusqueda(); } }} placeholder="Buscar por código o descripción — Enter agrega" className="flex-1 px-3 py-2 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
             <button type="button" onClick={agregarDesdeBusqueda} className="px-3 rounded text-sm" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Agregar</button>
           </div>
+          <div className="flex gap-2 mb-4 overflow-x-auto pb-1">
+  {categorias.map((cat) => (
+    <button
+      key={cat}
+      type="button"
+      onClick={() => setCategoria(cat)}
+      className="px-3 py-2 rounded-full text-xs whitespace-nowrap"
+      style={{
+        background: categoria === cat ? "#9C7A3C" : "#F7F3EC",
+        color: categoria === cat ? "#F7F3EC" : "#5B4E5E",
+        border: "1px solid #D9D0C2",
+      }}
+    >
+      {cat}
+    </button>
+  ))}
+</div>
           <div className="grid sm:grid-cols-2 gap-3">
           {itemsFiltrados.map((p) => {
             const c = cant[p.id] ?? 0;
