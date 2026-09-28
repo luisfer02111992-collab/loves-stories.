@@ -43,7 +43,23 @@ export default function InicioVentas() {
     supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
     supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
   }, []);
+useEffect(() => {
+  const guardado = sessionStorage.getItem("inicioVentasPendiente");
+  if (!guardado) return;
 
+  try {
+    const datos = JSON.parse(guardado);
+
+    if (Array.isArray(datos.carrito)) {
+      setCarrito(datos.carrito);
+    }
+  } catch (error) {
+    console.error("No se pudo recuperar la preasignación:", error);
+  }
+
+  sessionStorage.removeItem("inicioVentasPendiente");
+}, []);
+  
   async function buscarYAgregar(e: React.FormEvent) {
     e.preventDefault();
     if (!codigo.trim() || buscando) return;
