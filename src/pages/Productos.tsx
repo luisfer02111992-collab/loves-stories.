@@ -129,7 +129,31 @@ export default function Productos() {
         updated_at: new Date().toISOString(),
       })
       .eq("id", seleccionado.id);
+    // Si la imagen cambió, preparar nuevamente su índice para búsqueda por similitud
+    if (form.image_url && form.image_url !== seleccionado.image_url) {
+      const { error: resetEmbeddingError } = await supabase.rpc(
+        "save_product_image_embedding",
+        {
+          product_id: seleccionado.id,
+          embedding_value: null,
+        }
+      );
 
+      if (resetEmbeddingError) {
+        console.error("Error reiniciando índice de imagen:", resetEmbeddingError);
+      }
+
+      const { error: indexError } = await supabase.functions.invoke(
+        "search-product-by-image",
+        {
+          body: { action: "index-products" },
+        }
+      );
+
+      if (indexError) {
+        console.error("Error indexando nueva imagen:", indexError);
+      }
+    }
     if (cambioPrecio) {
       await supabase.from("price_history").update({ valid_to: new Date().toISOString() }).eq("product_id", seleccionado.id).is("valid_to", null);
       await supabase.from("price_history").insert({ product_id: seleccionado.id, price: form.price });
