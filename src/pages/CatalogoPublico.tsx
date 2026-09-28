@@ -28,6 +28,21 @@ export default function CatalogoPublico() {
   const sessionId = useMemo(() => idDeSesion(), []);
 
   useEffect(() => {
+  if (!imagenAmpliada) return;
+
+  window.history.pushState({ imagenCatalogo: true }, "");
+
+  const manejarAtrasImagen = () => {
+    setImagenAmpliada(null);
+  };
+
+  window.addEventListener("popstate", manejarAtrasImagen);
+
+  return () => {
+    window.removeEventListener("popstate", manejarAtrasImagen);
+  };
+}, [imagenAmpliada]);
+  useEffect(() => {
     supabase.rpc("catalog_release_expired").then(() => cargar());
     supabase.from("app_settings").select("business_name, whatsapp_number").eq("id", 1).single().then(({ data }) => {
       if (data?.business_name) setNombreNegocio(data.business_name);
