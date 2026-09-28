@@ -123,37 +123,57 @@ const itemsFiltrados = useMemo(() => {
   imagenAmpliadaRef.current = imagenAmpliada;
 seleccionRef.current = seleccion.length;
   useEffect(() => {
+  // Creamos una única barrera delante del catálogo.
   window.history.pushState({ catalogoProtegido: true }, "");
 
+  let restaurandoHistorial = false;
+
   const manejarAtras = () => {
-    // Si hay una imagen abierta, Atrás solo cierra la imagen
-    if (imagenAmpliadaRef.current) {
-      imagenAmpliadaRef.current = null;
-      setImagenAmpliada(null);
+    // Este popstate fue provocado por history.forward(),
+    // no por el botón Atrás del usuario.
+    if (restaurandoHistorial) {
+      restaurandoHistorial = false;
       return;
     }
 
-    // Si hay algo seleccionado, siempre preguntar
+    // 1. Si hay una foto abierta:
+    // Atrás solamente cierra la foto.
+    if (imagenAmpliadaRef.current) {
+      imagenAmpliadaRef.current = null;
+      setImagenAmpliada(null);
+
+      // Al pulsar Atrás ya quedamos una posición detrás.
+      // Regresamos a la barrera sin mostrar ningún aviso.
+      restaurandoHistorial = true;
+      window.history.forward();
+      return;
+    }
+
+    // 2. Si existe cualquier producto seleccionado:
+    // SIEMPRE debe preguntar.
     if (seleccionRef.current > 0) {
       const salir = window.confirm(
         "¿Estás seguro de que deseas salir del catálogo? Se perderá todo lo seleccionado."
       );
 
+      // CANCELAR:
+      // jamás permitimos abandonar el catálogo.
       if (!salir) {
-        // CANCELAR: seguimos dentro y dejamos nuevamente protegido el catálogo
-        window.history.pushState({ catalogoProtegido: true }, "");
+        restaurandoHistorial = true;
+        window.history.forward();
         return;
       }
 
-      // ACEPTAR: salir automáticamente
+      // ACEPTAR:
+      // esta es la ÚNICA forma de abandonar el catálogo.
       window.removeEventListener("popstate", manejarAtras);
-      window.history.go(-1);
+      window.history.back();
       return;
     }
 
-    // Sin selección: salir normalmente
+    // 3. Si no existe selección, puede salir normalmente.
     window.removeEventListener("popstate", manejarAtras);
-    window.history.go(-1);
+    window.history.back();
   };
 
   window.addEventListener("popstate", manejarAtras);
@@ -248,7 +268,6 @@ seleccionRef.current = seleccion.length;
     onClick={() => {
   setImagenAmpliada(p.image_url);
   imagenAmpliadaRef.current = p.image_url;
-  window.history.pushState({ imagenCatalogo: true }, "");
 }}
     className="w-full h-full object-cover cursor-zoom-in"
   />
