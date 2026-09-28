@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Minus, Search, ScanBarcode, Camera, Trash2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "../lib/pricing";
@@ -7,6 +8,7 @@ import type { Customer, Product } from "../lib/types";
 import { generarPdfGrande } from "../lib/pdf";
 
 export default function Asignacion() {
+    const navigate = useNavigate();
   const { vendedorActivoId, vendedorActivoNombre, sesionActivaId } = useSellerSession();
   const [clientes, setClientes] = useState<Customer[]>([]);
   const [clienteId, setClienteId] = useState<string>("");
