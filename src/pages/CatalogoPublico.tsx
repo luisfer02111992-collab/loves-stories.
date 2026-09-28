@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircle, ShoppingBag } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { CatalogProduct } from "../lib/types";
@@ -26,7 +26,8 @@ export default function CatalogoPublico() {
   const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
   const [categoria, setCategoria] = useState("Todos");
   const sessionId = useMemo(() => idDeSesion(), []);
-  
+  const imagenAmpliadaRef = useRef<string | null>(null);
+const seleccionRef = useRef(0);
   useEffect(() => {
     supabase.rpc("catalog_release_expired").then(() => cargar());
     supabase.from("app_settings").select("business_name, whatsapp_number").eq("id", 1).single().then(({ data }) => {
@@ -119,36 +120,39 @@ const itemsFiltrados = useMemo(() => {
   const seleccion = items.filter((p) => (cant[p.id] ?? 0) > 0);
   const totalUnidades = seleccion.reduce((a, p) => a + cant[p.id], 0);
   const totalBs = seleccion.reduce((a, p) => a + cant[p.id] * p.price, 0);
-  useEffect(() => {
+  imagenAmpliadaRef.current = imagenAmpliada;
+seleccionRef.current = seleccion.length;
+
+useEffect(() => {
+  // Una sola barrera de historial durante toda la estancia en el catálogo
   window.history.pushState({ catalogoProtegido: true }, "");
 
   const manejarAtras = () => {
-    // Si la imagen está ampliada, Atrás solo cierra la imagen
-    if (imagenAmpliada) {
+    // Si hay una foto abierta, Atrás solamente la cierra
+    if (imagenAmpliadaRef.current) {
       setImagenAmpliada(null);
       window.history.pushState({ catalogoProtegido: true }, "");
       return;
     }
 
-    // Si hay productos seleccionados, siempre pedir confirmación
-    if (seleccion.length > 0) {
+    // Si hay productos seleccionados, siempre exige confirmación
+    if (seleccionRef.current > 0) {
       const salir = window.confirm(
         "¿Estás seguro de que deseas salir del catálogo? Se perderán los productos que hayas seleccionado."
       );
 
       if (!salir) {
-        // Canceló: permanece protegido dentro del catálogo
         window.history.pushState({ catalogoProtegido: true }, "");
         return;
       }
 
-      // Aceptó: ahora sí puede salir
+      // Solo Aceptar permite abandonar el catálogo
       window.removeEventListener("popstate", manejarAtras);
       window.history.back();
       return;
     }
 
-    // Sin productos seleccionados puede salir normalmente
+    // Sin selección puede salir normalmente
     window.removeEventListener("popstate", manejarAtras);
     window.history.back();
   };
@@ -158,7 +162,7 @@ const itemsFiltrados = useMemo(() => {
   return () => {
     window.removeEventListener("popstate", manejarAtras);
   };
-}, [imagenAmpliada, seleccion.length]);
+}, []);
   async function enviarPedido(e: React.FormEvent) {
     e.preventDefault();
     if (!nombre.trim() || !telefono.trim() || seleccion.length === 0 || guardando) return;
