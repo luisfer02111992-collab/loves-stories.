@@ -85,12 +85,15 @@ export function generarPdfDevolucion(datos: DatosPdfDevolucion): Blob {
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
+
   doc.text("MONTO DEVUELTO", x1, y);
+
   doc.text(`Bs ${datos.monto.toFixed(2)}`, x1 + ancho, y, {
     align: "right",
   });
 
   const nombreArchivo = `devolucion_venta_${datos.numeroVenta}.pdf`;
+
   doc.save(nombreArchivo);
 
   return doc.output("blob");
@@ -116,7 +119,10 @@ async function cargarImagenComoDataUrl(
   url: string
 ): Promise<{ dataUrl: string; formato: "PNG" | "JPEG" } | null> {
   try {
-    const resp = await fetch(url, { mode: "cors" });
+    const resp = await fetch(url, {
+      mode: "cors",
+      cache: "no-store",
+    });
 
     if (!resp.ok) return null;
 
@@ -131,7 +137,8 @@ async function cargarImagenComoDataUrl(
       reader.readAsDataURL(blob);
     });
 
-    const formato = dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG";
+    const formato =
+      dataUrl.startsWith("data:image/png") ? "PNG" : "JPEG";
 
     return {
       dataUrl,
@@ -163,13 +170,13 @@ export async function generarPdfGrande(
   }
 
   // ==========================================================
-  // LOGO
+  // LOGO LOVE'S STORIES
   // ==========================================================
 
   try {
-    const logo = await cargarImagenComoDataUrl(
-      "/logo-loves-stories.png"
-    );
+    const logoUrl = `${window.location.origin}/logo-loves-stories.png`;
+
+    const logo = await cargarImagenComoDataUrl(logoUrl);
 
     if (logo) {
       try {
@@ -221,8 +228,6 @@ export async function generarPdfGrande(
 
   y += 6;
 
-  // Solo mostrar un teléfono real.
-  // Así ELEVENTA-7 no aparece.
   const telefonoLimpio = (datos.telefono ?? "").replace(/\D/g, "");
 
   if (telefonoLimpio.length >= 7) {
@@ -235,6 +240,7 @@ export async function generarPdfGrande(
   y += 8;
 
   doc.setDrawColor(200, 195, 180);
+
   doc.line(margen, y, margen + anchoUtil, y);
 
   y += 8;
@@ -261,15 +267,45 @@ export async function generarPdfGrande(
     doc.setTextColor(70, 60, 70);
 
     doc.text("FOTO", xFoto + 1, y + 4.5);
-    doc.text("CÓDIGO / PRODUCTO", xProducto, y + 4.5);
-    doc.text("CANT.", xCant, y + 4.5);
-    doc.text("PRECIO", xPrecio, y + 4.5);
-    doc.text("DESC.", xDesc, y + 4.5);
-    doc.text("FECHA / VENDEDOR", xDetalle, y + 4.5);
 
-    doc.text("SUBTOTAL", xSubtotal, y + 4.5, {
-      align: "right",
-    });
+    doc.text(
+      "CÓDIGO / PRODUCTO",
+      xProducto,
+      y + 4.5
+    );
+
+    doc.text(
+      "CANT.",
+      xCant,
+      y + 4.5
+    );
+
+    doc.text(
+      "PRECIO",
+      xPrecio,
+      y + 4.5
+    );
+
+    doc.text(
+      "DESC.",
+      xDesc,
+      y + 4.5
+    );
+
+    doc.text(
+      "FECHA / VENDEDOR",
+      xDetalle,
+      y + 4.5
+    );
+
+    doc.text(
+      "SUBTOTAL",
+      xSubtotal,
+      y + 4.5,
+      {
+        align: "right",
+      }
+    );
 
     doc.setTextColor(20, 20, 20);
 
@@ -289,7 +325,8 @@ export async function generarPdfGrande(
 
     if (g.imagen) {
       try {
-        imagenCargada = await cargarImagenComoDataUrl(g.imagen);
+        imagenCargada =
+          await cargarImagenComoDataUrl(g.imagen);
       } catch {
         imagenCargada = null;
       }
@@ -297,9 +334,9 @@ export async function generarPdfGrande(
 
     const tieneImagen = !!imagenCargada;
 
-    // ----------------------------------------------------------
-    // FECHAS Y VENDEDORES
-    // ----------------------------------------------------------
+    // ========================================================
+    // TODAS LAS FECHAS Y VENDEDORES
+    // ========================================================
 
     const detalle =
       g.detalle.length === 1
@@ -321,9 +358,9 @@ export async function generarPdfGrande(
 
     doc.setFontSize(6.2);
 
-    const lineasDetalle = doc.splitTextToSize(detalle, 31);
+    const lineasDetalle =
+      doc.splitTextToSize(detalle, 31);
 
-    // La altura se adapta para NO eliminar fechas.
     const altoPorDetalle = Math.max(
       8,
       lineasDetalle.length * 3.2 + 3
@@ -334,9 +371,9 @@ export async function generarPdfGrande(
       altoPorDetalle
     );
 
-    // ----------------------------------------------------------
-    // CAMBIO DE PÁGINA ANTES DE DIBUJAR
-    // ----------------------------------------------------------
+    // ========================================================
+    // CAMBIO DE PÁGINA
+    // ========================================================
 
     if (y + altoFila > 297 - margen) {
       doc.addPage();
@@ -348,9 +385,9 @@ export async function generarPdfGrande(
 
     const yInicio = y;
 
-    // ----------------------------------------------------------
+    // ========================================================
     // FOTO
-    // ----------------------------------------------------------
+    // ========================================================
 
     if (imagenCargada) {
       try {
@@ -365,19 +402,23 @@ export async function generarPdfGrande(
           "FAST"
         );
       } catch {
-        // Si una foto falla, no se detiene el PDF.
+        // Si una foto falla, el PDF continúa.
       }
     } else {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
       doc.setTextColor(150, 145, 145);
 
-      doc.text("—", xFoto + 6, yInicio + 4.8);
+      doc.text(
+        "—",
+        xFoto + 6,
+        yInicio + 4.8
+      );
     }
 
-    // ----------------------------------------------------------
+    // ========================================================
     // PRODUCTO
-    // ----------------------------------------------------------
+    // ========================================================
 
     doc.setTextColor(20, 20, 20);
     doc.setFont("helvetica", "bold");
@@ -392,9 +433,9 @@ export async function generarPdfGrande(
       }
     );
 
-    // ----------------------------------------------------------
+    // ========================================================
     // CANTIDAD
-    // ----------------------------------------------------------
+    // ========================================================
 
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
@@ -408,9 +449,9 @@ export async function generarPdfGrande(
       }
     );
 
-    // ----------------------------------------------------------
+    // ========================================================
     // PRECIO
-    // ----------------------------------------------------------
+    // ========================================================
 
     doc.text(
       `Bs ${g.precioUnitarioFinal.toFixed(2)}`,
@@ -418,9 +459,9 @@ export async function generarPdfGrande(
       yInicio + 4.8
     );
 
-    // ----------------------------------------------------------
+    // ========================================================
     // DESCUENTO
-    // ----------------------------------------------------------
+    // ========================================================
 
     doc.text(
       `Bs ${g.descuento.toFixed(2)}`,
@@ -428,9 +469,9 @@ export async function generarPdfGrande(
       yInicio + 4.8
     );
 
-    // ----------------------------------------------------------
-    // TODAS LAS FECHAS / VENDEDORES
-    // ----------------------------------------------------------
+    // ========================================================
+    // FECHAS / VENDEDORES
+    // ========================================================
 
     doc.setFontSize(6.2);
     doc.setTextColor(100, 90, 100);
@@ -441,9 +482,9 @@ export async function generarPdfGrande(
       yInicio + 4.8
     );
 
-    // ----------------------------------------------------------
+    // ========================================================
     // SUBTOTAL
-    // ----------------------------------------------------------
+    // ========================================================
 
     doc.setTextColor(20, 20, 20);
     doc.setFont("helvetica", "bold");
@@ -458,9 +499,9 @@ export async function generarPdfGrande(
       }
     );
 
-    // ----------------------------------------------------------
-    // TERMINAR FILA
-    // ----------------------------------------------------------
+    // ========================================================
+    // FINAL DE FILA
+    // ========================================================
 
     y += altoFila;
 
@@ -544,7 +585,7 @@ export async function generarPdfGrande(
   y += 8;
 
   // ==========================================================
-  // PAGOS / SALDOS
+  // PAGOS
   // ==========================================================
 
   if (datos.mostrarPagos) {
@@ -632,19 +673,21 @@ export async function generarPdfGrande(
       .replace(/\s+/g, "_")}_` +
     `${datos.cliente.replace(/\s+/g, "_")}.pdf`;
 
-  // Crear primero el blob.
   const pdfBlob = doc.output("blob");
 
-  // Intentar descargar.
   try {
     doc.save(nombreArchivo);
   } catch {
-    // Aunque el navegador bloquee la descarga,
-    // devolvemos el Blob para WhatsApp.
+    // Si el navegador bloquea la descarga,
+    // se sigue devolviendo el Blob.
   }
 
   return pdfBlob;
 }
+
+// ============================================================
+// PDF DE SESIÓN / VENDEDOR
+// ============================================================
 
 interface LineaSesionPdf {
   codigo: string;
@@ -785,6 +828,7 @@ export function generarPdfSesion(
   for (const l of datos.lineas) {
     if (y > 270) {
       doc.addPage();
+
       y = margen;
     }
 
@@ -938,6 +982,10 @@ export function generarPdfSesion(
   return doc.output("blob");
 }
 
+// ============================================================
+// PDF PEDIDO / RECIBO 80 MM
+// ============================================================
+
 export function generarPdfPedido(
   datos: DatosPdfPedido
 ): Blob {
@@ -992,7 +1040,8 @@ export function generarPdfPedido(
 
   y += 4;
 
-  const telefonoLimpio = (datos.telefono ?? "").replace(/\D/g, "");
+  const telefonoLimpio =
+    (datos.telefono ?? "").replace(/\D/g, "");
 
   if (telefonoLimpio.length >= 7) {
     doc.text(
