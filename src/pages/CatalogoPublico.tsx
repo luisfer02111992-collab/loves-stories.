@@ -124,35 +124,45 @@ const itemsFiltrados = useMemo(() => {
 seleccionRef.current = seleccion.length;
 
 useEffect(() => {
-  // Una sola barrera de historial durante toda la estancia en el catálogo
+  // Dejamos siempre una entrada protegida delante del catálogo
   window.history.pushState({ catalogoProtegido: true }, "");
 
   const manejarAtras = () => {
-    // Si hay una foto abierta, Atrás solamente la cierra
+    // FOTO ABIERTA:
+    // el primer Atrás solamente cierra la foto.
     if (imagenAmpliadaRef.current) {
       setImagenAmpliada(null);
+
+      // Restauramos inmediatamente la protección.
       window.history.pushState({ catalogoProtegido: true }, "");
       return;
     }
 
-    // Si hay productos seleccionados, siempre exige confirmación
+    // HAY PRODUCTOS SELECCIONADOS:
+    // jamás salir sin presionar Aceptar.
     if (seleccionRef.current > 0) {
       const salir = window.confirm(
         "¿Estás seguro de que deseas salir del catálogo? Se perderán los productos que hayas seleccionado."
       );
 
-      if (!salir) {
+      if (salir) {
+        // Aceptó expresamente: quitamos el controlador y salimos.
+        window.removeEventListener("popstate", manejarAtras);
+
+        // Retrocedemos la entrada protegida y la página del catálogo.
+        window.history.go(-2);
+      } else {
+        // Canceló: volvemos a colocar la protección.
+        // Puede presionar Atrás todas las veces que quiera
+        // y siempre volverá a aparecer este aviso.
         window.history.pushState({ catalogoProtegido: true }, "");
-        return;
       }
 
-      // Solo Aceptar permite abandonar el catálogo
-      window.removeEventListener("popstate", manejarAtras);
-      window.history.back();
       return;
     }
 
-    // Sin selección puede salir normalmente
+    // NO HAY NADA SELECCIONADO:
+    // puede abandonar el catálogo normalmente.
     window.removeEventListener("popstate", manejarAtras);
     window.history.back();
   };
