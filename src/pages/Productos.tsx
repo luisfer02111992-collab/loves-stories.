@@ -25,10 +25,21 @@ export default function Productos() {
   const buscadorRef = useRef<HTMLInputElement>(null);
   const listaRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    cargar();
-    supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
-  }, []);
+useEffect(() => {
+  cargar();
+
+  supabase
+    .from("categories")
+    .select("*")
+    .order("sort_order")
+    .then(({ data }) => setCategorias((data as Category[]) ?? []));
+
+  const codigoRecibido = searchParams.get("codigo")?.trim();
+
+  if (codigoRecibido) {
+    setBusqueda(codigoRecibido);
+  }
+}, []);
 
   // Se ordena SIEMPRE por código (estable): editar la descripción ya no mueve
   // el producto de posición en la lista.
