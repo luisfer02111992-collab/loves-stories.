@@ -269,8 +269,28 @@ async function guardarDescripcion(id: string, descripcion: string) {
         <div className="flex gap-2">
           <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
             <Search size={14} style={{ color: "#5B4E5E" }} />
-            <input value={busquedaProducto} onChange={(e) => { setBusquedaProducto(e.target.value); setMostrarListaProducto(true); setPendiente(""); }} onFocus={() => setMostrarListaProducto(true)}
-              placeholder="Código o descripción…" className="flex-1 text-sm outline-none bg-transparent" />
+            <input
+  value={busquedaProducto}
+  onChange={(e) => {
+    setBusquedaProducto(e.target.value);
+    setMostrarListaProducto(true);
+    setPendiente("");
+  }}
+  onKeyDown={(e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+
+      if (pendiente) {
+        publicar();
+      } else if (coincidenciasProducto.length > 0) {
+        elegirProducto(coincidenciasProducto[0]);
+      }
+    }
+  }}
+  onFocus={() => setMostrarListaProducto(true)}
+  placeholder="Código o descripción..."
+  className="flex-1 text-sm outline-none bg-transparent"
+  />
           </div>
           <button onClick={publicar} disabled={!pendiente} className="px-4 rounded-md text-sm flex items-center gap-1.5" style={{ background: pendiente ? "#9C7A3C" : "#D9D0C2", color: "#F7F3EC" }}>
             <Upload size={14} /> Publicar
