@@ -143,53 +143,146 @@ export async function generarPdfGrande(datos: DatosPdfGrande): Promise<Blob> {
   doc.line(margen, y, margen + anchoUtil, y);
   y += 8;
 
-  const altoImagen = 22;
+    // TABLA COMPACTA DE PRODUCTOS
+  const xFoto = margen;
+  const xProducto = margen + 17;
+  const xCant = margen + 76;
+  const xPrecio = margen + 91;
+  const xDesc = margen + 113;
+  const xDetalle = margen + 133;
+  const xSubtotal = margen + anchoUtil;
+
+  function encabezadoTabla() {
+    doc.setFillColor(247, 243, 236);
+    doc.rect(margen, y, anchoUtil, 7, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(70, 60, 70);
+
+    doc.text("FOTO", xFoto + 1, y + 4.5);
+    doc.text("CÓDIGO / PRODUCTO", xProducto, y + 4.5);
+    doc.text("CANT.", xCant, y + 4.5);
+    doc.text("PRECIO", xPrecio, y + 4.5);
+    doc.text("DESC.", xDesc, y + 4.5);
+    doc.text("FECHA / VENDEDOR", xDetalle, y + 4.5);
+    doc.text("SUBTOTAL", xSubtotal, y + 4.5, { align: "right" });
+
+    doc.setTextColor(20, 20, 20);
+    y += 7;
+  }
+
+  encabezadoTabla();
+
   for (const g of datos.grupos) {
-    saltoDePaginaSiNecesario(altoImagen + 6);
-    const yInicioFila = y;
+    let imagenCargada: Awaited<ReturnType<typeof cargarImagenComoDataUrl>> = null;
 
     if (g.imagen) {
-      const cargada = await cargarImagenComoDataUrl(g.imagen);
-      if (cargada) {
-        try {
-          doc.addImage(cargada.dataUrl, cargada.formato, margen, y, altoImagen, altoImagen, undefined, "FAST");
-        } catch {
-          // si la imagen no se puede decodificar, simplemente se omite — no se simula nada
-        }
-      }
+      imagenCargada = await cargarImagenComoDataUrl(g.imagen);
     }
 
-    const xTexto = margen + altoImagen + 6;
-    const anchoTexto = anchoUtil - altoImagen - 6;
-    let yTexto = yInicioFila + 4;
+    const tieneImagen = !!imagenCargada;
+    const altoFila = tieneImagen ? 17 : 8;
 
+    if (y + altoFila > 297 - margen) {
+      doc.addPage();
+      y = margen;
+      encabezadoTabla();
+    }
+
+    const yInicio = y;
+
+    if (imagenCargada) {
+      try {
+        doc.addImage(
+          imagenCargada.dataUrl,
+          imagenCargada.formato,
+          xFoto,
+          yInicio + 1,
+          14,
+          14,
+          undefined,
+          "FAST"
+        );
+      } catch {
+        // Si una imagen falla, la tabla continúa normalmente.
+      }
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(150, 145, 145);
+      doc.text("—", xFoto + 6, yInicio + 4.8);
+    }
+
+    doc.setTextColor(20, 20, 20);
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(12);
-    doc.text(`${g.codigo} · ${g.nombre}`, xTexto, yTexto, { maxWidth: anchoTexto });
-    yTexto += 6;
+    doc.setFontSize(7.5);
+    doc.text(
+      `${g.codigo} · ${g.nombre}`,
+      xProducto,
+      yInicio + 4.8,
+      { maxWidth: 56 }
+    );
 
     doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Cantidad total: ${g.cantidadTotal}  ·  Precio: Bs ${g.precioUnitarioFinal.toFixed(2)}  ·  Descuento: Bs ${g.descuento.toFixed(2)}`, xTexto, yTexto, { maxWidth: anchoTexto });
-    yTexto += 5;
+    doc.setFontSize(7);
 
-    doc.setFontSize(9);
-    doc.setTextColor(110, 100, 110);
+    doc.text(
+      String(g.cantidadTotal),
+      xCant + 5,
+      yInicio + 4.8,
+      { align: "center" }
+    );
+
+    doc.text(
+      `Bs ${g.precioUnitarioFinal.toFixed(2)}`,
+      xPrecio,
+      yInicio + 4.8
+    );
+
+    doc.text(
+      `Bs ${g.descuento.toFixed(2)}`,
+      xDesc,
+      yInicio + 4.8
+    );
+
     const detalle = g.detalle.length === 1
-      ? `${g.detalle[0].fecha}${g.detalle[0].vendedorNombre ? ` — ${g.detalle[0].vendedorNombre}` : ""}`
-      : g.detalle.map((d) => `${d.fecha}: ${d.cantidad} un.${d.vendedorNombre ? ` (${d.vendedorNombre})` : ""}`).join("   ");
-    doc.text(detalle, xTexto, yTexto, { maxWidth: anchoTexto });
+      ? `${g.detalle[0].fecha}${g.detalle[0].vendedorNombre ? ` · ${g.detalle[0].vendedorNombre}` : " · Sin vendedor"}`
+      : g.detalle
+          .map(
+            (d) =>
+              `${d.fecha}: ${d.cantidad} un.${d.vendedorNombre ? ` · ${d.vendedorNombre}` : " · Sin vendedor"}`
+          )
+          .join(" / ");
+
+    doc.setFontSize(6.2);
+    doc.setTextColor(100, 90, 100);
+
+    const lineasDetalle = doc.splitTextToSize(detalle, 31);
+    doc.text(
+      lineasDetalle.slice(0, tieneImagen ? 3 : 1),
+      xDetalle,
+      yInicio + 4.8
+    );
+
     doc.setTextColor(20, 20, 20);
-
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(11);
-    doc.text(`Bs ${g.subtotalConDescuento.toFixed(2)}`, margen + anchoUtil, yInicioFila + 4, { align: "right" });
+    doc.setFontSize(7.5);
 
-    y = Math.max(yInicioFila + altoImagen, yTexto + 4) + 4;
-    doc.setDrawColor(230, 225, 210);
+    doc.text(
+      `Bs ${g.subtotalConDescuento.toFixed(2)}`,
+      xSubtotal,
+      yInicio + 4.8,
+      { align: "right" }
+    );
+
+    y += altoFila;
+
+    doc.setDrawColor(225, 220, 215);
     doc.line(margen, y, margen + anchoUtil, y);
-    y += 6;
   }
+
+  y += 5;
 
   saltoDePaginaSiNecesario(50);
   doc.setFont("helvetica", "normal");
