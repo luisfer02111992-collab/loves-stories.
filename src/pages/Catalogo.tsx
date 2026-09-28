@@ -189,13 +189,53 @@ await cargar();
   }
 
   async function subirImagenCatalogo(id: string, file: File) {
-    setSubiendoId(id);
-    const url = await subirImagen(file, "catalogo");
+  setSubiendoId(id);
+
+  const url = await subirImagen(file, "catalogo");
+
+  if (!url) {
     setSubiendoId(null);
-    if (!url) return;
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, image_url: url } : it)));
-    await supabase.from("catalog_products").update({ image_url: url }).eq("id", id);
+    return;
   }
+
+  // Buscar a qué producto del inventario pertenece este item del catálogo
+  const itemCatalogo = items.find((it) => it.id === id);
+
+  if (!itemCatalogo) {
+    setSubiendoId(null);
+    alert("No se encontró el producto correspondiente.");
+    return;
+  }
+
+  // Guardar imagen en el catálogo
+  const { error: errorCatalogo } = await supabase
+    .from("catalog_products")
+    .update({ image_url: url })
+    .eq("id", id);
+
+  if (errorCatalogo) {
+    setSubiendoId(null);
+    alert("No se pudo guardar la imagen en el catálogo: " + errorCatalogo.message);
+    return;
+  }
+
+  // Guardar la misma imagen en el producto original del inventario
+  const { error: errorProducto } = await supabase
+    .from("products")
+    .update({ image_url: url })
+    .eq("id", itemCatalogo.product_id);
+
+  setSubiendoId(null);
+
+  if (errorProducto) {
+    alert("La imagen se guardó en el catálogo, pero no en el inventario: " + errorProducto.message);
+    return;
+  }
+
+  setItems((prev) =>
+    prev.map((it) => (it.id === id ? { ...it, image_url: url } : it))
+  );
+}
 
   async function eliminar(id: string) {
     setItems((prev) => prev.filter((it) => it.id !== id));
