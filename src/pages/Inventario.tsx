@@ -51,6 +51,8 @@ export default function Inventario() {
   const [buscarFoto, setBuscarFoto] = useState(false);
   const [mostrarCamara, setMostrarCamara] = useState(false);
   const [fotoBusqueda, setFotoBusqueda] = useState<string | null>(null);
+  const [resultadosFoto, setResultadosFoto] = useState<Product[]>([]);
+const [buscandoFoto, setBuscandoFoto] = useState(false);
   const [duplicados, setDuplicados] = useState<Duplicado[] | null>(null);
   const [nuevos, setNuevos] = useState<FilaExcel[]>([]);
   const [conError, setConError] = useState<FilaExcel[]>([]);
@@ -372,36 +374,204 @@ export default function Inventario() {
         </button>
       </div>
 
-      {buscarFoto && (
-        <div className="p-3 mb-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          {fotoBusqueda ? (
-            <div className="flex items-center gap-3 mb-2">
-              <img src={fotoBusqueda} alt="Foto tomada" className="w-16 h-16 rounded object-cover" />
-              <button onClick={() => setFotoBusqueda(null)} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                Tomar otra foto
-              </button>
-            </div>
-          ) : (
-            <div className="flex gap-2 mb-2">
-              <button onClick={() => setMostrarCamara(true)} className="flex-1 flex items-center gap-2 px-3 py-3 rounded justify-center text-sm" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C", color: "#7A5F2D" }}>
-                <Camera size={16} /> Abrir cámara
-              </button>
-              <label className="flex-1 flex items-center gap-2 px-3 py-3 rounded justify-center text-sm cursor-pointer" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C", color: "#7A5F2D" }}>
-                <ImageIcon size={16} /> Subir foto
-                <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) setFotoBusqueda(URL.createObjectURL(f));
-                }} />
-              </label>
-            </div>
-          )}
-          <p className="text-xs" style={{ color: "#5B4E5E" }}>
-            La búsqueda por similitud de imagen todavía no está conectada a un servicio real de reconocimiento —
-            cuando definamos ese servicio, aquí aparecerán los productos con foto más parecidos a la que subas.
-            La cámara y la foto ya funcionan de verdad (pide permiso, muestra la vista previa y captura la imagen).
-          </p>
+     {buscarFoto && (
+  <div
+    className="p-3 mb-3 rounded-md"
+    style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+  >
+    {fotoBusqueda ? (
+      <>
+        <div className="flex items-center gap-3 mb-3">
+          <img
+            src={fotoBusqueda}
+            alt="Foto tomada"
+            className="w-16 h-16 rounded object-cover"
+          />
+
+          <button
+            onClick={() => {
+              setFotoBusqueda(null);
+              setResultadosFoto([]);
+            }}
+            className="text-xs px-3 py-1.5 rounded-md"
+            style={{
+              background: "#EDE7DE",
+              border: "1px solid #D9D0C2",
+            }}
+          >
+            Tomar otra foto
+          </button>
+
+          <button
+            disabled={buscandoFoto}
+            onClick={async () => {
+              try {
+                setBuscandoFoto(true);
+                setResultadosFoto([]);
+
+                const response = await fetch(fotoBusqueda);
+                const blob = await response.blob();
+
+                const reader = new FileReader();
+
+                reader.onloadend = async () => {
+                  try {
+                    const imagenBase64 = reader.result as string;
+
+                    const { data, error } = await supabase.functions.invoke(
+                      "search-product-by-image",
+                      {
+                        body: {
+                          action: "search-by-image",
+                          image: imagenBase64,
+                        },
+                      }
+                    );
+
+                    if (error) throw error;
+
+                    if (!data?.success) {
+                      throw new Error(data?.error || "No se pudo buscar la imagen");
+                    }
+
+                    setResultadosFoto(data.results ?? []);
+                  } catch (error) {
+                    console.error("Error buscando por imagen:", error);
+                    alert("No se pudo realizar la búsqueda por imagen.");
+                  } finally {
+                    setBuscandoFoto(false);
+                  }
+                };
+
+                reader.onerror = () => {
+                  setBuscandoFoto(false);
+                  alert("No se pudo leer la imagen.");
+                };
+
+                reader.readAsDataURL(blob);
+              } catch (error) {
+                console.error("Error preparando imagen:", error);
+                setBuscandoFoto(false);
+                alert("No se pudo preparar la imagen para buscar.");
+              }
+            }}
+            className="text-xs px-3 py-1.5 rounded-md"
+            style={{
+              background: "#B7791F",
+              color: "#FFFFFF",
+              opacity: buscandoFoto ? 0.6 : 1,
+            }}
+          >
+            {buscandoFoto ? "Buscando..." : "Buscar similares"}
+          </button>
         </div>
-      )}
+
+        {resultadosFoto.length > 0 && (
+          <div className="mt-3">
+            <p
+              className="text-sm font-medium mb-2"
+              style={{ color: "#5B4E5E" }}
+            >
+              Productos similares encontrados
+            </p>
+
+            <div className="space-y-2">
+              {resultadosFoto.map((p: any) => (
+                <div
+                  key={p.id}
+                  className="flex items-center gap-3 p-2 rounded-md"
+                  style={{
+                    background: "#FFFFFF",
+                    border: "1px solid #D9D0C2",
+                  }}
+                >
+                  {p.image_url ? (
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      className="w-14 h-14 rounded object-cover"
+                    />
+                  ) : (
+                    <div
+                      className="w-14 h-14 rounded flex items-center justify-center text-xs"
+                      style={{ background: "#EDE7DE", color: "#9C8F82" }}
+                    >
+                      Sin foto
+                    </div>
+                  )}
+
+                  <div className="flex-1">
+                    <p className="text-sm font-medium">{p.code}</p>
+                    <p className="text-xs" style={{ color: "#5B4E5E" }}>
+                      {p.name}
+                    </p>
+                    <p className="text-xs" style={{ color: "#7A5F2D" }}>
+                      Disponible: {p.stock_available}
+                    </p>
+                  </div>
+
+                  {typeof p.similarity === "number" && (
+                    <span
+                      className="text-xs px-2 py-1 rounded"
+                      style={{ background: "#EDE7DE", color: "#7A5F2D" }}
+                    >
+                      {Math.round(p.similarity * 100)}%
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {!buscandoFoto && resultadosFoto.length === 0 && (
+          <p className="text-xs" style={{ color: "#5B4E5E" }}>
+            Presiona “Buscar similares” para encontrar productos parecidos a esta imagen.
+          </p>
+        )}
+      </>
+    ) : (
+      <div className="flex gap-2 mb-2">
+        <button
+          onClick={() => setMostrarCamara(true)}
+          className="flex-1 flex items-center gap-2 px-3 py-3 rounded justify-center text-sm"
+          style={{
+            background: "#EDE7DE",
+            border: "1px dashed #9C7A3C",
+            color: "#7A5F2D",
+          }}
+        >
+          <Camera size={16} /> Abrir cámara
+        </button>
+
+        <label
+          className="flex-1 flex items-center gap-2 px-3 py-3 rounded justify-center text-sm cursor-pointer"
+          style={{
+            background: "#EDE7DE",
+            border: "1px dashed #9C7A3C",
+            color: "#7A5F2D",
+          }}
+        >
+          <ImageIcon size={16} /> Subir foto
+
+          <input
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+
+              if (f) {
+                setFotoBusqueda(URL.createObjectURL(f));
+                setResultadosFoto([]);
+              }
+            }}
+          />
+        </label>
+      </div>
+    )}
+  </div>
+)}
 
       {mostrarCamara && (
         <CamaraCaptura
