@@ -122,12 +122,14 @@ export async function generarPdfGrande(datos: DatosPdfGrande): Promise<Blob> {
     }
   }
 
-  doc.setFont("times", "bolditalic");
-  doc.setFontSize(23);
-  doc.setTextColor(156, 122, 60);
-  doc.text(datos.negocio, margen, y);
-  doc.setTextColor(20, 20, 20);
-  y += 8;
+ // Encabezado Love's Stories en rosa
+doc.setFont("times", "bolditalic");
+doc.setFontSize(23);
+doc.setTextColor(214, 139, 154);
+doc.text("Love's Stories", margen, y);
+
+doc.setTextColor(20, 20, 20);
+y += 8;
   doc.setFontSize(13);
   doc.setTextColor(90, 80, 90);
   doc.text(datos.titulo, margen, y);
