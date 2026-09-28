@@ -57,7 +57,38 @@ useEffect(() => {
     const todos: Product[] = [];
     for (const r of paginas) { if (r.error) { console.error("Error cargando productos:", r.error); continue; } todos.push(...(((r.data as Product[]) ?? []))); }
     setProductos(todos);
-    if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) setSeleccionadoId(todos.length ? todos[0].id : null);
+
+const codigoRecibido = searchParams.get("codigo")?.trim();
+
+if (codigoRecibido && searchParams.get("desde") === "asignar") {
+  const productoRecibido = todos.find(
+    (p) => p.code.trim().toLowerCase() === codigoRecibido.toLowerCase()
+  );
+
+  if (productoRecibido) {
+    const stock = Number(
+      productoRecibido.stock_available ?? productoRecibido.stock_physical ?? 0
+    );
+
+    setBusqueda(codigoRecibido);
+    setPestanaStock(stock > 0 ? "disponibles" : "agotados");
+    setSeleccionadoId(productoRecibido.id);
+  } else {
+    setBusqueda("");
+    setMostrarNuevo(true);
+    setNuevo((anterior) => ({
+      ...anterior,
+      code: codigoRecibido,
+    }));
+    setSeleccionadoId(null);
+  }
+
+  return;
+}
+
+if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
+  setSeleccionadoId(todos.length ? todos[0].id : null);
+}
   }
 
   const { disponibles, agotados, lista, unidadesDisponibles } = useMemo(() => {
