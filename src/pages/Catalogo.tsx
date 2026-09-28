@@ -42,15 +42,60 @@ export default function Catalogo() {
   }, []);
 
   async function cargar() {
-    const { data: prod } = await supabase.from("products").select("*").is("deleted_at", null).order("name");
-    const inventario = (prod as Product[]) ?? [];
-    const idsInventario = new Set(inventario.map((p) => p.id));
-    const { data: cat } = await supabase.from("catalog_products").select("*").order("created_at");
-    // El catálogo nunca debe mostrar registros antiguos si el producto ya no existe en el inventario activo.
-    const catalogoValido = ((cat as CatalogProduct[]) ?? []).filter((it) => it.active && idsInventario.has(it.product_id));
-    setItems(catalogoValido);
-    setProductos(inventario);
+  const TAMANO_PAGINA = 1000;
+
+  const { count, error: countError } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null);
+
+  if (countError) {
+    console.error("Error contando productos:", countError);
+    return;
   }
+
+  const total = count ?? 0;
+
+  const consultas = Array.from(
+    { length: Math.ceil(total / TAMANO_PAGINA) },
+    (_, i) =>
+      supabase
+        .from("products")
+        .select("*")
+        .is("deleted_at", null)
+        .order("name")
+        .order("id")
+        .range(
+          i * TAMANO_PAGINA,
+          Math.min(total - 1, (i + 1) * TAMANO_PAGINA - 1)
+        )
+  );
+
+  const paginas = await Promise.all(consultas);
+  const inventario: Product[] = [];
+
+  for (const r of paginas) {
+    if (r.error) {
+      console.error("Error cargando productos:", r.error);
+      continue;
+    }
+    inventario.push(...((r.data as Product[]) ?? []));
+  }
+
+  const idsInventario = new Set(inventario.map((p) => p.id));
+
+  const { data: cat } = await supabase
+    .from("catalog_products")
+    .select("*")
+    .order("created_at");
+
+  const catalogoValido = ((cat as CatalogProduct[]) ?? []).filter(
+    (it) => it.active && idsInventario.has(it.product_id)
+  );
+
+  setItems(catalogoValido);
+  setProductos(inventario);
+}
 
   const disponiblesParaPublicar = productos.filter((p) => p.stock_available > 0 && !items.some((it) => it.product_id === p.id));
   const coincidenciasProducto = useMemo(() => {
