@@ -87,7 +87,20 @@ useEffect(() => {
     setCodigo("");
     inputRef.current?.focus();
   }
+useEffect(() => {
+  if (!filaSeleccionada) return;
 
+  requestAnimationFrame(() => {
+    const fila = document.getElementById(
+      `producto-carrito-${filaSeleccionada}`
+    );
+
+    fila?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+  });
+}, [filaSeleccionada, carrito]);
   function cambiarCantidad(productId: string, delta: number) {
     setCarrito((prev) =>
       prev
@@ -296,7 +309,10 @@ useEffect(() => {
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           {carrito.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Escanea o escribe un código para empezar. Selecciona una fila y presiona Supr para quitarla.</p>}
           {carrito.map((l, i) => (
-            <div key={l.product.id} onClick={() => setFilaSeleccionada(l.product.id)}
+            <div
+  key={l.product.id}
+  id={`producto-carrito-${l.product.id}`}
+  onClick={() => setFilaSeleccionada(l.product.id)}
               className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer"
               style={{ borderBottom: i < carrito.length - 1 ? "1px solid #D9D0C2" : "none", background: filaSeleccionada === l.product.id ? "#EDE7DE" : "transparent" }}>
               <div>
