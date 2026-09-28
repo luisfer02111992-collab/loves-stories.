@@ -153,7 +153,20 @@ export default function Catalogo() {
     await supabase.from("catalog_products").update({ stock_available: limitada }).eq("id", id);
     cargar();
   }
+async function guardarDescripcion(id: string, descripcion: string) {
+  const { error } = await supabase
+    .from("catalog_products")
+    .update({ display_description: descripcion.trim() || null })
+    .eq("id", id);
 
+  if (error) {
+    console.error("Error guardando descripción:", error);
+    alert("No se pudo guardar la descripción.");
+    return;
+  }
+
+  await cargar();
+}
 
   function actualizarVarianteLocal(id: string, clave: string, cantidad: number, maximo: number) {
     setItems((prev) => prev.map((it) => {
@@ -352,6 +365,14 @@ export default function Catalogo() {
                   style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
                 />
               </>}
+              <input
+  type="text"
+  defaultValue={p.display_description ?? ""}
+  placeholder="Descripción opcional: color, tamaño, detalle..."
+  onBlur={(e) => guardarDescripcion(p.id, e.target.value)}
+  className="w-64 px-2 py-1 rounded text-xs outline-none"
+  style={{ background: "#F7F3EC", border: "1px solid #D9D0C2", color: "#5B4E5E" }}
+/>
               <button onClick={() => eliminar(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }}><X size={13} /></button>
             </div>
           </div>
