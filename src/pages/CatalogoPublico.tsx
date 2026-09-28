@@ -164,11 +164,16 @@ seleccionRef.current = seleccion.length;
         return;
       }
 
-      // ACEPTAR:
-      // esta es la ÚNICA forma de abandonar el catálogo.
-      window.removeEventListener("popstate", manejarAtras);
-      window.history.go(-2);
-      return;
+// ACEPTAR: abandonar el catálogo inmediatamente.
+window.removeEventListener("popstate", manejarAtras);
+
+if (document.referrer && !document.referrer.includes(window.location.host)) {
+  window.location.replace(document.referrer);
+} else {
+  window.location.replace("about:blank");
+}
+
+return;
     }
 
     // 3. Si no existe selección, puede salir normalmente.
