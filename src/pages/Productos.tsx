@@ -1,11 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Pencil, History, Trash2, Image as ImageIcon, Search } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { subirImagen } from "../lib/imagenes";
 import { useAuth } from "../hooks/useAuth";
 import type { Product, Category } from "../lib/types";
 
 export default function Productos() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { profile } = useAuth();
   const verPrecios = profile?.role === "admin";
   const [productos, setProductos] = useState<Product[]>([]);
