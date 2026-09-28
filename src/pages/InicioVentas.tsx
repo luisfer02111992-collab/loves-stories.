@@ -25,7 +25,7 @@ export default function InicioVentas() {
   const [productoSinStock, setProductoSinStock] = useState<Product | null>(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-
+  const listaCarritoRef = useRef<HTMLDivElement>(null);
   const [mostrarAsignar, setMostrarAsignar] = useState(false);
   const [modo, setModo] = useState<"cliente" | "nuevo" | "directa">("cliente");
   const [clientes, setClientes] = useState<Customer[]>([]);
@@ -87,21 +87,25 @@ useEffect(() => {
     setCodigo("");
     inputRef.current?.focus();
   }
-useEffect(() => {
-  if (!filaSeleccionada) return;
+  useEffect(() => {
+  if (!filaSeleccionada || !listaCarritoRef.current) return;
 
   requestAnimationFrame(() => {
-    const fila = document.getElementById(
-      `producto-carrito-${filaSeleccionada}`
-    );
+    const fila = listaCarritoRef.current?.querySelector(
+      `#producto-carrito-${filaSeleccionada}`
+    ) as HTMLElement | null;
 
-    fila?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
+    if (fila && listaCarritoRef.current) {
+      const contenedor = listaCarritoRef.current;
+
+      contenedor.scrollTo({
+        top: fila.offsetTop - contenedor.offsetTop,
+        behavior: "smooth",
+      });
+    }
   });
 }, [filaSeleccionada, carrito]);
-  function cambiarCantidad(productId: string, delta: number) {
+    function cambiarCantidad(productId: string, delta: number) {
     setCarrito((prev) =>
       prev
         .map((l) => (l.product.id === productId ? { ...l, cantidad: Math.max(0, Math.min(l.product.stock_available, l.cantidad + delta)) } : l))
@@ -306,7 +310,15 @@ useEffect(() => {
 )}
         </form>
 
-        <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        <div ref={listaCarritoRef}
+  style={{
+    background: "#F7F3EC",
+    border: "1px solid #D9D0C2",
+    maxHeight: "calc(100vh - 330px)",
+    overflowY: "auto",
+    scrollBehavior: "smooth",
+  }}
+>
           {carrito.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Escanea o escribe un código para empezar. Selecciona una fila y presiona Supr para quitarla.</p>}
           {carrito.map((l, i) => (
             <div
