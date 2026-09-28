@@ -239,7 +239,30 @@ await cargar();
     );
     return;
   }
+// Borrar el índice de la imagen anterior
+const { error: resetEmbeddingError } = await supabase.rpc(
+  "save_product_image_embedding",
+  {
+    product_id: itemCatalogo.product_id,
+    embedding_value: null,
+  }
+);
 
+if (resetEmbeddingError) {
+  console.error("Error reiniciando índice de imagen:", resetEmbeddingError);
+}
+
+// Generar el índice de la nueva imagen
+const { error: indexError } = await supabase.functions.invoke(
+  "search-product-by-image",
+  {
+    body: { action: "index-products" },
+  }
+);
+
+if (indexError) {
+  console.error("Error indexando nueva imagen:", indexError);
+}
   setItems((prev) =>
     prev.map((it) =>
       it.id === id ? { ...it, image_url: url } : it
