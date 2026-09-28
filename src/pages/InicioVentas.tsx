@@ -23,7 +23,6 @@ export default function InicioVentas() {
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [productoSinStock, setProductoSinStock] = useState<Product | null>(null);
-  const [productoSinStock, setProductoSinStock] = useState<Product | null>(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
