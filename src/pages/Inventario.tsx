@@ -71,28 +71,43 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
     supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
   }, []);
 
-  async function cargar() {
-    // Carga rápida: contamos una vez y pedimos todas las páginas en paralelo.
-    const TAMANO_PAGINA = 1000;
-    const { count, error: countError } = await supabase.from("products").select("id", { count: "exact", head: true }).is("deleted_at", null);
-    if (countError) { console.error("Error contando inventario:", countError); return; }
-    const total = count ?? 0;
-    const consultas = Array.from({ length: Math.ceil(total / TAMANO_PAGINA) }, (_, i) =>
-      supabase
-  .from("products")
-  .select("*, purchase_batches(label)")
-  .is("deleted_at", null)
-  .order("name")
-  .order("id")
-  .range(i * TAMANO_PAGINA, Math.min(total - 1, (i + 1) * TAMANO_PAGINA - 1))
-    );
-    const paginas = await Promise.all(consultas);
-    const todas: Product[] = [];
-    for (const r of paginas) { if (r.error) { console.error("Error cargando inventario:", r.error); continue; } todas.push(...(((r.data as Product[]) ?? []))); }
-    setProductos(todas);
-    if (todas.length > 0) setMermaCodigo(todas[0].code);
+ async function cargar() {
+  const TAMANO_PAGINA = 1000;
+  const todas: Product[] = [];
+  let desde = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("products")
+      .select("*, purchase_batches(label)")
+      .is("deleted_at", null)
+      .order("id", { ascending: true })
+      .range(desde, desde + TAMANO_PAGINA - 1);
+
+    if (error) {
+      console.error("Error cargando inventario:", error);
+      break;
+    }
+
+    const pagina = (data as Product[]) ?? [];
+
+    todas.push(...pagina);
+
+    if (pagina.length < TAMANO_PAGINA) {
+      break;
+    }
+
+    desde += TAMANO_PAGINA;
   }
 
+  setProductos(todas);
+
+  if (todas.length > 0) {
+    setMermaCodigo(todas[0].code);
+  }
+
+  console.log("TOTAL PRODUCTOS CARGADOS:", todas.length);
+}
   async function exportarInventario() {
     const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet("Inventario");
     ws.columns=[
