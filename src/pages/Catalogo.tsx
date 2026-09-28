@@ -385,14 +385,33 @@ async function guardarDescripcion(id: string, descripcion: string) {
                   style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
                 />
               </>}
-              <input
-  type="text"
-  defaultValue={p.display_description ?? ""}
-  placeholder="Descripción opcional: color, tamaño, detalle..."
-  onBlur={(e) => guardarDescripcion(p.id, e.target.value)}
-  className="w-64 px-2 py-1 rounded text-xs outline-none"
-  style={{ background: "#F7F3EC", border: "1px solid #D9D0C2", color: "#5B4E5E" }}
-/>
+ <div className="flex items-center gap-1">
+  <input
+    type="text"
+    defaultValue={p.display_description ?? ""}
+    placeholder="Descripción opcional: color, tamaño, detalle..."
+    onKeyDown={(e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        guardarDescripcion(p.id, e.currentTarget.value);
+        e.currentTarget.blur();
+      }
+    }}
+    className="w-56 px-2 py-1 rounded text-xs outline-none"
+    style={{ background: "#F7F3EC", border: "1px solid #D9D0C2", color: "#5B4E5E" }}
+  />
+  <button
+    type="button"
+    onClick={(e) => {
+      const input = e.currentTarget.previousElementSibling as HTMLInputElement;
+      guardarDescripcion(p.id, input.value);
+    }}
+    className="px-2 py-1 rounded text-xs"
+    style={{ background: "#9C7A3C", color: "white" }}
+  >
+    Guardar
+  </button>
+</div>
               <button onClick={() => eliminar(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }}><X size={13} /></button>
             </div>
           </div>
