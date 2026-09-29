@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Upload, Image as ImageIcon, Search, MessageCircle, Copy, Check } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { subirImagen } from "../lib/imagenes";
@@ -35,6 +35,8 @@ export default function Catalogo() {
   const [mostrarListaCliente, setMostrarListaCliente] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [variantesPendientes, setVariantesPendientes] = useState<Record<string, number>>({});
+  const ultimoProductoRef = useRef<HTMLDivElement>(null);
+  const [irAlFinal, setIrAlFinal] = useState(false);
 
   useEffect(() => {
     cargar();
@@ -112,21 +114,36 @@ export default function Catalogo() {
     setMostrarListaProducto(false);
   }
 
-  async function publicar() {
-    const producto = productos.find((p) => p.id === pendiente);
-    if (!producto) return;
-    const tipo = tipoVariante(producto.name);
-    const totalVariantes = sumaVariantes(variantesPendientes);
-    if (tipo && totalVariantes <= 0) {
-      alert(tipo === "ring_size" ? "Indica al menos una talla disponible." : "Indica al menos un largo disponible.");
-      return;
-    }
-    if (tipo && totalVariantes > producto.stock_available) {
-      alert(`La suma de variantes (${totalVariantes}) no puede superar las ${producto.stock_available} unidades disponibles.`);
-      return;
-    }
-    const stockCatalogo = tipo ? totalVariantes : producto.stock_available;
-    const { error } = await supabase.from("catalog_products").insert({
+async function publicar() {
+  const producto = productos.find((p) => p.id === pendiente);
+  if (!producto) return;
+
+  const tipo = tipoVariante(producto.name);
+  const totalVariantes = sumaVariantes(variantesPendientes);
+
+  if (tipo && totalVariantes <= 0) {
+    alert(
+      tipo === "ring_size"
+        ? "Indica al menos una talla disponible."
+        : "Indica al menos un largo disponible."
+    );
+    return;
+  }
+
+  if (tipo && totalVariantes > producto.stock_available) {
+    alert(
+      `La suma de variantes (${totalVariantes}) no puede superar las ${producto.stock_available} unidades disponibles.`
+    );
+    return;
+  }
+
+  const stockCatalogo = tipo
+    ? totalVariantes
+    : producto.stock_available;
+
+  const { error } = await supabase
+    .from("catalog_products")
+    .insert({
       product_id: producto.id,
       code: producto.code,
       name: producto.name,
@@ -136,12 +153,32 @@ export default function Catalogo() {
       variant_type: tipo,
       variant_stock: tipo ? variantesPendientes : {},
     });
-    if (error) { alert(`No se pudo publicar: ${error.message}`); return; }
-    setPendiente("");
-    setBusquedaProducto("");
-    setVariantesPendientes({});
-    cargar();
+
+  if (error) {
+    alert(`No se pudo publicar: ${error.message}`);
+    return;
   }
+
+  setPendiente("");
+  setBusquedaProducto("");
+  setVariantesPendientes({});
+
+  setIrAlFinal(true);
+  await cargar();
+}
+
+useEffect(() => {
+  if (!irAlFinal || items.length === 0) return;
+
+  requestAnimationFrame(() => {
+    ultimoProductoRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "center",
+    });
+
+    setIrAlFinal(false);
+  });
+}, [items, irAlFinal]);
 
   function actualizarCantidadLocal(id: string, cantidad: number, maximo: number) {
     const limitada = Math.min(Math.max(0, cantidad), maximo);
@@ -427,9 +464,10 @@ if (indexError) {
             p.stock_available;
 
           return (
-            <div
-              key={p.id}
-              className="p-3"
+           <div
+  key={p.id}
+  ref={i === items.length - 1 ? ultimoProductoRef : null}
+  className="p-3"
               style={{
                 borderBottom:
                   i < items.length - 1 ? "1px solid #D9D0C2" : "none",
