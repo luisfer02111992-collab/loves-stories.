@@ -649,25 +649,31 @@ if (indexError) {
                       </p>
                     </div>
 
-                    <input
-                      type="number"
-                      min={1}
-                      max={prod.stock_available}
-                      value={cantidadPendiente}
-                      onChange={(e) =>
-                        setCantidadPendiente(
-                          Math.min(
-                            Math.max(1, Number(e.target.value) || 1),
-                            prod.stock_available
-                          )
-                        )
-                      }
-                      className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
-                      style={{
-                        background: "#F7F3EC",
-                        border: "1px solid #D9D0C2",
-                      }}
-                    />
+                   <input
+  type="text"
+  inputMode="numeric"
+  value={cantidadPendiente === 0 ? "" : cantidadPendiente}
+  onFocus={(e) => e.currentTarget.select()}
+  onChange={(e) => {
+    const valor = e.target.value.replace(/\D/g, "");
+
+    if (valor === "") {
+      setCantidadPendiente(0);
+      return;
+    }
+
+    const numero = Number(valor);
+
+    setCantidadPendiente(
+      Math.min(numero, prod.stock_available)
+    );
+  }}
+  className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
+  style={{
+    background: "#F7F3EC",
+    border: "1px solid #D9D0C2",
+  }}
+/>
                   </div>
                 )}
               </div>
