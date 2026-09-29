@@ -420,88 +420,297 @@ if (indexError) {
         )}
       </div>
 
-      <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-        {items.map((p, i) => (
-          <div key={p.id} className="flex items-center justify-between px-3.5 py-2.5 gap-3" style={{ borderBottom: i < items.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-            <div className="flex items-center gap-3 min-w-0">
-              {p.image_url ? (
-                <img src={p.image_url} alt="" className="w-10 h-10 rounded object-cover shrink-0" />
-              ) : (
-                <div className="w-10 h-10 rounded flex items-center justify-center shrink-0" style={{ background: "#EDE7DE" }}>
-                  <ImageIcon size={14} style={{ color: "#5B4E5E" }} />
+            <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        {items.map((p, i) => {
+          const maximo =
+            productos.find((pr) => pr.id === p.product_id)?.stock_available ??
+            p.stock_available;
+
+          return (
+            <div
+              key={p.id}
+              className="p-3"
+              style={{
+                borderBottom:
+                  i < items.length - 1 ? "1px solid #D9D0C2" : "none",
+              }}
+            >
+              {/* IMAGEN Y DATOS PRINCIPALES */}
+              <div className="flex items-start gap-3">
+                <div className="shrink-0">
+                  {p.image_url ? (
+                    <img
+                      src={p.image_url}
+                      alt={p.name}
+                      className="w-20 h-20 sm:w-16 sm:h-16 rounded-md object-cover"
+                      style={{ border: "1px solid #D9D0C2" }}
+                    />
+                  ) : (
+                    <div
+                      className="w-20 h-20 sm:w-16 sm:h-16 rounded-md flex items-center justify-center"
+                      style={{
+                        background: "#EDE7DE",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    >
+                      <ImageIcon size={22} style={{ color: "#5B4E5E" }} />
+                    </div>
+                  )}
                 </div>
-              )}
-              <div className="min-w-0">
-                <p className="text-sm truncate">{p.name}</p>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>{p.code} · Bs {p.price}</p>
+
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-tight">
+                    {p.name}
+                  </p>
+
+                  <p
+                    className="text-xs mt-1"
+                    style={{ color: "#5B4E5E" }}
+                  >
+                    Código: {p.code}
+                  </p>
+
+                  <p
+                    className="text-sm font-medium mt-1"
+                    style={{ color: "#7A5F2D" }}
+                  >
+                    Bs {p.price}
+                  </p>
+
+                  <p
+                    className="text-xs mt-1"
+                    style={{ color: "#5B4E5E" }}
+                  >
+                    Stock inventario: {maximo}
+                  </p>
+
+                  {!p.image_url && (
+                    <label
+                      className="inline-block mt-2 text-xs px-2.5 py-1.5 rounded-md cursor-pointer"
+                      style={{
+                        background: "#EDE7DE",
+                        border: "1px dashed #9C7A3C",
+                        color: "#7A5F2D",
+                      }}
+                    >
+                      {subiendoId === p.id ? "Subiendo…" : "Cargar imagen"}
+
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) =>
+                          e.target.files?.[0] &&
+                          subirImagenCatalogo(p.id, e.target.files[0])
+                        }
+                      />
+                    </label>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => eliminar(p.id)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
+                  style={{
+                    background: "#F4E3E6",
+                    color: "#7A2540",
+                  }}
+                >
+                  <X size={14} />
+                </button>
+              </div>
+
+              {/* TALLAS / LARGOS / CANTIDAD */}
+              <div className="mt-3">
+                {p.variant_type ? (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        {p.variant_type === "ring_size"
+                          ? "Cantidad por talla"
+                          : "Cantidad por largo"}
+                      </p>
+
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#7A5F2D" }}
+                      >
+                        Total: {sumaVariantes(p.variant_stock)}
+                      </p>
+                    </div>
+
+                    <div
+                      className="grid gap-2"
+                      style={{
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(82px, 1fr))",
+                      }}
+                    >
+                      {opcionesVariante(p.variant_type).map((op) => (
+                        <label
+                          key={op}
+                          className="flex flex-col items-center justify-center px-2 py-1.5 rounded"
+                          style={{
+                            background: "#EDE7DE",
+                            border: "1px solid #D9D0C2",
+                          }}
+                        >
+                          <span
+                            className="text-xs mb-1 whitespace-nowrap"
+                            style={{ color: "#5B4E5E" }}
+                          >
+                            {etiquetaVariante(p.variant_type, op)}
+                          </span>
+
+                          <input
+                            type="number"
+                            min={0}
+                            value={p.variant_stock?.[op] ?? 0}
+                            onChange={(e) =>
+                              actualizarVarianteLocal(
+                                p.id,
+                                op,
+                                Number(e.target.value),
+                                maximo
+                              )
+                            }
+                            onBlur={() => guardarVariantes(p, maximo)}
+                            className="w-full px-1 py-1.5 rounded text-center text-sm outline-none"
+                            style={{
+                              background: "#F7F3EC",
+                              border: "1px solid #D9D0C2",
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+
+                    <div
+                      className="mt-2 px-3 py-2 rounded flex justify-between items-center"
+                      style={{
+                        background: "#EDE7DE",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    >
+                      <span
+                        className="text-xs"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Total publicado
+                      </span>
+
+                      <span className="text-sm font-medium">
+                        {sumaVariantes(p.variant_stock)} unidades
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    className="flex items-center justify-between gap-3 p-2 rounded"
+                    style={{
+                      background: "#EDE7DE",
+                      border: "1px solid #D9D0C2",
+                    }}
+                  >
+                    <div>
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Cantidad publicada
+                      </p>
+
+                      <p
+                        className="text-xs mt-0.5"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Máximo: {maximo}
+                      </p>
+                    </div>
+
+                    <input
+                      type="number"
+                      min={0}
+                      max={maximo}
+                      value={p.stock_available}
+                      onChange={(e) =>
+                        actualizarCantidadLocal(
+                          p.id,
+                          Number(e.target.value),
+                          maximo
+                        )
+                      }
+                      onBlur={(e) =>
+                        guardarCantidad(
+                          p.id,
+                          Number(e.target.value),
+                          maximo
+                        )
+                      }
+                      className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
+                      style={{
+                        background: "#F7F3EC",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* DESCRIPCIÓN */}
+              <div className="mt-3 flex gap-2">
+                <input
+                  type="text"
+                  defaultValue={p.display_description ?? ""}
+                  placeholder="Descripción opcional: color, tamaño, detalle..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      guardarDescripcion(p.id, e.currentTarget.value);
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  className="flex-1 min-w-0 px-3 py-2 rounded text-xs outline-none"
+                  style={{
+                    background: "#FFF",
+                    border: "1px solid #D9D0C2",
+                    color: "#5B4E5E",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    const input =
+                      e.currentTarget
+                        .previousElementSibling as HTMLInputElement;
+
+                    guardarDescripcion(p.id, input.value);
+                  }}
+                  className="px-3 py-2 rounded text-xs shrink-0"
+                  style={{
+                    background: "#9C7A3C",
+                    color: "white",
+                  }}
+                >
+                  Guardar
+                </button>
               </div>
             </div>
-            <div className="flex items-center gap-2 shrink-0">
-              {!p.image_url && (
-                <label className="text-xs px-2.5 py-1.5 rounded-md cursor-pointer" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C", color: "#7A5F2D" }}>
-                  {subiendoId === p.id ? "Subiendo…" : "Cargar imagen"}
-                  <input type="file" accept="image/*" className="hidden" onChange={(e) => e.target.files?.[0] && subirImagenCatalogo(p.id, e.target.files[0])} />
-                </label>
-              )}
-              {p.variant_type ? (
-                <div className="flex flex-wrap items-center justify-end gap-1 max-w-xl">
-                  {opcionesVariante(p.variant_type).map((op) => {
-                    const maximo = productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available;
-                    return <label key={op} className="text-xs flex items-center gap-1 px-1.5 py-1 rounded" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
-                      <span>{etiquetaVariante(p.variant_type,op)}</span>
-                      <input type="number" min={0} value={p.variant_stock?.[op]??0}
-                        onChange={(e)=>actualizarVarianteLocal(p.id,op,Number(e.target.value),maximo)}
-                        onBlur={()=>guardarVariantes(p,maximo)}
-                        className="w-11 px-1 py-1 rounded text-center outline-none" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}} />
-                    </label>;
-                  })}
-                  <span className="text-xs" style={{color:"#5B4E5E"}}>Total {sumaVariantes(p.variant_stock)}</span>
-                </div>
-              ) : <>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>Cant. (máx. {productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available})</p>
-                <input
-                  type="number"
-                  min={0}
-                  max={productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available}
-                  value={p.stock_available}
-                  onChange={(e) => actualizarCantidadLocal(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
-                  onBlur={(e) => guardarCantidad(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
-                  className="w-16 px-2 py-1.5 rounded text-sm text-center outline-none"
-                  style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
-                />
-              </>}
- <div className="flex items-center gap-1">
-  <input
-    type="text"
-    defaultValue={p.display_description ?? ""}
-    placeholder="Descripción opcional: color, tamaño, detalle..."
-    onKeyDown={(e) => {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        guardarDescripcion(p.id, e.currentTarget.value);
-        e.currentTarget.blur();
-      }
-    }}
-    className="w-56 px-2 py-1 rounded text-xs outline-none"
-    style={{ background: "#F7F3EC", border: "1px solid #D9D0C2", color: "#5B4E5E" }}
-  />
-  <button
-    type="button"
-    onClick={(e) => {
-      const input = e.currentTarget.previousElementSibling as HTMLInputElement;
-      guardarDescripcion(p.id, input.value);
-    }}
-    className="px-2 py-1 rounded text-xs"
-    style={{ background: "#9C7A3C", color: "white" }}
-  >
-    Guardar
-  </button>
-</div>
-              <button onClick={() => eliminar(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }}><X size={13} /></button>
-            </div>
-          </div>
-        ))}
-        {items.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay productos publicados.</p>}
+          );
+        })}
+
+        {items.length === 0 && (
+          <p
+            className="text-sm p-4"
+            style={{ color: "#5B4E5E" }}
+          >
+            No hay productos publicados.
+          </p>
+        )}
       </div>
     </div>
   );
