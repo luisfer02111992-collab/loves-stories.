@@ -36,12 +36,22 @@ const seleccionRef = useRef(0);
     });
   }, []);
 
-  async function cargar() {
-    const { data: prod } = await supabase.from("products").select("id").is("deleted_at", null).gt("stock_available", 0);
-    const idsInventario = new Set((prod ?? []).map((p: any) => p.id));
-    const { data } = await supabase.from("catalog_products").select("*").eq("active", true).gt("stock_available", 0).order("created_at");
-    setItems(((data as CatalogProduct[]) ?? []).filter((p) => idsInventario.has(p.product_id)));
+async function cargar() {
+  const { data, error } = await supabase
+    .from("catalog_products")
+    .select("*")
+    .eq("active", true)
+    .gt("stock_available", 0)
+    .order("created_at");
+
+  if (error) {
+    console.error("Error cargando catálogo público:", error);
+    setItems([]);
+    return;
   }
+
+  setItems((data as CatalogProduct[]) ?? []);
+}
 
   async function fijarCantidad(item: CatalogProduct, nueva: number) {
     nueva = Math.max(0, nueva);
