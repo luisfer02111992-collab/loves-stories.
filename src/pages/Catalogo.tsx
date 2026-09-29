@@ -35,6 +35,9 @@ export default function Catalogo() {
   const [mostrarListaCliente, setMostrarListaCliente] = useState(false);
   const [copiado, setCopiado] = useState(false);
   const [variantesPendientes, setVariantesPendientes] = useState<Record<string, number>>({});
+  const [descripcionPendiente, setDescripcionPendiente] = useState("");
+const [imagenPendiente, setImagenPendiente] = useState<File | null>(null);
+const [cantidadPendiente, setCantidadPendiente] = useState(1);
 
   useEffect(() => {
     cargar();
@@ -106,42 +109,89 @@ export default function Catalogo() {
   }, [busquedaProducto, disponiblesParaPublicar.length]);
 
   function elegirProducto(p: Product) {
-    setPendiente(p.id);
-    setBusquedaProducto(`${p.code} · ${p.name}`);
-    setVariantesPendientes({});
-    setMostrarListaProducto(false);
+  setPendiente(p.id);
+  setBusquedaProducto(`${p.code} · ${p.name}`);
+  setVariantesPendientes({});
+  setDescripcionPendiente("");
+  setImagenPendiente(null);
+  setCantidadPendiente(1);
+  setMostrarListaProducto(false);
+}
+
+ async function publicar() {
+  const producto = productos.find((p) => p.id === pendiente);
+  if (!producto) return;
+
+  const tipo = tipoVariante(producto.name);
+  const totalVariantes = sumaVariantes(variantesPendientes);
+
+  if (tipo && totalVariantes <= 0) {
+    alert(
+      tipo === "ring_size"
+        ? "Indica al menos una talla disponible."
+        : "Indica al menos un largo disponible."
+    );
+    return;
   }
 
-  async function publicar() {
-    const producto = productos.find((p) => p.id === pendiente);
-    if (!producto) return;
-    const tipo = tipoVariante(producto.name);
-    const totalVariantes = sumaVariantes(variantesPendientes);
-    if (tipo && totalVariantes <= 0) {
-      alert(tipo === "ring_size" ? "Indica al menos una talla disponible." : "Indica al menos un largo disponible.");
-      return;
-    }
-    if (tipo && totalVariantes > producto.stock_available) {
-      alert(`La suma de variantes (${totalVariantes}) no puede superar las ${producto.stock_available} unidades disponibles.`);
-      return;
-    }
-    const stockCatalogo = tipo ? totalVariantes : producto.stock_available;
-    const { error } = await supabase.from("catalog_products").insert({
-      product_id: producto.id,
-      code: producto.code,
-      name: producto.name,
-      price: producto.price,
-      image_url: producto.image_url,
-      stock_available: stockCatalogo,
-      variant_type: tipo,
-      variant_stock: tipo ? variantesPendientes : {},
-    });
-    if (error) { alert(`No se pudo publicar: ${error.message}`); return; }
-    setPendiente("");
-    setBusquedaProducto("");
-    setVariantesPendientes({});
-    cargar();
+  if (tipo && totalVariantes > producto.stock_available) {
+    alert(
+      `La suma de variantes (${totalVariantes}) no puede superar las ${producto.stock_available} unidades disponibles.`
+    );
+    return;
   }
+
+  if (!tipo && (cantidadPendiente <= 0 || cantidadPendiente > producto.stock_available)) {
+    alert(`La cantidad debe estar entre 1 y ${producto.stock_available}.`);
+    return;
+  }
+
+  let imagenFinal = producto.image_url;
+
+  if (imagenPendiente) {
+    const nuevaImagen = await subirImagen(imagenPendiente, "catalogo");
+
+    if (!nuevaImagen) {
+      alert("No se pudo cargar la imagen.");
+      return;
+    }
+
+    imagenFinal = nuevaImagen;
+
+    await supabase
+      .from("products")
+      .update({ image_url: nuevaImagen })
+      .eq("id", producto.id);
+  }
+
+  const stockCatalogo = tipo ? totalVariantes : cantidadPendiente;
+
+  const { error } = await supabase.from("catalog_products").insert({
+    product_id: producto.id,
+    code: producto.code,
+    name: producto.name,
+    price: producto.price,
+    image_url: imagenFinal,
+    stock_available: stockCatalogo,
+    variant_type: tipo,
+    variant_stock: tipo ? variantesPendientes : {},
+    display_description: descripcionPendiente.trim() || null,
+  });
+
+  if (error) {
+    alert(`No se pudo guardar en catálogo: ${error.message}`);
+    return;
+  }
+
+  setPendiente("");
+  setBusquedaProducto("");
+  setVariantesPendientes({});
+  setDescripcionPendiente("");
+  setImagenPendiente(null);
+  setCantidadPendiente(1);
+
+  await cargar();
+}
 
   function actualizarCantidadLocal(id: string, cantidad: number, maximo: number) {
     const limitada = Math.min(Math.max(0, cantidad), maximo);
@@ -349,77 +399,312 @@ if (indexError) {
         </div>
       </div>
 
-      <div className="p-4 mb-3 relative" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-        <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Buscar y publicar un producto del inventario al catálogo público</p>
-        <div className="flex gap-2">
-          <div className="flex-1 flex items-center gap-2 px-3 py-2 rounded" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-            <Search size={14} style={{ color: "#5B4E5E" }} />
-            <input
-  value={busquedaProducto}
-  onChange={(e) => {
-    setBusquedaProducto(e.target.value);
-    setMostrarListaProducto(true);
-    setPendiente("");
-  }}
-  onKeyDown={(e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
+            <div
+        className="p-4 mb-3 relative"
+        style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+      >
+        <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>
+          Buscar producto del inventario
+        </p>
 
-      if (pendiente) {
-        publicar();
-      } else if (coincidenciasProducto.length > 0) {
-        elegirProducto(coincidenciasProducto[0]);
-      }
-    }
-  }}
-  onFocus={() => setMostrarListaProducto(true)}
-  placeholder="Código o descripción..."
-  className="flex-1 text-sm outline-none bg-transparent"
-  />
-          </div>
-          <button onClick={publicar} disabled={!pendiente} className="px-4 rounded-md text-sm flex items-center gap-1.5" style={{ background: pendiente ? "#9C7A3C" : "#D9D0C2", color: "#F7F3EC" }}>
-            <Upload size={14} /> Publicar
-          </button>
+        <div className="flex items-center gap-2 px-3 py-2 rounded"
+          style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
+        >
+          <Search size={14} style={{ color: "#5B4E5E" }} />
+
+          <input
+            value={busquedaProducto}
+            onChange={(e) => {
+              setBusquedaProducto(e.target.value);
+              setMostrarListaProducto(true);
+              setPendiente("");
+              setVariantesPendientes({});
+              setDescripcionPendiente("");
+              setImagenPendiente(null);
+              setCantidadPendiente(1);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+
+                if (!pendiente && coincidenciasProducto.length > 0) {
+                  elegirProducto(coincidenciasProducto[0]);
+                }
+              }
+            }}
+            onFocus={() => setMostrarListaProducto(true)}
+            placeholder="Código o descripción..."
+            className="flex-1 text-sm outline-none bg-transparent"
+          />
         </div>
-        {pendiente && (() => {
-          const prod = productos.find((p) => p.id === pendiente);
-          const tipo = prod ? tipoVariante(prod.name) : null;
-          if (!prod || !tipo) return null;
-          const opciones = opcionesVariante(tipo);
-          const total = sumaVariantes(variantesPendientes);
-          return <div className="mt-3 p-3 rounded-md" style={{background:"#FFF",border:"1px solid #D9D0C2"}}>
-            <p className="text-xs font-medium mb-2">
-              {tipo==="ring_size" ? "Cantidad disponible por talla" : "Cantidad disponible por largo"}
-              <span style={{color:"#5B4E5E"}}> · {total}/{prod.stock_available} unidades</span>
-            </p>
-            <div className="flex flex-wrap gap-2">
-              {opciones.map(op => <label key={op} className="text-xs flex items-center gap-1 px-2 py-1 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>
-                <span>{etiquetaVariante(tipo,op)}</span>
-                <input type="number" min={0} max={prod.stock_available} value={variantesPendientes[op]??0}
-                  onChange={e=>{
-                    const n=Math.max(0,Number(e.target.value)||0);
-                    const nuevo={...variantesPendientes,[op]:n};
-                    if(sumaVariantes(nuevo)<=prod.stock_available) setVariantesPendientes(nuevo);
-                  }}
-                  className="w-12 px-1 py-1 text-center rounded outline-none" style={{border:"1px solid #D9D0C2"}} />
-              </label>)}
-            </div>
-            <p className="text-xs mt-2" style={{color: total===prod.stock_available?"#4F6F52":"#7A5F2D"}}>
-              Solo estas variantes aparecerán en el catálogo público. No es obligatorio publicar todo el stock.
-            </p>
-          </div>;
-        })()}
+
         {mostrarListaProducto && coincidenciasProducto.length > 0 && (
-          <div className="absolute left-4 right-4 mt-1 rounded-md z-10 shadow-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+          <div
+            className="absolute left-4 right-4 mt-1 rounded-md z-20 shadow-md"
+            style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+          >
             {coincidenciasProducto.map((p) => (
-              <button key={p.id} onClick={() => elegirProducto(p)} className="w-full text-left px-3 py-2 text-sm hover:bg-black/5" style={{ borderBottom: "1px solid #D9D0C2" }}>
-                {p.code} · {p.name} <span style={{ color: "#5B4E5E" }}>({p.stock_available} disp.)</span>
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => elegirProducto(p)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-black/5"
+                style={{ borderBottom: "1px solid #D9D0C2" }}
+              >
+                {p.code} · {p.name}
+                <span style={{ color: "#5B4E5E" }}>
+                  {" "}({p.stock_available} disp.)
+                </span>
               </button>
             ))}
           </div>
         )}
-      </div>
 
+        {pendiente && (() => {
+          const prod = productos.find((p) => p.id === pendiente);
+
+          if (!prod) return null;
+
+          const tipo = tipoVariante(prod.name);
+          const opciones = opcionesVariante(tipo);
+          const total = sumaVariantes(variantesPendientes);
+
+          return (
+            <div
+              className="mt-3 p-3 rounded-md"
+              style={{ background: "#FFF", border: "1px solid #D9D0C2" }}
+            >
+              <div className="flex items-start gap-3">
+
+                {/* IMAGEN */}
+                <div className="shrink-0">
+                  {imagenPendiente ? (
+                    <img
+                      src={URL.createObjectURL(imagenPendiente)}
+                      alt={prod.name}
+                      className="w-24 h-24 rounded-md object-cover"
+                      style={{ border: "1px solid #D9D0C2" }}
+                    />
+                  ) : prod.image_url ? (
+                    <img
+                      src={prod.image_url}
+                      alt={prod.name}
+                      className="w-24 h-24 rounded-md object-cover"
+                      style={{ border: "1px solid #D9D0C2" }}
+                    />
+                  ) : (
+                    <div
+                      className="w-24 h-24 rounded-md flex items-center justify-center"
+                      style={{
+                        background: "#EDE7DE",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    >
+                      <ImageIcon size={24} style={{ color: "#5B4E5E" }} />
+                    </div>
+                  )}
+
+                  <label
+                    className="block mt-2 text-center text-xs px-2 py-1.5 rounded-md cursor-pointer"
+                    style={{
+                      background: "#EDE7DE",
+                      border: "1px dashed #9C7A3C",
+                      color: "#7A5F2D",
+                    }}
+                  >
+                    {prod.image_url || imagenPendiente
+                      ? "Cambiar imagen"
+                      : "Cargar imagen"}
+
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const archivo = e.target.files?.[0];
+                        if (archivo) setImagenPendiente(archivo);
+                      }}
+                    />
+                  </label>
+                </div>
+
+                {/* DATOS */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{prod.name}</p>
+
+                  <p className="text-xs mt-1" style={{ color: "#5B4E5E" }}>
+                    Código: {prod.code}
+                  </p>
+
+                  <p
+                    className="text-sm font-medium mt-1"
+                    style={{ color: "#7A5F2D" }}
+                  >
+                    Bs {prod.price}
+                  </p>
+
+                  <p className="text-xs mt-1" style={{ color: "#5B4E5E" }}>
+                    Stock inventario: {prod.stock_available}
+                  </p>
+                </div>
+              </div>
+
+              {/* CANTIDAD / TALLAS / LARGOS */}
+              <div className="mt-3">
+                {tipo ? (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        {tipo === "ring_size"
+                          ? "Cantidad por talla"
+                          : "Cantidad por largo"}
+                      </p>
+
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#7A5F2D" }}
+                      >
+                        Total: {total}/{prod.stock_available}
+                      </p>
+                    </div>
+
+                    <div
+                      className="grid gap-2"
+                      style={{
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(82px, 1fr))",
+                      }}
+                    >
+                      {opciones.map((op) => (
+                        <label
+                          key={op}
+                          className="flex flex-col items-center justify-center px-2 py-1.5 rounded"
+                          style={{
+                            background: "#EDE7DE",
+                            border: "1px solid #D9D0C2",
+                          }}
+                        >
+                          <span
+                            className="text-xs mb-1 whitespace-nowrap"
+                            style={{ color: "#5B4E5E" }}
+                          >
+                            {etiquetaVariante(tipo, op)}
+                          </span>
+
+                          <input
+                            type="number"
+                            min={0}
+                            value={variantesPendientes[op] ?? 0}
+                            onChange={(e) => {
+                              const n = Math.max(
+                                0,
+                                Number(e.target.value) || 0
+                              );
+
+                              const nuevo = {
+                                ...variantesPendientes,
+                                [op]: n,
+                              };
+
+                              if (
+                                sumaVariantes(nuevo) <= prod.stock_available
+                              ) {
+                                setVariantesPendientes(nuevo);
+                              }
+                            }}
+                            className="w-full px-1 py-1.5 rounded text-center text-sm outline-none"
+                            style={{
+                              background: "#F7F3EC",
+                              border: "1px solid #D9D0C2",
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    className="flex items-center justify-between gap-3 p-2 rounded"
+                    style={{
+                      background: "#EDE7DE",
+                      border: "1px solid #D9D0C2",
+                    }}
+                  >
+                    <div>
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Cantidad a publicar
+                      </p>
+
+                      <p
+                        className="text-xs mt-0.5"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Máximo: {prod.stock_available}
+                      </p>
+                    </div>
+
+                    <input
+                      type="number"
+                      min={1}
+                      max={prod.stock_available}
+                      value={cantidadPendiente}
+                      onChange={(e) =>
+                        setCantidadPendiente(
+                          Math.min(
+                            Math.max(1, Number(e.target.value) || 1),
+                            prod.stock_available
+                          )
+                        )
+                      }
+                      className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
+                      style={{
+                        background: "#F7F3EC",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* DESCRIPCIÓN */}
+              <input
+                type="text"
+                value={descripcionPendiente}
+                onChange={(e) =>
+                  setDescripcionPendiente(e.target.value)
+                }
+                placeholder="Descripción opcional: color, tamaño, detalle..."
+                className="w-full mt-3 px-3 py-2 rounded text-xs outline-none"
+                style={{
+                  background: "#F7F3EC",
+                  border: "1px solid #D9D0C2",
+                  color: "#5B4E5E",
+                }}
+              />
+
+              {/* GUARDAR */}
+              <button
+                type="button"
+                onClick={publicar}
+                className="w-full mt-3 px-4 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2"
+                style={{
+                  background: "#9C7A3C",
+                  color: "#F7F3EC",
+                }}
+              >
+                <Upload size={15} />
+                Guardar en catálogo
+              </button>
+            </div>
+          );
+        })()}
+      </div>
             <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
         {items.map((p, i) => {
           const maximo =
