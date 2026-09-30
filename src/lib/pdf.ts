@@ -522,7 +522,32 @@ export async function generarPdfGrande(
   y += 5;
 
   saltoDePaginaSiNecesario(50);
+const cantidadTotal = datos.grupos.reduce(
+  (total, g) => total + g.cantidadTotal,
+  0
+);
 
+doc.setFont("helvetica", "bold");
+doc.setFontSize(11);
+doc.setTextColor(20, 20, 20);
+
+doc.text(
+  "CANTIDAD TOTAL DE JOYAS",
+  margen,
+  y
+);
+
+doc.text(
+  `${cantidadTotal} unidades`,
+  margen + anchoUtil,
+  y,
+  {
+    align: "right",
+  }
+);
+
+y += 7;
+  
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
   doc.setTextColor(20, 20, 20);
