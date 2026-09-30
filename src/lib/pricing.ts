@@ -30,6 +30,7 @@ export interface LineaPedido {
   cantidad: number;
   precio_base: number;
   fecha: string;
+    ring_size?: string | null;
   vendedorNombre?: string | null;
   imagen?: string | null;
 }
@@ -45,8 +46,13 @@ export interface GrupoProducto {
   subtotalConDescuento: number;
   descuento: number;
   imagen: string | null;
-  detalle: { id: string; cantidad: number; fecha: string; vendedorNombre?: string | null }[];
-}
+  detalle: {
+    id: string;
+    cantidad: number;
+    fecha: string;
+    ring_size?: string | null;
+    vendedorNombre?: string | null;
+  }[];}
 
 // Agrupa las líneas de un pedido por producto (mismo código), sumando la cantidad
 // de TODAS las fechas en que se asignó ese producto dentro del pedido abierto, y
@@ -74,8 +80,13 @@ export function agruparPorProducto(reglas: PricingRule[], lineas: LineaPedido[])
     if (!g.imagen && l.imagen) g.imagen = l.imagen;
     g.cantidadTotal += l.cantidad;
     g.subtotalSinDescuento += l.precio_base * l.cantidad;
-    g.detalle.push({ id: l.id, cantidad: l.cantidad, fecha: l.fecha, vendedorNombre: l.vendedorNombre });
-  }
+g.detalle.push({
+  id: l.id,
+  cantidad: l.cantidad,
+  fecha: l.fecha,
+  ring_size: l.ring_size ?? null,
+  vendedorNombre: l.vendedorNombre,
+});  }
   for (const g of grupos.values()) {
     const base = g.subtotalSinDescuento / g.cantidadTotal;
     const porNombre = precioNegocioPorCantidad(null, g.nombre, g.cantidadTotal, base);
