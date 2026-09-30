@@ -81,7 +81,7 @@ export default function Ventas() {
     const hasta = new Date(fecha + "T23:59:59");
     const { data } = await supabase
       .from("orders")
-      .select("id, order_number, closed_at, total_cerrado, closed_by, customers(name, phone), closed_profile:profiles!orders_closed_by_fkey(full_name, role), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, products(code, name, description, category_id, cost))")
+      .select("id, order_number, closed_at, total_cerrado, closed_by, customers(name, phone), closed_profile:profiles!orders_closed_by_fkey(full_name, role), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, products(code, name, description, category_id, cost, image_url))")
       .eq("status", "closed")
       .gte("closed_at", desde.toISOString())
       .lte("closed_at", hasta.toISOString())
