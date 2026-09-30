@@ -585,58 +585,6 @@ export async function generarPdfGrande(
   y += 8;
 
   // ==========================================================
-  // PAGOS
-  // ==========================================================
-
-  if (datos.mostrarPagos) {
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(11);
-
-    doc.text(
-      "Depósitos / pagos realizados",
-      margen,
-      y
-    );
-
-    doc.text(
-      `Bs ${datos.depositado.toFixed(2)}`,
-      margen + anchoUtil,
-      y,
-      {
-        align: "right",
-      }
-    );
-
-    y += 7;
-
-doc.setFont("helvetica", "bold");
-doc.setFontSize(13);
-
-if (datos.saldoPendiente > 0) {
-  doc.setTextColor(122, 37, 64);
-
-  doc.text(
-    "SALDO PENDIENTE",
-    margen,
-    y
-  );
-
-  doc.text(
-    `Bs ${datos.saldoPendiente.toFixed(2)}`,
-    margen + anchoUtil,
-    y,
-    {
-      align: "right",
-    }
-  );
-}
-
-    doc.setTextColor(20, 20, 20);
-
-    y += 10;
-  }
-
-  // ==========================================================
   // PIE
   // ==========================================================
 
