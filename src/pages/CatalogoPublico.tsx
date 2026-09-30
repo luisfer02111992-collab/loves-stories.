@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { MessageCircle, ShoppingBag } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { CatalogProduct } from "../lib/types";
+import { generarPdfCatalogo } from "../lib/pdf";
 
 function idDeSesion() {
   let id = localStorage.getItem("catalogo_session_id");
@@ -197,28 +198,108 @@ return;
     window.removeEventListener("popstate", manejarAtras);
   };
 }, []);
-  async function enviarPedido(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nombre.trim() || !telefono.trim() || seleccion.length === 0 || guardando) return;
-    setGuardando(true);
-    try {
-      const codigo = `CAT-${Date.now().toString().slice(-8)}`;
-      const payload = seleccion.flatMap((p) => {
-        if (!p.variant_type) return [{ catalog_product_id: p.id, quantity: cant[p.id], variant_key: null }];
-        return Object.entries(cantVariante[p.id]??{}).filter(([,q])=>Number(q)>0).map(([variant_key,quantity])=>({catalog_product_id:p.id,quantity:Number(quantity),variant_key}));
-      });
-      const { data, error } = await supabase.rpc("submit_catalog_order", {
-        p_code: codigo, p_customer_name: nombre.trim(), p_customer_phone: telefono.trim(),
-        p_session_id: sessionId, p_items: payload,
-      });
-      if (error) throw new Error(error.message);
-      setEnviado(String(data ?? codigo));
-    } catch (err: any) {
-      alert(`No se pudo registrar el pedido: ${err.message}`);
-    } finally {
-      setGuardando(false);
+  async function descargarPdfCatalogo(codigoPedido: string) {
+  const itemsPdf = seleccion.flatMap((p) => {
+    if (!p.variant_type) {
+      return [
+        {
+          codigo: p.code,
+          nombre: p.name,
+          imagen: p.image_url ?? null,
+          cantidad: Number(cant[p.id] ?? 0),
+          precio: Number(p.price ?? 0),
+          variante: null,
+        },
+      ];
     }
+
+    return Object.entries(cantVariante[p.id] ?? {})
+      .filter(([, q]) => Number(q) > 0)
+      .map(([clave, cantidad]) => ({
+        codigo: p.code,
+        nombre: p.name,
+        imagen: p.image_url ?? null,
+        cantidad: Number(cantidad),
+        precio: Number(p.price ?? 0),
+        variante:
+          p.variant_type === "ring_size"
+            ? `Talla ${clave}`
+            : `${clave} cm`,
+      }));
+  });
+
+  await generarPdfCatalogo({
+    negocio: nombreNegocio,
+    codigoPedido,
+    cliente: nombre.trim(),
+    telefono: telefono.trim(),
+    fecha: new Date().toLocaleString("es-BO"),
+    items: itemsPdf,
+    totalUnidades,
+    total: totalBs,
+  });
+}
+ async function enviarPedido(e: React.FormEvent) {
+  e.preventDefault();
+
+  if (
+    !nombre.trim() ||
+    !telefono.trim() ||
+    seleccion.length === 0 ||
+    guardando
+  )
+    return;
+
+  setGuardando(true);
+
+  try {
+    const codigo = `CAT-${Date.now().toString().slice(-8)}`;
+
+    const payload = seleccion.flatMap((p) => {
+      if (!p.variant_type) {
+        return [
+          {
+            catalog_product_id: p.id,
+            quantity: cant[p.id],
+            variant_key: null,
+          },
+        ];
+      }
+
+      return Object.entries(cantVariante[p.id] ?? {})
+        .filter(([, q]) => Number(q) > 0)
+        .map(([variant_key, quantity]) => ({
+          catalog_product_id: p.id,
+          quantity: Number(quantity),
+          variant_key,
+        }));
+    });
+
+    const { data, error } = await supabase.rpc(
+      "submit_catalog_order",
+      {
+        p_code: codigo,
+        p_customer_name: nombre.trim(),
+        p_customer_phone: telefono.trim(),
+        p_session_id: sessionId,
+        p_items: payload,
+      }
+    );
+
+    if (error) throw new Error(error.message);
+
+    const codigoFinal = String(data ?? codigo);
+
+    // Descarga automática del comprobante del catálogo.
+    await descargarPdfCatalogo(codigoFinal);
+
+    setEnviado(codigoFinal);
+  } catch (err: any) {
+    alert(`No se pudo registrar el pedido: ${err.message}`);
+  } finally {
+    setGuardando(false);
   }
+}
 
   function linkWhatsapp(codigo: string) {
     const lineas = seleccion.flatMap((p) => {
@@ -230,19 +311,66 @@ return;
     return `https://wa.me/${destino}?text=${encodeURIComponent(mensaje)}`;
   }
 
-  if (enviado) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-6" style={{ background: "#2B1E2E" }}>
-        <div className="max-w-sm w-full rounded-md p-6 text-center" style={{ background: "#F7F3EC" }}>
-          <p className="font-cursive text-3xl mb-2" style={{ color: "#9C7A3C" }}>{nombreNegocio}</p>
-          <p className="text-sm mb-4">Tu pedido {enviado} quedó registrado. Envíanoslo por WhatsApp para finalizar.</p>
-          <a href={linkWhatsapp(enviado)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
-            <MessageCircle size={15} /> Enviar por WhatsApp
+ if (enviado) {
+  return (
+    <div
+      className="min-h-screen flex items-center justify-center p-6"
+      style={{ background: "#2B1E2E" }}
+    >
+      <div
+        className="max-w-sm w-full rounded-md p-6 text-center"
+        style={{ background: "#F7F3EC" }}
+      >
+        <p
+          className="font-cursive text-3xl mb-2"
+          style={{ color: "#9C7A3C" }}
+        >
+          {nombreNegocio}
+        </p>
+
+        <p className="text-sm mb-2">
+          Tu pedido <strong>{enviado}</strong> quedó registrado.
+        </p>
+
+        <p
+          className="text-xs mb-5"
+          style={{ color: "#5B4E5E" }}
+        >
+          Descargamos el PDF con el detalle de tu pedido para que puedas
+          conservarlo.
+        </p>
+
+        <div className="flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => descargarPdfCatalogo(enviado)}
+            className="w-full px-4 py-2.5 rounded-md text-sm"
+            style={{
+              background: "#9C7A3C",
+              color: "#F7F3EC",
+            }}
+          >
+            Descargar PDF nuevamente
+          </button>
+
+          <a
+            href={linkWhatsapp(enviado)}
+            target="_blank"
+            rel="noreferrer"
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm"
+            style={{
+              background: "#4F6F52",
+              color: "#F7F3EC",
+            }}
+          >
+            <MessageCircle size={15} />
+            Enviar pedido por WhatsApp
           </a>
         </div>
       </div>
-    );
-  }
+    </div>
+  );
+}
 
   return (
     <div className="min-h-screen p-5" style={{ background: "#EDE7DE" }}>
