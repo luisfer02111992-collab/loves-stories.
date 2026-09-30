@@ -609,43 +609,27 @@ export async function generarPdfGrande(
 
     y += 7;
 
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(13);
+doc.setFont("helvetica", "bold");
+doc.setFontSize(13);
 
-    if (datos.saldoAFavor > 0) {
-      doc.setTextColor(79, 111, 82);
+if (datos.saldoPendiente > 0) {
+  doc.setTextColor(122, 37, 64);
 
-      doc.text(
-        "SALDO A FAVOR",
-        margen,
-        y
-      );
+  doc.text(
+    "SALDO PENDIENTE",
+    margen,
+    y
+  );
 
-      doc.text(
-        `Bs ${datos.saldoAFavor.toFixed(2)}`,
-        margen + anchoUtil,
-        y,
-        {
-          align: "right",
-        }
-      );
-    } else {
-      doc.setTextColor(122, 37, 64);
-
-      doc.text(
-        "SALDO PENDIENTE",
-        margen,
-        y
-      );
-
-      doc.text(
-        `Bs ${datos.saldoPendiente.toFixed(2)}`,
-        margen + anchoUtil,
-        y,
-        {
-          align: "right",
-        }
-      );
+  doc.text(
+    `Bs ${datos.saldoPendiente.toFixed(2)}`,
+    margen + anchoUtil,
+    y,
+    {
+      align: "right",
+    }
+  );
+}
     }
 
     doc.setTextColor(20, 20, 20);
