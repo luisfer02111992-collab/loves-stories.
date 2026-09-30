@@ -249,6 +249,7 @@ export default function Clientes() {
   }, [productoSeleccionado, depositoSeleccionado, grupos, depositos]);
   const subtotalSinDescuento = grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0);
   const total = grupos.reduce((a, g) => a + g.subtotalConDescuento, 0);
+  const cantidadTotal = grupos.reduce((a, g) => a + g.cantidadTotal, 0);
   const descuentoTotal = subtotalSinDescuento - total;
   const depositado = depositos.reduce((a, d) => a + d.amount, 0);
   // Nunca se muestra un número negativo: se separa en "saldo a favor" (pagó de
@@ -805,6 +806,10 @@ window.open(
             )}
 
             <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+              <div className="flex justify-between text-sm mb-1.5">
+  <span style={{ color: "#5B4E5E" }}>Cantidad total de joyas</span>
+  <span className="font-serif">{cantidadTotal} unidades</span>
+</div>
               <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Subtotal sin descuento</span><span>Bs {subtotalSinDescuento.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#4F6F52" }}>Descuento por cantidad</span><span style={{ color: "#4F6F52" }}>− Bs {descuentoTotal.toFixed(2)}</span></div>
               <div className="flex justify-between text-sm mb-1.5 pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total seleccionado</span><span className="font-serif">Bs {total.toFixed(2)}</span></div>
