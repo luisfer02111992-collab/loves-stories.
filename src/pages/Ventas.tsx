@@ -104,6 +104,7 @@ export default function Ventas() {
         categoria_id: it.products?.category_id ?? null,
         descripcion: it.products?.description ?? "",
         costo: Number(it.products?.cost ?? 0),
+        imagen: it.products?.image_url ?? null,
         cantidad: it.quantity,
         precio_base: it.unit_price,
         fecha: new Date(it.assigned_at).toLocaleDateString("es-BO"),
