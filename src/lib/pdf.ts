@@ -630,7 +630,6 @@ if (datos.saldoPendiente > 0) {
     }
   );
 }
-    }
 
     doc.setTextColor(20, 20, 20);
 
