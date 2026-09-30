@@ -38,7 +38,32 @@ export default function Catalogo() {
   const [descripcionPendiente, setDescripcionPendiente] = useState("");
 const [imagenPendiente, setImagenPendiente] = useState<File | null>(null);
 const [cantidadPendiente, setCantidadPendiente] = useState(1);
+const [busquedaCatalogo, setBusquedaCatalogo] = useState("");
+const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
+  useEffect(() => {
+  if (!imagenAmpliada) return;
 
+  const cerrarConEscape = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setImagenAmpliada(null);
+    }
+  };
+
+  const cerrarConAtras = () => {
+    setImagenAmpliada(null);
+  };
+
+  window.addEventListener("keydown", cerrarConEscape);
+  window.history.pushState({ imagenCatalogo: true }, "");
+
+  window.addEventListener("popstate", cerrarConAtras);
+
+  return () => {
+    window.removeEventListener("keydown", cerrarConEscape);
+    window.removeEventListener("popstate", cerrarConAtras);
+  };
+}, [imagenAmpliada]);
+  
   useEffect(() => {
     cargar();
     supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
@@ -361,7 +386,15 @@ if (indexError) {
     const mensaje = `Hola ${nombre}, te comparto nuestro catálogo — puedes ver los productos disponibles y seleccionar lo que te interese: ${linkCatalogo}`;
     return `https://wa.me/${limpio}?text=${encodeURIComponent(mensaje)}`;
   }
+const itemsCatalogoFiltrados = items.filter((p) => {
+  const q = busquedaCatalogo.trim().toLowerCase();
+  if (!q) return true;
 
+  return (
+    p.code.toLowerCase().includes(q) ||
+    p.name.toLowerCase().includes(q)
+  );
+});
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -711,9 +744,34 @@ if (indexError) {
           );
         })()}
       </div>
+      <div
+  className="p-4 mb-3"
+  style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+>
+  <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>
+    Buscar producto publicado
+  </p>
+
+  <div
+    className="flex items-center gap-2 px-3 py-2 rounded"
+    style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
+  >
+    <input
+      value={busquedaCatalogo}
+      onChange={(e) => setBusquedaCatalogo(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.preventDefault();
+      }}
+      placeholder="Escribe el código..."
+      className="flex-1 text-sm outline-none bg-transparent"
+    />
+
+    <Search size={17} style={{ color: "#5B4E5E" }} />
+  </div>
+</div>
             <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-        {items.map((p, i) => {
-          const maximo =
+{itemsCatalogoFiltrados.map((p, i) => {
+  const maximo =
             productos.find((pr) => pr.id === p.product_id)?.stock_available ??
             p.stock_available;
 
@@ -731,12 +789,12 @@ if (indexError) {
                 <div className="shrink-0">
                   {p.image_url ? (
                     <img
-                      src={p.image_url}
-                      alt={p.name}
-                      className="w-20 h-20 sm:w-16 sm:h-16 rounded-md object-cover"
-                      style={{ border: "1px solid #D9D0C2" }}
-                    />
-                  ) : (
+  src={p.image_url}
+  alt={p.name}
+  onClick={() => setImagenAmpliada(p.image_url)}
+  className="w-20 h-20 sm:w-16 sm:h-16 rounded-md object-cover cursor-zoom-in"
+  style={{ border: "1px solid #D9D0C2" }}
+/>                  ) : (
                     <div
                       className="w-20 h-20 sm:w-16 sm:h-16 rounded-md flex items-center justify-center"
                       style={{
@@ -1003,6 +1061,29 @@ if (indexError) {
           </p>
         )}
       </div>
+      {imagenAmpliada && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    style={{ background: "rgba(0,0,0,0.85)" }}
+    onClick={() => setImagenAmpliada(null)}
+  >
+    <button
+      type="button"
+      onClick={() => setImagenAmpliada(null)}
+      className="absolute top-4 right-4 w-10 h-10 rounded-full text-2xl flex items-center justify-center"
+      style={{ background: "#F7F3EC", color: "#5B4E5E" }}
+    >
+      ×
+    </button>
+
+    <img
+      src={imagenAmpliada}
+      alt="Imagen ampliada"
+      className="max-w-full max-h-[90vh] object-contain rounded-lg"
+      onClick={(e) => e.stopPropagation()}
+    />
+  </div>
+)}
     </div>
   );
 }
