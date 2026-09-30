@@ -9,6 +9,7 @@ import { precioNegocioPorCantidad } from "../lib/pricing";
 interface LineaCarrito {
   product: Product;
   cantidad: number;
+  precioPersonalizado?: number;
 }
 
 // Pantalla inicial: escanear/buscar productos a una lista temporal (nada se
@@ -117,7 +118,22 @@ useEffect(() => {
     setCarrito((prev) => prev.filter((l) => l.product.id !== productId));
     setFilaSeleccionada(null);
   }
+function cambiarPrecio(productId: string, valor: string) {
+  setCarrito((prev) =>
+    prev.map((l) => {
+      if (l.product.id !== productId) return l;
 
+      if (valor === "") {
+        return { ...l, precioPersonalizado: undefined };
+      }
+
+      const precio = Number(valor);
+      if (!Number.isFinite(precio) || precio < 0) return l;
+
+      return { ...l, precioPersonalizado: precio };
+    })
+  );
+}
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.key === "Delete" || e.key === "Backspace") && filaSeleccionada) {
@@ -148,10 +164,22 @@ useEffect(() => {
     return () => window.removeEventListener("keydown", confirmarConEnter);
   }, [mostrarAsignar, procesando, carrito, modo, clienteElegido, nuevoNombre, nuevoTelefono]);
 
-  function precioPreview(l: LineaCarrito) {
-    const categoria = categorias.find((c) => c.id === l.product.category_id)?.name ?? null;
-    return precioNegocioPorCantidad(categoria, l.product.name, l.cantidad, Number(l.product.price), l.product.description);
+ function precioPreview(l: LineaCarrito) {
+  if (l.precioPersonalizado !== undefined) {
+    return l.precioPersonalizado;
   }
+
+  const categoria =
+    categorias.find((c) => c.id === l.product.category_id)?.name ?? null;
+
+  return precioNegocioPorCantidad(
+    categoria,
+    l.product.name,
+    l.cantidad,
+    Number(l.product.price),
+    l.product.description
+  );
+}
   const total = carrito.reduce((a, l) => a + precioPreview(l) * l.cantidad, 0);
   const unidades = carrito.reduce((a, l) => a + l.cantidad, 0);
 
@@ -211,7 +239,9 @@ useEffect(() => {
         for (const l of carrito) {
           const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
             p_order_id: orden.id, p_product_id: l.product.id, p_quantity: l.cantidad, p_origin: "manual",
-            p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
+            p_seller_id: vendedorActivoId,
+p_session_id: sesionActivaId,
+p_unit_price: precioPreview(l),
           });
           if (errAsig) throw new Error(errAsig.message);
         }
@@ -228,7 +258,9 @@ useEffect(() => {
         for (const l of carrito) {
           const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
             p_order_id: orderId, p_product_id: l.product.id, p_quantity: l.cantidad, p_origin: "manual",
-            p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
+            p_seller_id: vendedorActivoId,
+p_session_id: sesionActivaId,
+p_unit_price: precioPreview(l),
           });
           if (errAsig) throw new Error(errAsig.message);
         }
@@ -329,7 +361,28 @@ useEffect(() => {
               style={{ borderBottom: i < carrito.length - 1 ? "1px solid #D9D0C2" : "none", background: filaSeleccionada === l.product.id ? "#EDE7DE" : "transparent" }}>
               <div>
                 <p className="text-sm">{l.product.code} · {l.product.name} × {l.cantidad}</p>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>Bs {precioPreview(l).toFixed(2)} c/u{precioPreview(l) < Number(l.product.price) ? ` (− Bs ${(Number(l.product.price) - precioPreview(l)).toFixed(2)} c/u)` : ""} · {l.product.stock_available} disponibles</p>
+<div className="flex items-center gap-2 mt-1">
+  <span className="text-xs" style={{ color: "#5B4E5E" }}>
+    Precio Bs
+  </span>
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={l.precioPersonalizado ?? precioPreview(l)}
+    onClick={(e) => e.stopPropagation()}
+    onChange={(e) => cambiarPrecio(l.product.id, e.target.value)}
+    className="w-20 px-2 py-1 rounded text-xs outline-none"
+    style={{
+      background: "#FFFFFF",
+      border: "1px solid #D9D0C2",
+      color: "#2B1E2E",
+    }}
+  />
+  <span className="text-xs" style={{ color: "#5B4E5E" }}>
+    c/u · {l.product.stock_available} disponibles
+  </span>
+</div>
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-serif text-sm">Bs {(precioPreview(l) * l.cantidad).toFixed(2)}</span>
