@@ -1318,3 +1318,297 @@ export function generarPdfPedido(
 
   return doc.output("blob");
 }
+// ============================================================
+// PDF PEDIDO POR CATÁLOGO
+// ============================================================
+
+export interface ItemPdfCatalogo {
+  codigo: string;
+  nombre: string;
+  imagen: string | null;
+  cantidad: number;
+  precio: number;
+  variante?: string | null;
+}
+
+export interface DatosPdfCatalogo {
+  negocio: string;
+  codigoPedido: string;
+  cliente: string;
+  telefono: string;
+  fecha: string;
+  items: ItemPdfCatalogo[];
+  totalUnidades: number;
+  total: number;
+}
+
+export async function generarPdfCatalogo(
+  datos: DatosPdfCatalogo
+): Promise<Blob> {
+  const doc = new jsPDF({
+    unit: "mm",
+    format: "a4",
+  });
+
+  const margen = 15;
+  const anchoUtil = 210 - margen * 2;
+  let y = margen;
+
+  // LOGO
+  try {
+    const logoUrl = `${window.location.origin}/logo-loves-stories.png`;
+    const logo = await cargarImagenComoDataUrl(logoUrl);
+
+    if (logo) {
+      doc.addImage(
+        logo.dataUrl,
+        logo.formato,
+        margen,
+        y,
+        18,
+        18,
+        undefined,
+        "FAST"
+      );
+    }
+  } catch {
+    // El PDF continúa aunque el logo no cargue.
+  }
+
+  // ENCABEZADO
+  doc.setFont("times", "bolditalic");
+  doc.setFontSize(23);
+  doc.setTextColor(214, 139, 154);
+  doc.text("Love's Stories", margen + 23, y + 10);
+
+  doc.setTextColor(20, 20, 20);
+  y += 20;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.setTextColor(90, 80, 90);
+  doc.text("PEDIDO POR CATÁLOGO", margen, y);
+
+  y += 8;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(20, 20, 20);
+
+  doc.text(`N.º de pedido: ${datos.codigoPedido}`, margen, y);
+  y += 5;
+
+  doc.text(`Cliente: ${datos.cliente}`, margen, y);
+  y += 5;
+
+  const telefonoLimpio = (datos.telefono ?? "").replace(/\D/g, "");
+
+  if (telefonoLimpio.length >= 7) {
+    doc.text(`Teléfono: ${datos.telefono}`, margen, y);
+    y += 5;
+  }
+
+  doc.text(`Fecha: ${datos.fecha}`, margen, y);
+  y += 7;
+
+  doc.setDrawColor(200, 195, 180);
+  doc.line(margen, y, margen + anchoUtil, y);
+  y += 6;
+
+  // COLUMNAS
+  const xFoto = margen;
+  const xProducto = margen + 20;
+  const xCant = margen + 105;
+  const xPrecio = margen + 125;
+  const xSubtotal = margen + anchoUtil;
+
+  function encabezadoTabla() {
+    doc.setFillColor(247, 243, 236);
+    doc.rect(margen, y, anchoUtil, 7, "F");
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7);
+    doc.setTextColor(70, 60, 70);
+
+    doc.text("FOTO", xFoto + 1, y + 4.5);
+    doc.text("CÓDIGO / PRODUCTO", xProducto, y + 4.5);
+    doc.text("CANT.", xCant, y + 4.5);
+    doc.text("PRECIO", xPrecio, y + 4.5);
+    doc.text("SUBTOTAL", xSubtotal, y + 4.5, {
+      align: "right",
+    });
+
+    doc.setTextColor(20, 20, 20);
+    y += 7;
+  }
+
+  encabezadoTabla();
+
+  // PRODUCTOS
+  for (const item of datos.items) {
+    let imagenCargada: Awaited<
+      ReturnType<typeof cargarImagenComoDataUrl>
+    > = null;
+
+    if (item.imagen) {
+      try {
+        imagenCargada = await cargarImagenComoDataUrl(item.imagen);
+      } catch {
+        imagenCargada = null;
+      }
+    }
+
+    const altoFila = imagenCargada ? 19 : 13;
+
+    if (y + altoFila > 282) {
+      doc.addPage();
+      y = margen;
+      encabezadoTabla();
+    }
+
+    const yInicio = y;
+
+    // FOTO
+    if (imagenCargada) {
+      try {
+        doc.addImage(
+          imagenCargada.dataUrl,
+          imagenCargada.formato,
+          xFoto,
+          yInicio + 1,
+          16,
+          16,
+          undefined,
+          "FAST"
+        );
+      } catch {
+        // Continúa sin foto.
+      }
+    } else {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(150, 145, 145);
+      doc.text("—", xFoto + 7, yInicio + 5);
+    }
+
+    // PRODUCTO
+    doc.setTextColor(20, 20, 20);
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(7.5);
+
+    doc.text(
+      `${item.codigo} · ${item.nombre}`,
+      xProducto,
+      yInicio + 5,
+      { maxWidth: 80 }
+    );
+
+    if (item.variante) {
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.setTextColor(122, 95, 45);
+
+      doc.text(
+        item.variante,
+        xProducto,
+        yInicio + 10,
+        { maxWidth: 80 }
+      );
+    }
+
+    // CANTIDAD
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    doc.setTextColor(20, 20, 20);
+
+    doc.text(
+      String(item.cantidad),
+      xCant + 5,
+      yInicio + 5,
+      { align: "center" }
+    );
+
+    // PRECIO
+    doc.text(
+      `Bs ${item.precio.toFixed(2)}`,
+      xPrecio,
+      yInicio + 5
+    );
+
+    // SUBTOTAL
+    doc.setFont("helvetica", "bold");
+
+    doc.text(
+      `Bs ${(item.precio * item.cantidad).toFixed(2)}`,
+      xSubtotal,
+      yInicio + 5,
+      { align: "right" }
+    );
+
+    y += altoFila;
+
+    doc.setDrawColor(225, 220, 215);
+    doc.line(margen, y, margen + anchoUtil, y);
+  }
+
+  // TOTALES
+  y += 7;
+
+  if (y > 265) {
+    doc.addPage();
+    y = margen;
+  }
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(10);
+  doc.setTextColor(20, 20, 20);
+
+  doc.text("Total de unidades", margen, y);
+
+  doc.text(
+    String(datos.totalUnidades),
+    margen + anchoUtil,
+    y,
+    { align: "right" }
+  );
+
+  y += 7;
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+
+  doc.text("TOTAL", margen, y);
+
+  doc.text(
+    `Bs ${datos.total.toFixed(2)}`,
+    margen + anchoUtil,
+    y,
+    { align: "right" }
+  );
+
+  y += 12;
+
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(9);
+  doc.setTextColor(120, 120, 120);
+
+  doc.text(
+    "Pedido realizado mediante el catálogo de Love's Stories.",
+    margen,
+    y
+  );
+
+  const nombreArchivo =
+    `pedido_catalogo_${datos.codigoPedido}_` +
+    `${datos.cliente.replace(/\s+/g, "_")}.pdf`;
+
+  const pdfBlob = doc.output("blob");
+
+  try {
+    doc.save(nombreArchivo);
+  } catch {
+    // Si el navegador bloquea la descarga, igualmente devolvemos el Blob.
+  }
+
+  return pdfBlob;
+}
