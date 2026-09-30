@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Check, X, Clock, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { CatalogSubmission, Customer } from "../lib/types";
@@ -27,12 +27,41 @@ export default function PedidosCatalogo() {
   const [clienteManual, setClienteManual] = useState<Record<string, string>>({});
   const [busquedaCliente, setBusquedaCliente] = useState<Record<string, string>>({});
   const [pedidoAbierto, setPedidoAbierto] = useState<string | null>(null);
+  const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
+  const imagenAmpliadaRef = useRef<string | null>(null);
   
   useEffect(() => {
     cargar();
     supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
   }, []);
+useEffect(() => {
+  imagenAmpliadaRef.current = imagenAmpliada;
+}, [imagenAmpliada]);
 
+useEffect(() => {
+  function cerrarConEscape(e: KeyboardEvent) {
+    if (e.key === "Escape" && imagenAmpliadaRef.current) {
+      setImagenAmpliada(null);
+      imagenAmpliadaRef.current = null;
+    }
+  }
+
+  function manejarAtras() {
+  if (!imagenAmpliadaRef.current) return;
+
+  setImagenAmpliada(null);
+  imagenAmpliadaRef.current = null;
+}
+
+  window.addEventListener("keydown", cerrarConEscape);
+  window.addEventListener("popstate", manejarAtras);
+
+  return () => {
+    window.removeEventListener("keydown", cerrarConEscape);
+    window.removeEventListener("popstate", manejarAtras);
+  };
+}, []);
+  
   async function cargar() {
     const { data } = await supabase
       .from("catalog_submissions")
@@ -220,10 +249,15 @@ price: Number(it.catalog_products?.price ?? 0),
                     {/* FOTO */}
                     <div className="shrink-0">
                       {it.image_url ? (
-                        <img
-                          src={it.image_url}
-                          alt={it.name}
-                          className="w-20 h-20 rounded-md object-cover"
+                       <img
+  src={it.image_url}
+  alt={it.name}
+  onClick={() => {
+    setImagenAmpliada(it.image_url);
+    imagenAmpliadaRef.current = it.image_url;
+    window.history.pushState({ fotoPedido: true }, "");
+  }}
+  className="w-20 h-20 rounded-md object-cover cursor-zoom-in"
                           style={{
                             border: "1px solid #D9D0C2",
                           }}
@@ -491,7 +525,36 @@ price: Number(it.catalog_products?.price ?? 0),
       No hay pedidos pendientes del catálogo.
     </p>
   )}
-</div>        
+</div> 
+     {imagenAmpliada && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    style={{ background: "rgba(0,0,0,0.88)" }}
+    onClick={() => {
+      setImagenAmpliada(null);
+      imagenAmpliadaRef.current = null;
+    }}
+  >
+    <button
+      type="button"
+      onClick={() => {
+        setImagenAmpliada(null);
+        imagenAmpliadaRef.current = null;
+      }}
+      className="absolute top-4 right-4 w-10 h-10 rounded-full text-2xl flex items-center justify-center"
+      style={{ background: "#F7F3EC", color: "#5B4E5E" }}
+    >
+      ×
+    </button>
+
+    <img
+      src={imagenAmpliada}
+      alt="Producto ampliado"
+      className="max-w-full max-h-[90vh] object-contain rounded-lg"
+      onClick={(e) => e.stopPropagation()}
+    />
+  </div>
+)} 
     </div>
   );
 }
