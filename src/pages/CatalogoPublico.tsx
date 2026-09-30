@@ -199,46 +199,55 @@ return;
   };
 }, []);
   async function descargarPdfCatalogo(codigoPedido: string) {
-  const itemsPdf = seleccion.flatMap((p) => {
-    if (!p.variant_type) {
-      return [
-        {
+    const itemsPdf = seleccion.map((p) => {
+      if (!p.variant_type) {
+        return {
           codigo: p.code,
           nombre: p.name,
           imagen: p.image_url ?? null,
           cantidad: Number(cant[p.id] ?? 0),
           precio: Number(p.price ?? 0),
           variante: null,
-        },
-      ];
-    }
+        };
+      }
 
-    return Object.entries(cantVariante[p.id] ?? {})
-      .filter(([, q]) => Number(q) > 0)
-      .map(([clave, cantidad]) => ({
+      const variantesSeleccionadas = Object.entries(cantVariante[p.id] ?? {})
+        .filter(([, q]) => Number(q) > 0);
+
+      const cantidadTotalModelo = variantesSeleccionadas.reduce(
+        (total, [, q]) => total + Number(q),
+        0
+      );
+
+      const detalleVariantes = variantesSeleccionadas
+        .map(([clave, cantidad]) =>
+          p.variant_type === "ring_size"
+            ? `Talla ${clave} - ${cantidad} u.`
+            : `${clave} cm - ${cantidad} u.`
+        )
+        .join("\n");
+
+      return {
         codigo: p.code,
         nombre: p.name,
         imagen: p.image_url ?? null,
-        cantidad: Number(cantidad),
+        cantidad: cantidadTotalModelo,
         precio: Number(p.price ?? 0),
-        variante:
-          p.variant_type === "ring_size"
-            ? `Talla ${clave}`
-            : `${clave} cm`,
-      }));
-  });
+        variante: detalleVariantes,
+      };
+    });
 
-  await generarPdfCatalogo({
-    negocio: nombreNegocio,
-    codigoPedido,
-    cliente: nombre.trim(),
-    telefono: telefono.trim(),
-    fecha: new Date().toLocaleString("es-BO"),
-    items: itemsPdf,
-    totalUnidades,
-    total: totalBs,
-  });
-}
+    await generarPdfCatalogo({
+      negocio: nombreNegocio,
+      codigoPedido,
+      cliente: nombre.trim(),
+      telefono: telefono.trim(),
+      fecha: new Date().toLocaleString("es-BO"),
+      items: itemsPdf,
+      totalUnidades,
+      total: totalBs,
+    });
+  }
  async function enviarPedido(e: React.FormEvent) {
   e.preventDefault();
 
