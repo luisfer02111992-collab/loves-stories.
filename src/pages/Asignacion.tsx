@@ -17,6 +17,8 @@ export default function Asignacion() {
   const [buscando, setBuscando] = useState(false);
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [cantidad, setCantidad] = useState(1);
+  const [tallasDisponibles, setTallasDisponibles] = useState<Record<string, number>>({});
+  const [tallaSeleccionada, setTallaSeleccionada] = useState("");
   const [buscarFoto, setBuscarFoto] = useState(false);
   const [items, setItems] = useState<LineaPedido[]>([]);
   const [reglas, setReglas] = useState<PricingRule[]>([]);
@@ -45,14 +47,13 @@ export default function Asignacion() {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const { data: filas } = await supabase
       .from("order_items")
-      .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id)")
+   .select("id, product_id, quantity, unit_price, assigned_at, ring_size, products(code, name, category_id)")
       .eq("order_id", orden.id)
       .gte("assigned_at", hoy.toISOString())
       .order("assigned_at", { ascending: true });
     setItems((filas ?? []).map((f: any) => ({
       id: f.id, product_id: f.product_id, codigo: f.products?.code ?? "", nombre: f.products?.name ?? "",
-      categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base: f.unit_price,
-      fecha: new Date(f.assigned_at).toLocaleTimeString("es-BO").slice(0, 5),
+categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base: f.unit_price, ring_size: f.ring_size ?? null,      fecha: new Date(f.assigned_at).toLocaleTimeString("es-BO").slice(0, 5),
     })));
   }
 
@@ -67,50 +68,104 @@ export default function Asignacion() {
   // Escribir/escanear el código YA NO asigna nada — solo busca y muestra el
   // producto. Hace falta presionar "Asignar" (o Enter, que hace lo mismo)
   // para que la unidad se descuente del inventario de verdad.
-  async function buscarProducto(e: React.FormEvent) {
-    e.preventDefault();
-    if (!codigo.trim() || buscando) return;
-    setBuscando(true);
-    setNoEncontrado(false);
-    const { data: producto } = await supabase.from("products").select("*").eq("code", codigo.trim()).is("deleted_at", null).maybeSingle();
+ async function buscarProducto(e: React.FormEvent) {
+  e.preventDefault();
+  if (!codigo.trim() || buscando) return;
+
+  setBuscando(true);
+  setNoEncontrado(false);
+  setTallasDisponibles({});
+  setTallaSeleccionada("");
+
+  const { data: producto } = await supabase
+    .from("products")
+    .select("*")
+    .eq("code", codigo.trim())
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (!producto) {
     setBuscando(false);
-    if (!producto) {
-      setProductoEncontrado(null);
-      setNoEncontrado(true);
-      return;
-    }
-    setProductoEncontrado(producto as Product);
-    setCantidad(1);
+    setProductoEncontrado(null);
+    setNoEncontrado(true);
+    return;
   }
+
+  const { data: productoCatalogo } = await supabase
+    .from("catalog_products")
+    .select("variant_type, variant_stock")
+    .eq("product_id", producto.id)
+    .eq("active", true)
+    .eq("variant_type", "ring_size")
+    .maybeSingle();
+
+  if (productoCatalogo?.variant_type === "ring_size") {
+    const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
+
+    const disponibles = Object.fromEntries(
+      Object.entries(tallas).filter(([, stock]) => Number(stock) > 0)
+    );
+
+    setTallasDisponibles(disponibles);
+  }
+
+  setProductoEncontrado(producto as Product);
+  setCantidad(1);
+  setBuscando(false);
+}
 
   // Confirmar con el botón "Asignar" (o Enter dentro del formulario de
   // confirmación) es el ÚNICO momento en que se descuenta stock de verdad.
-  async function confirmarAsignacion(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    if (!productoEncontrado || !clienteId || enviando) return;
-    setEnviando(true);
-    const orderId = await obtenerOrdenAbierta(clienteId);
-    const { error } = await supabase.rpc("assign_product_to_order", {
-      p_order_id: orderId,
-      p_product_id: productoEncontrado.id,
-      p_quantity: cantidad,
-      p_origin: "manual",
-      p_seller_id: vendedorActivoId,
-      p_session_id: sesionActivaId,
-    });
-    setEnviando(false);
-    if (error) {
-      alert(error.message);
-      return;
-    }
-    setCodigo("");
-    setProductoEncontrado(null);
-    setCantidad(1);
-    setNoEncontrado(false);
-    setBuscarFoto(false);
-    inputRef.current?.focus();
-    cargarPedidoDeHoy(clienteId);
+async function confirmarAsignacion(e?: React.FormEvent) {
+  if (e) e.preventDefault();
+  if (!productoEncontrado || !clienteId || enviando) return;
+
+  const tieneTallas = Object.keys(tallasDisponibles).length > 0;
+
+  if (tieneTallas && !tallaSeleccionada) {
+    alert("Selecciona una talla antes de asignar.");
+    return;
   }
+
+  if (
+    tieneTallas &&
+    cantidad > Number(tallasDisponibles[tallaSeleccionada] ?? 0)
+  ) {
+    alert("No hay suficientes unidades disponibles de esa talla.");
+    return;
+  }
+
+  setEnviando(true);
+
+  const orderId = await obtenerOrdenAbierta(clienteId);
+
+  const { error } = await supabase.rpc("assign_product_to_order", {
+    p_order_id: orderId,
+    p_product_id: productoEncontrado.id,
+    p_quantity: cantidad,
+    p_origin: "manual",
+    p_seller_id: vendedorActivoId,
+    p_session_id: sesionActivaId,
+    p_ring_size: tieneTallas ? tallaSeleccionada : null,
+  });
+
+  setEnviando(false);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  setCodigo("");
+  setProductoEncontrado(null);
+  setCantidad(1);
+  setTallasDisponibles({});
+  setTallaSeleccionada("");
+  setNoEncontrado(false);
+  setBuscarFoto(false);
+  inputRef.current?.focus();
+  cargarPedidoDeHoy(clienteId);
+}
 
   function cancelarBusqueda() {
     setCodigo("");
@@ -137,17 +192,71 @@ function irAProductos() {
   // + / − sobre una fila ya asignada: cada click es una operación real e
   // inmediata contra Supabase (aumentar descuenta la diferencia, o sea 1
   // unidad más; disminuir devuelve 1 unidad al inventario).
-  async function aumentarUnidad(grupoProductId: string) {
-    if (!clienteId) return;
-    setEnviando(true);
-    const orderId = await obtenerOrdenAbierta(clienteId);
-    await supabase.rpc("assign_product_to_order", {
-      p_order_id: orderId, p_product_id: grupoProductId, p_quantity: 1, p_origin: "manual",
-      p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
-    });
-    setEnviando(false);
-    cargarPedidoDeHoy(clienteId);
+async function aumentarUnidad(grupoProductId: string) {
+  const { data: producto } = await supabase
+    .from("products")
+    .select("*")
+    .eq("id", grupoProductId)
+    .is("deleted_at", null)
+    .maybeSingle();
+
+  if (!producto) {
+    alert("No se encontró el producto.");
+    return;
   }
+
+  const { data: productoCatalogo } = await supabase
+    .from("catalog_products")
+    .select("variant_type, variant_stock")
+    .eq("product_id", grupoProductId)
+    .eq("active", true)
+    .eq("variant_type", "ring_size")
+    .maybeSingle();
+
+  if (productoCatalogo?.variant_type === "ring_size") {
+    const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
+
+    const disponibles = Object.fromEntries(
+      Object.entries(tallas).filter(([, stock]) => Number(stock) > 0)
+    );
+
+    if (Object.keys(disponibles).length === 0) {
+      alert("Este anillo ya no tiene tallas disponibles.");
+      return;
+    }
+
+    setTallasDisponibles(disponibles);
+    setTallaSeleccionada("");
+    setCantidad(1);
+    setProductoEncontrado(producto as Product);
+    return;
+  }
+
+  if (!clienteId) return;
+
+  setEnviando(true);
+
+  const orderId = await obtenerOrdenAbierta(clienteId);
+
+  const { error } = await supabase.rpc("assign_product_to_order", {
+    p_order_id: orderId,
+    p_product_id: grupoProductId,
+    p_quantity: 1,
+    p_origin: "manual",
+    p_seller_id: vendedorActivoId,
+    p_session_id: sesionActivaId,
+    p_ring_size: null,
+  });
+
+  setEnviando(false);
+
+  if (error) {
+    alert(error.message);
+    return;
+  }
+
+  cargarPedidoDeHoy(clienteId);
+}
 
   async function disminuirUnidad(ultimoItemId: string) {
     await supabase.rpc("remove_order_item_unit", { p_order_item_id: ultimoItemId, p_quantity: 1 });
@@ -328,10 +437,56 @@ function irAProductos() {
           <form onSubmit={confirmarAsignacion} className="p-4 rounded-md mb-3" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
             <p className="text-xs mb-1" style={{ color: "#7A5F2D" }}>Producto encontrado — confirma para asignar (no se ha descontado nada todavía)</p>
             <p className="text-sm font-medium mb-2">{productoEncontrado.code} · {productoEncontrado.name} — Bs {productoEncontrado.price} <span className="text-xs" style={{ color: "#5B4E5E" }}>({productoEncontrado.stock_available} disponibles)</span></p>
-            <div className="flex gap-2">
-              <input type="number" min={1} max={productoEncontrado.stock_available} autoFocus value={cantidad}
-                onChange={(e) => setCantidad(Math.max(1, Math.min(productoEncontrado.stock_available, Number(e.target.value) || 1)))}
-                className="w-24 px-2 py-3 rounded text-lg text-center outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+            {Object.keys(tallasDisponibles).length > 0 && (
+  <div className="mb-3">
+    <p className="text-xs mb-1" style={{ color: "#7A5F2D" }}>
+      Selecciona la talla
+    </p>
+
+    <select
+      value={tallaSeleccionada}
+      onChange={(e) => {
+        setTallaSeleccionada(e.target.value);
+        setCantidad(1);
+      }}
+      className="w-full px-3 py-3 rounded text-sm outline-none"
+      style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+    >
+      <option value="">Seleccionar talla...</option>
+
+      {Object.entries(tallasDisponibles)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([talla, stock]) => (
+          <option key={talla} value={talla}>
+            Talla {talla} — {stock} {stock === 1 ? "disponible" : "disponibles"}
+          </option>
+        ))}
+    </select>
+  </div>
+)}
+              <div className="flex gap-2">
+<input
+  type="number"
+  min={1}
+  max={
+    tallaSeleccionada
+      ? Number(tallasDisponibles[tallaSeleccionada] ?? 0)
+      : productoEncontrado.stock_available
+  }
+  autoFocus={Object.keys(tallasDisponibles).length === 0}
+  value={cantidad}
+  onChange={(e) => {
+    const maximo = tallaSeleccionada
+      ? Number(tallasDisponibles[tallaSeleccionada] ?? 0)
+      : productoEncontrado.stock_available;
+
+    setCantidad(
+      Math.max(1, Math.min(maximo, Number(e.target.value) || 1))
+    );
+  }}
+  className="w-24 px-2 py-3 rounded text-lg text-center outline-none"
+  style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+/>
               <button type="submit" disabled={enviando || productoEncontrado.stock_available < 1} className="flex-1 rounded flex items-center justify-center gap-1.5 text-sm font-medium" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                 <Plus size={16} /> {enviando ? "Asignando..." : "Asignar (Enter)"}
               </button>
@@ -364,8 +519,13 @@ function irAProductos() {
               style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none", background: filaSeleccionada === g.product_id ? "#EDE7DE" : "transparent" }}>
               <div>
                 <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>{g.detalle.map((d) => `${d.cantidad} un. — ${d.fecha}`).join(" · ")}</p>
-              </div>
+<p className="text-xs" style={{ color: "#5B4E5E" }}>
+  {g.detalle
+    .map((d) =>
+      `${d.cantidad} un.${d.ring_size ? ` — Talla ${d.ring_size}` : ""} — ${d.fecha}`
+    )
+    .join(" · ")}
+</p>              </div>
               <div className="flex items-center gap-2">
                 <div className="text-right">
                   <span className="font-serif text-sm block">Bs {g.subtotalConDescuento.toFixed(2)}</span>
