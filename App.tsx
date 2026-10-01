@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { SellerSessionProvider } from "./hooks/useSellerSession";
@@ -50,7 +50,47 @@ export default function App() {
 
 function AppRoutes() {
   const { recovery } = useAuth();
+  useEffect(() => {
+    function desplazarConFlechas(e: KeyboardEvent) {
+      const elemento = e.target as HTMLElement | null;
+      const tag = elemento?.tagName;
 
+      // No interferir cuando estás escribiendo o usando campos
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        elemento?.isContentEditable
+      ) {
+        return;
+      }
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+
+        window.scrollBy({
+          top: 180,
+          behavior: "smooth",
+        });
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+
+        window.scrollBy({
+          top: -180,
+          behavior: "smooth",
+        });
+      }
+    }
+
+    window.addEventListener("keydown", desplazarConFlechas);
+
+    return () => {
+      window.removeEventListener("keydown", desplazarConFlechas);
+    };
+  }, []);
+  
   // El enlace de recuperación de Supabase puede caer en cualquier ruta de la app
   // (según la Site URL configurada en Supabase). En cuanto detectamos la sesión de
   // recuperación (evento PASSWORD_RECOVERY, ver useAuth), mostramos siempre la
