@@ -411,7 +411,31 @@ export default function Clientes() {
       grupos, subtotalSinDescuento, descuentoTotal, total,
       depositado, saldoPendiente, saldoAFavor, mostrarPagos: true,
     });
-    setUltimoPdf({ blob, texto: mensajeWhatsapp(true) });
+    const textoWhatsapp = mensajeWhatsapp(true);
+
+    // Descargar automáticamente el PDF del pedido cerrado.
+    const urlPdf = URL.createObjectURL(blob);
+    const enlace = document.createElement("a");
+    enlace.href = urlPdf;
+    enlace.download = `pedido_cerrado_${seleccionado.name || "cliente"}.pdf`;
+    enlace.style.display = "none";
+    document.body.appendChild(enlace);
+    enlace.click();
+
+    setTimeout(() => {
+      document.body.removeChild(enlace);
+      URL.revokeObjectURL(urlPdf);
+    }, 2000);
+
+    // Al cerrar el pedido, abrir directamente el WhatsApp del cliente
+    // con el mensaje de cierre listo para enviar. El PDF queda descargado
+    // para adjuntarlo en el chat.
+    window.open(
+      linkWhatsapp(seleccionado.phone, textoWhatsapp),
+      "_blank"
+    );
+
+    setUltimoPdf({ blob, texto: textoWhatsapp });
     setCerrando(false);
     setMostrarResumenCierre(false);
     await cargarPedido(seleccionado.id);
