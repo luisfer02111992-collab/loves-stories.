@@ -314,6 +314,20 @@ if (linea) {
   }, [filaSeleccionada, carrito]);
 
   useEffect(() => {
+    function volverAlBuscadorConEnter(e: KeyboardEvent) {
+      if (e.key !== "Enter" || mostrarAsignar) return;
+      const activo = document.activeElement as HTMLElement | null;
+      if (activo === inputRef.current) return;
+      if (activo?.tagName === "TEXTAREA" || activo?.tagName === "SELECT") return;
+      e.preventDefault();
+      e.stopPropagation();
+      inputRef.current?.focus();
+    }
+    window.addEventListener("keydown", volverAlBuscadorConEnter);
+    return () => window.removeEventListener("keydown", volverAlBuscadorConEnter);
+  }, [mostrarAsignar]);
+
+  useEffect(() => {
     function confirmarConEnter(e: KeyboardEvent) {
       if (e.key !== "Enter" || !mostrarAsignar || procesando || carrito.length === 0) return;
       const el = e.target as HTMLElement | null;
@@ -555,6 +569,13 @@ style={{
     onChange={(e) =>
   cambiarPrecio(l.product.id, e.target.value, l.ringSize)
 }
+    onKeyDown={(e) => {
+      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+        e.preventDefault();
+        e.stopPropagation();
+        inputRef.current?.focus();
+      }
+    }}
     className="w-20 px-2 py-1 rounded text-xs outline-none"
     style={{
       background: "#FFFFFF",
