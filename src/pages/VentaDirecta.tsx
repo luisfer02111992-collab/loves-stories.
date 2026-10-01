@@ -18,7 +18,10 @@ export default function VentaDirecta() {
   const [metodoPago, setMetodoPago] = useState("efectivo");
   const [finalizando, setFinalizando] = useState(false);
   const [ultimaVenta, setUltimaVenta] = useState<{ total: number; numero: number } | null>(null);
-
+const [productoPendiente, setProductoPendiente] = useState<Product | null>(null);
+const [tallasDisponibles, setTallasDisponibles] = useState<Record<string, number>>({});
+const [tallaSeleccionada, setTallaSeleccionada] = useState("");
+  
   useEffect(() => {
     cargarProductos();
     loadPricingRules().then(setReglas);
@@ -50,32 +53,117 @@ export default function VentaDirecta() {
   async function cargarItems(id: string) {
     const { data: filas } = await supabase
       .from("order_items")
-      .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id)")
+.select("id, product_id, quantity, unit_price, assigned_at, ring_size, products(code, name, category_id)")
       .eq("order_id", id)
       .order("assigned_at", { ascending: true });
     setItems((filas ?? []).map((f: any) => ({
       id: f.id, product_id: f.product_id, codigo: f.products?.code ?? "", nombre: f.products?.name ?? "",
       categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base: f.unit_price,
-      fecha: new Date(f.assigned_at).toLocaleTimeString("es-BO").slice(0, 5),
+fecha: new Date(f.assigned_at).toLocaleTimeString("es-BO").slice(0, 5),
+ring_size: f.ring_size ?? null,
     })));
   }
 
-  async function agregar(p: Product) {
-    try {
-      const id = await obtenerOrden();
-      const { error } = await supabase.rpc("assign_product_to_order", {
-        p_order_id: id, p_product_id: p.id, p_quantity: cantidad, p_origin: "manual",
-        p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
-      });
-      if (error) { alert(error.message); return; }
-      setBusqueda(""); setMostrarLista(false); setCantidad(1);
-      cargarItems(id);
-      cargarProductos();
-    } catch (e: any) {
-      alert(e.message);
+ async function agregar(p: Product) {
+  try {
+    const { data: productoCatalogo } = await supabase
+      .from("catalog_products")
+      .select("variant_type, variant_stock")
+      .eq("product_id", p.id)
+      .eq("active", true)
+      .eq("variant_type", "ring_size")
+      .maybeSingle();
+
+    if (productoCatalogo?.variant_type === "ring_size") {
+      const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
+
+      const disponibles = Object.fromEntries(
+        Object.entries(tallas).filter(([, stock]) => Number(stock) > 0)
+      );
+
+      if (Object.keys(disponibles).length === 0) {
+        alert("Este anillo no tiene tallas disponibles.");
+        return;
+      }
+
+      setProductoPendiente(p);
+      setTallasDisponibles(disponibles);
+      setTallaSeleccionada("");
+      setMostrarLista(false);
+      return;
     }
+
+    const id = await obtenerOrden();
+
+    const { error } = await supabase.rpc("assign_product_to_order", {
+      p_order_id: id,
+      p_product_id: p.id,
+      p_quantity: cantidad,
+      p_origin: "manual",
+      p_seller_id: vendedorActivoId,
+      p_session_id: sesionActivaId,
+      p_ring_size: null,
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setBusqueda("");
+    setMostrarLista(false);
+    setCantidad(1);
+    cargarItems(id);
+    cargarProductos();
+  } catch (e: any) {
+    alert(e.message);
+  }
+}
+async function confirmarAnillo() {
+  if (!productoPendiente || !tallaSeleccionada) {
+    alert("Selecciona una talla.");
+    return;
   }
 
+  const stockTalla = Number(tallasDisponibles[tallaSeleccionada] ?? 0);
+
+  if (cantidad > stockTalla) {
+    alert("No hay suficientes unidades disponibles de esa talla.");
+    return;
+  }
+
+  try {
+    const id = await obtenerOrden();
+
+    const { error } = await supabase.rpc("assign_product_to_order", {
+      p_order_id: id,
+      p_product_id: productoPendiente.id,
+      p_quantity: cantidad,
+      p_origin: "manual",
+      p_seller_id: vendedorActivoId,
+      p_session_id: sesionActivaId,
+      p_ring_size: tallaSeleccionada,
+    });
+
+    if (error) {
+      alert(error.message);
+      return;
+    }
+
+    setProductoPendiente(null);
+    setTallasDisponibles({});
+    setTallaSeleccionada("");
+    setBusqueda("");
+    setMostrarLista(false);
+    setCantidad(1);
+
+    cargarItems(id);
+    cargarProductos();
+  } catch (e: any) {
+    alert(e.message);
+  }
+}
+  
   async function quitarUnidad(itemId: string) {
     await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
     if (orderId) cargarItems(orderId);
@@ -136,6 +224,65 @@ export default function VentaDirecta() {
             <input type="number" min={1} value={cantidad} onChange={(e) => setCantidad(Math.max(1, Number(e.target.value) || 1))}
               className="w-16 px-2 py-2 rounded text-sm text-center outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
           </div>
+          {productoPendiente && (
+  <div
+    className="mt-3 p-3 rounded"
+    style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}
+  >
+    <p className="text-sm font-medium mb-2">
+      {productoPendiente.code} · {productoPendiente.name}
+    </p>
+
+    <p className="text-xs mb-1" style={{ color: "#7A5F2D" }}>
+      Selecciona la talla
+    </p>
+
+    <select
+      value={tallaSeleccionada}
+      onChange={(e) => setTallaSeleccionada(e.target.value)}
+      className="w-full px-3 py-2 rounded text-sm outline-none mb-2"
+      style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+    >
+      <option value="">Seleccionar talla...</option>
+
+      {Object.entries(tallasDisponibles)
+        .sort(([a], [b]) => Number(a) - Number(b))
+        .map(([talla, stock]) => (
+          <option key={talla} value={talla}>
+            Talla {talla} — {stock} {stock === 1 ? "disponible" : "disponibles"}
+          </option>
+        ))}
+    </select>
+
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={confirmarAnillo}
+        disabled={!tallaSeleccionada}
+        className="flex-1 px-3 py-2 rounded text-sm font-medium"
+        style={{
+          background: tallaSeleccionada ? "#9C7A3C" : "#D9D0C2",
+          color: "#F7F3EC",
+        }}
+      >
+        Agregar anillo
+      </button>
+
+      <button
+        type="button"
+        onClick={() => {
+          setProductoPendiente(null);
+          setTallasDisponibles({});
+          setTallaSeleccionada("");
+        }}
+        className="px-3 py-2 rounded text-sm"
+        style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+      >
+        Cancelar
+      </button>
+    </div>
+  </div>
+)}
           {mostrarLista && coincidencias.length > 0 && (
             <div className="absolute left-4 right-4 mt-1 rounded-md z-10 shadow-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               {coincidencias.map((p) => (
@@ -153,7 +300,11 @@ export default function VentaDirecta() {
             <div key={g.product_id} className="flex items-center justify-between px-3.5 py-2.5" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <div>
                 <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>{g.detalle.map((d) => `${d.cantidad} un. — ${d.fecha}`).join(" · ")}</p>
+                <p className="text-xs" style={{ color: "#5B4E5E" }}>
+  {g.detalle.map((d) =>
+    `${d.cantidad} un.${d.ring_size ? ` — Talla ${d.ring_size}` : ""} — ${d.fecha}`
+  ).join(" · ")}
+</p>
               </div>
               <div className="flex items-center gap-3">
                 <span className="font-serif text-sm">Bs {g.subtotalConDescuento.toFixed(2)}</span>
