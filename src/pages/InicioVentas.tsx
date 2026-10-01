@@ -10,6 +10,8 @@ interface LineaCarrito {
   product: Product;
   cantidad: number;
   precioPersonalizado?: number;
+  ringSize?: string | null;
+  stockTalla?: number | null;
 }
 
 // Pantalla inicial: escanear/buscar productos a una lista temporal (nada se
@@ -76,6 +78,80 @@ useEffect(() => {
   setProductoSinStock(p);
   return;
 }
+    const { data: productoCatalogo, error: errorCatalogo } = await supabase
+  .from("catalog_products")
+  .select("variant_type, variant_stock")
+  .eq("product_id", p.id)
+  .eq("active", true)
+  .eq("variant_type", "ring_size")
+  .maybeSingle();
+
+if (errorCatalogo) {
+  alert(`No se pudo revisar las tallas: ${errorCatalogo.message}`);
+  return;
+}
+
+if (productoCatalogo?.variant_type === "ring_size") {
+  const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
+
+  const disponibles = Object.entries(tallas)
+    .filter(([, stock]) => Number(stock) > 0)
+    .sort(([a], [b]) => Number(a) - Number(b));
+
+  if (disponibles.length === 0) {
+    alert("Este anillo no tiene tallas disponibles.");
+    return;
+  }
+
+  const opciones = disponibles
+    .map(([talla, stock]) => `Talla ${talla} — ${stock} disponibles`)
+    .join("\n");
+
+  const talla = window.prompt(
+    `Selecciona la talla disponible:\n\n${opciones}\n\nEscribe solo el número de talla:`
+  );
+
+  if (talla === null) return;
+
+  const tallaLimpia = talla.trim();
+  const stockTalla = Number(tallas[tallaLimpia] ?? 0);
+
+  if (stockTalla <= 0) {
+    alert("La talla seleccionada no está disponible.");
+    return;
+  }
+
+  setCarrito((prev) => {
+    const existente = prev.find(
+      (l) => l.product.id === p.id && l.ringSize === tallaLimpia
+    );
+
+    if (existente) {
+      if (existente.cantidad >= stockTalla) return prev;
+
+      return prev.map((l) =>
+        l.product.id === p.id && l.ringSize === tallaLimpia
+          ? { ...l, cantidad: l.cantidad + 1 }
+          : l
+      );
+    }
+
+    return [
+      ...prev,
+      {
+        product: p,
+        cantidad: 1,
+        ringSize: tallaLimpia,
+        stockTalla,
+      },
+    ];
+  });
+
+  setFilaSeleccionada(`${p.id}-${tallaLimpia}`);
+  setCodigo("");
+  inputRef.current?.focus();
+  return;
+}
     setCarrito((prev) => {
       const existente = prev.find((l) => l.product.id === p.id);
       if (existente) {
@@ -106,22 +182,53 @@ useEffect(() => {
     }
   });
 }, [filaSeleccionada, carrito]);
-    function cambiarCantidad(productId: string, delta: number) {
-    setCarrito((prev) =>
-      prev
-        .map((l) => (l.product.id === productId ? { ...l, cantidad: Math.max(0, Math.min(l.product.stock_available, l.cantidad + delta)) } : l))
-        .filter((l) => l.cantidad > 0)
-    );
-  }
+    function cambiarCantidad(productId: string, delta: number, ringSize?: string | null) {
+  setCarrito((prev) =>
+    prev
+      .map((l) => {
+        const mismaLinea =
+          l.product.id === productId &&
+          (l.ringSize ?? null) === (ringSize ?? null);
 
-  function quitarLinea(productId: string) {
-    setCarrito((prev) => prev.filter((l) => l.product.id !== productId));
-    setFilaSeleccionada(null);
-  }
-function cambiarPrecio(productId: string, valor: string) {
+        if (!mismaLinea) return l;
+
+        const limite =
+          l.ringSize && l.stockTalla != null
+            ? Math.min(l.product.stock_available, l.stockTalla)
+            : l.product.stock_available;
+
+        return {
+          ...l,
+          cantidad: Math.max(0, Math.min(limite, l.cantidad + delta)),
+        };
+      })
+      .filter((l) => l.cantidad > 0)
+  );
+}
+ function quitarLinea(productId: string, ringSize?: string | null) {
+  setCarrito((prev) =>
+    prev.filter(
+      (l) =>
+        !(
+          l.product.id === productId &&
+          (l.ringSize ?? null) === (ringSize ?? null)
+        )
+    )
+  );
+  setFilaSeleccionada(null);
+}
+function cambiarPrecio(
+  productId: string,
+  valor: string,
+  ringSize?: string | null
+) {
   setCarrito((prev) =>
     prev.map((l) => {
-      if (l.product.id !== productId) return l;
+      const mismaLinea =
+        l.product.id === productId &&
+        (l.ringSize ?? null) === (ringSize ?? null);
+
+      if (!mismaLinea) return l;
 
       if (valor === "") {
         return { ...l, precioPersonalizado: undefined };
@@ -134,19 +241,28 @@ function cambiarPrecio(productId: string, valor: string) {
     })
   );
 }
-  useEffect(() => {
+        useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
       if ((e.key === "Delete" || e.key === "Backspace") && filaSeleccionada) {
         const activo = document.activeElement;
         const enCampoDeTexto = activo && (activo.tagName === "INPUT" || activo.tagName === "TEXTAREA" || activo.tagName === "SELECT");
         if (enCampoDeTexto) return;
         e.preventDefault();
-        quitarLinea(filaSeleccionada);
+        const linea = carrito.find(
+  (l) =>
+    (l.ringSize
+      ? `${l.product.id}-${l.ringSize}`
+      : l.product.id) === filaSeleccionada
+);
+
+if (linea) {
+  quitarLinea(linea.product.id, linea.ringSize);
+}
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [filaSeleccionada]);
+  }, [filaSeleccionada, carrito]);
 
   useEffect(() => {
     function confirmarConEnter(e: KeyboardEvent) {
@@ -242,6 +358,7 @@ function cambiarPrecio(productId: string, valor: string) {
             p_seller_id: vendedorActivoId,
 p_session_id: sesionActivaId,
 p_unit_price: precioPreview(l),
+            p_ring_size: l.ringSize ?? null,
           });
           if (errAsig) throw new Error(errAsig.message);
         }
@@ -261,6 +378,7 @@ p_unit_price: precioPreview(l),
             p_seller_id: vendedorActivoId,
 p_session_id: sesionActivaId,
 p_unit_price: precioPreview(l),
+            p_ring_size: l.ringSize ?? null,
           });
           if (errAsig) throw new Error(errAsig.message);
         }
@@ -354,13 +472,27 @@ p_unit_price: precioPreview(l),
           {carrito.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Escanea o escribe un código para empezar. Selecciona una fila y presiona Supr para quitarla.</p>}
           {carrito.map((l, i) => (
             <div
-  key={l.product.id}
-  id={`producto-carrito-${l.product.id}`}
-  onClick={() => setFilaSeleccionada(l.product.id)}
+ key={`${l.product.id}-${l.ringSize ?? "normal"}`}
+id={`producto-carrito-${l.product.id}-${l.ringSize ?? "normal"}`}
+onClick={() =>
+  setFilaSeleccionada(
+    l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id
+  )
+}
               className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer"
-              style={{ borderBottom: i < carrito.length - 1 ? "1px solid #D9D0C2" : "none", background: filaSeleccionada === l.product.id ? "#EDE7DE" : "transparent" }}>
-              <div>
-                <p className="text-sm">{l.product.code} · {l.product.name} × {l.cantidad}</p>
+style={{
+  borderBottom: i < carrito.length - 1 ? "1px solid #D9D0C2" : "none",
+  background:
+    filaSeleccionada ===
+    (l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id)
+      ? "#EDE7DE"
+      : "transparent",
+}}>
+                    <div>
+                <p className="text-sm">
+  {l.product.code} · {l.product.name}
+  {l.ringSize ? ` · Talla ${l.ringSize}` : ""} × {l.cantidad}
+</p>
 <div className="flex items-center gap-2 mt-1">
   <span className="text-xs" style={{ color: "#5B4E5E" }}>
     Precio Bs
@@ -371,7 +503,9 @@ p_unit_price: precioPreview(l),
     step="0.01"
     value={l.precioPersonalizado ?? precioPreview(l)}
     onClick={(e) => e.stopPropagation()}
-    onChange={(e) => cambiarPrecio(l.product.id, e.target.value)}
+    onChange={(e) =>
+  cambiarPrecio(l.product.id, e.target.value, l.ringSize)
+}
     className="w-20 px-2 py-1 rounded text-xs outline-none"
     style={{
       background: "#FFFFFF",
@@ -386,13 +520,34 @@ p_unit_price: precioPreview(l),
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-serif text-sm">Bs {(precioPreview(l) * l.cantidad).toFixed(2)}</span>
-                <button onClick={(e) => { e.stopPropagation(); cambiarCantidad(l.product.id, -1); }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                  <Minus size={13} />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); cambiarCantidad(l.product.id, 1); }} disabled={l.cantidad >= l.product.stock_available} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                  <Plus size={13} />
-                </button>
-                <button onClick={(e) => { e.stopPropagation(); quitarLinea(l.product.id); }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }} title="Quitar (Supr)">
+                <button
+  onClick={(e) => {
+    e.stopPropagation();
+    cambiarCantidad(l.product.id, -1, l.ringSize);
+  }}
+  className="w-7 h-7 rounded-full flex items-center justify-center"
+  style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
+>
+  <Minus size={13} />
+</button>
+
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    cambiarCantidad(l.product.id, 1, l.ringSize);
+  }}
+  disabled={
+    l.cantidad >=
+    (l.ringSize && l.stockTalla != null
+      ? Math.min(l.product.stock_available, l.stockTalla)
+      : l.product.stock_available)
+  }
+  className="w-7 h-7 rounded-full flex items-center justify-center"
+  style={{ background: "#9C7A3C", color: "#F7F3EC" }}
+>
+  <Plus size={13} />
+</button>
+                <button onClick={(e) => { e.stopPropagation(); quitarLinea(l.product.id, l.ringSize); }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }} title="Quitar (Supr)">
                   <Trash2 size={13} />
                 </button>
               </div>
