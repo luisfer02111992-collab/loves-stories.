@@ -278,9 +278,43 @@ export default function Clientes() {
     if (seleccionado) await cargarPedido(seleccionado.id);
   }
 
+  async function cerrarPedidoVacioSinDeposito(customerId: string, orderId: string) {
+    const [{ count: cantidadItems, error: errorItems }, { data: pagos, error: errorPagos }] = await Promise.all([
+      supabase.from("order_items").select("id", { count: "exact", head: true }).eq("order_id", orderId),
+      supabase.from("payments").select("amount, applied_amount, method").eq("customer_id", customerId),
+    ]);
+
+    if (errorItems) throw new Error(errorItems.message);
+    if (errorPagos) throw new Error(errorPagos.message);
+
+    const saldoDisponible = (pagos ?? [])
+      .filter((p: any) => p.method !== "cierre_pedido" && p.method !== "devolucion_sobrante")
+      .reduce((total: number, p: any) => total + Math.max(0, Number(p.amount ?? 0) - Number(p.applied_amount ?? 0)), 0);
+
+    if ((cantidadItems ?? 0) === 0 && saldoDisponible <= 0.0001) {
+      const { error: errorCerrar } = await supabase
+        .from("orders")
+        .update({ status: "closed" })
+        .eq("id", orderId)
+        .in("status", ["open", "reopened"]);
+
+      if (errorCerrar) throw new Error(errorCerrar.message);
+    }
+  }
+
   async function quitarUnidad(itemId: string) {
+    const pedidoActualId = ordenId;
+    const clienteActualId = seleccionado?.id ?? null;
+
     const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
     if (error) { alert(`No se pudo disminuir: ${error.message}`); return; }
+
+    try {
+      if (pedidoActualId && clienteActualId) await cerrarPedidoVacioSinDeposito(clienteActualId, pedidoActualId);
+    } catch (err: any) {
+      alert(`Se quitó la unidad, pero no se pudo actualizar el estado de la cuenta: ${err.message}`);
+    }
+
     if (seleccionado) {
       await cargarPedido(seleccionado.id);
       await cargarClientes();
@@ -298,10 +332,21 @@ export default function Clientes() {
 
   async function quitarProductoCompleto(g: GrupoProducto) {
     if (!confirm(`¿Quitar "${g.nombre}" completo (${g.cantidadTotal} unidades) de este pedido? Se devuelve todo al inventario.`)) return;
+
+    const pedidoActualId = ordenId;
+    const clienteActualId = seleccionado?.id ?? null;
+
     for (const d of g.detalle) {
       const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: d.id, p_quantity: d.cantidad });
       if (error) { alert(`No se pudo eliminar el producto: ${error.message}`); return; }
     }
+
+    try {
+      if (pedidoActualId && clienteActualId) await cerrarPedidoVacioSinDeposito(clienteActualId, pedidoActualId);
+    } catch (err: any) {
+      alert(`Se quitó el producto, pero no se pudo actualizar el estado de la cuenta: ${err.message}`);
+    }
+
     setProductoSeleccionado(null);
     if (seleccionado) {
       await cargarPedido(seleccionado.id);
