@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
+import { supabase } from "../lib/supabase";
 import { Search, Trash2, Upload, Save, X } from "lucide-react";
 
 type VariantType = "ring_size" | "length_cm" | null;
