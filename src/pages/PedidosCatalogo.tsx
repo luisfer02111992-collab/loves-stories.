@@ -28,6 +28,13 @@ export default function PedidosCatalogo() {
   const [clienteManual, setClienteManual] = useState<Record<string, string>>({});
   const [busquedaCliente, setBusquedaCliente] = useState<Record<string, string>>({});
   const [pedidoAbierto, setPedidoAbierto] = useState<string | null>(null);
+  const hoyLocal = new Date();
+const fechaHoy = `${hoyLocal.getFullYear()}-${String(
+  hoyLocal.getMonth() + 1
+).padStart(2, "0")}-${String(hoyLocal.getDate()).padStart(2, "0")}`;
+
+const [fechaDesde, setFechaDesde] = useState(fechaHoy);
+const [fechaHasta, setFechaHasta] = useState(fechaHoy);
   const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
   const imagenAmpliadaRef = useRef<string | null>(null);
   
@@ -183,8 +190,29 @@ price: Number(it.catalog_products?.price ?? 0),
       return acc;
     }, {});
 
-  const archivadosPorFecha = agruparPorFecha(pedidosArchivados);
-  const rechazadosPorFecha = agruparPorFecha(pedidosRechazados);
+function estaEnRango(pedido: PedidoConItems) {
+  const fecha = new Date(pedido.created_at);
+
+  const y = fecha.getFullYear();
+  const m = String(fecha.getMonth() + 1).padStart(2, "0");
+  const d = String(fecha.getDate()).padStart(2, "0");
+
+  const clave = `${y}-${m}-${d}`;
+
+  return clave >= fechaDesde && clave <= fechaHasta;
+}
+
+const pedidosArchivadosFiltrados =
+  pedidosArchivados.filter(estaEnRango);
+
+const pedidosRechazadosFiltrados =
+  pedidosRechazados.filter(estaEnRango);
+
+const archivadosPorFecha =
+  agruparPorFecha(pedidosArchivadosFiltrados);
+
+const rechazadosPorFecha =
+  agruparPorFecha(pedidosRechazadosFiltrados);
 
   return (
     <div>
@@ -575,6 +603,76 @@ price: Number(it.catalog_products?.price ?? 0),
   )}
 
   <div className="mt-7">
+    <div
+  className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-3 mb-5 p-3 rounded-md"
+  style={{
+    background: "#F7F3EC",
+    border: "1px solid #D9D0C2",
+  }}
+>
+  <div>
+    <p className="text-sm font-medium">
+      Buscar pedidos por fecha
+    </p>
+
+    <p
+      className="text-xs mt-1"
+      style={{ color: "#5B4E5E" }}
+    >
+      Al entrar se muestran solo los pedidos de hoy.
+    </p>
+  </div>
+
+  <div className="flex flex-wrap items-end gap-2">
+    <label className="text-xs">
+      <span
+        className="block mb-1"
+        style={{ color: "#5B4E5E" }}
+      >
+        Desde
+      </span>
+
+      <input
+        type="date"
+        value={fechaDesde}
+        onChange={(e) => setFechaDesde(e.target.value)}
+        className="px-3 py-2 rounded outline-none"
+        style={{
+          background: "#FFF",
+          border: "1px solid #D9D0C2",
+        }}
+      />
+    </label>
+
+    <span
+      className="pb-2 text-xs"
+      style={{ color: "#5B4E5E" }}
+    >
+      a
+    </span>
+
+    <label className="text-xs">
+      <span
+        className="block mb-1"
+        style={{ color: "#5B4E5E" }}
+      >
+        Hasta
+      </span>
+
+      <input
+        type="date"
+        value={fechaHasta}
+        min={fechaDesde}
+        onChange={(e) => setFechaHasta(e.target.value)}
+        className="px-3 py-2 rounded outline-none"
+        style={{
+          background: "#FFF",
+          border: "1px solid #D9D0C2",
+        }}
+      />
+    </label>
+  </div>
+</div>
     <div className="flex items-center gap-2 mb-3">
       <FolderOpen size={18} />
       <div>
@@ -639,13 +737,11 @@ price: Number(it.catalog_products?.price ?? 0),
         </div>
       </div>
     ))}
-
-    {pedidosArchivados.length === 0 && (
-      <p className="text-sm" style={{ color: "#5B4E5E" }}>
-        Todavía no hay pedidos aceptados archivados.
-      </p>
-    )}
-
+{pedidosArchivadosFiltrados.length === 0 && (
+  <p className="text-sm" style={{ color: "#5B4E5E" }}>
+    No hay pedidos aceptados en las fechas seleccionadas.
+  </p>
+)}
     <div className="mt-8 pt-5" style={{ borderTop: "1px solid #D9D0C2" }}>
       <div className="flex items-center gap-2 mb-3">
         <FolderOpen size={18} />
@@ -695,11 +791,11 @@ price: Number(it.catalog_products?.price ?? 0),
         </div>
       ))}
 
-      {pedidosRechazados.length === 0 && (
-        <p className="text-sm" style={{ color: "#5B4E5E" }}>
-          No hay pedidos rechazados.
-        </p>
-      )}
+      {pedidosRechazadosFiltrados.length === 0 && (
+  <p className="text-sm" style={{ color: "#5B4E5E" }}>
+    No hay pedidos rechazados en las fechas seleccionadas.
+  </p>
+)}
     </div>
   </div>
 </div> 
