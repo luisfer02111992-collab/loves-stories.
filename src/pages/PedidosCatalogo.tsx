@@ -168,16 +168,23 @@ price: Number(it.catalog_products?.price ?? 0),
   }
 
   const pedidosPendientes = pedidos.filter((p: any) => p.status === "pending");
-  const pedidosArchivados = pedidos.filter((p: any) => p.status !== "pending");
+  const pedidosRechazados = pedidos.filter((p: any) =>
+    ["discarded", "rejected", "cancelled"].includes(String(p.status ?? "").toLowerCase())
+  );
+  const pedidosArchivados = pedidos.filter((p: any) =>
+    p.status !== "pending" &&
+    !["discarded", "rejected", "cancelled"].includes(String(p.status ?? "").toLowerCase())
+  );
 
-  const archivadosPorFecha = pedidosArchivados.reduce<Record<string, PedidoConItems[]>>(
-    (acc, pedido) => {
+  const agruparPorFecha = (lista: PedidoConItems[]) =>
+    lista.reduce<Record<string, PedidoConItems[]>>((acc, pedido) => {
       const fecha = new Date(pedido.created_at).toLocaleDateString("es-BO");
       (acc[fecha] ??= []).push(pedido);
       return acc;
-    },
-    {}
-  );
+    }, {});
+
+  const archivadosPorFecha = agruparPorFecha(pedidosArchivados);
+  const rechazadosPorFecha = agruparPorFecha(pedidosRechazados);
 
   return (
     <div>
@@ -573,7 +580,7 @@ price: Number(it.catalog_products?.price ?? 0),
       <div>
         <p className="font-serif text-lg">Archivo de pedidos del catálogo</p>
         <p className="text-xs" style={{ color: "#5B4E5E" }}>
-          Pedidos ya procesados, conservados por fecha con fotos, cantidades y tallas/largos.
+          Pedidos aceptados organizados por fecha. Las fotos, tallas y largos se revisan dentro del PDF.
         </p>
       </div>
     </div>
@@ -590,12 +597,10 @@ price: Number(it.catalog_products?.price ?? 0),
         <div className="flex flex-col gap-2 mt-2">
           {lista.map((p: any) => {
             const totalUnidades = p.items.reduce(
-              (t: number, it: ItemPedido) => t + it.cantidadOriginal,
-              0
+              (t: number, it: ItemPedido) => t + it.cantidadOriginal, 0
             );
             const total = p.items.reduce(
-              (t: number, it: ItemPedido) => t + it.price * it.cantidadOriginal,
-              0
+              (t: number, it: ItemPedido) => t + it.price * it.cantidadOriginal, 0
             );
 
             return (
@@ -614,7 +619,7 @@ price: Number(it.catalog_products?.price ?? 0),
                       })}
                     </p>
                     <p className="text-xs mt-1">
-                      {totalUnidades} unidades · Bs {total.toFixed(2)} · Estado: {p.status}
+                      {totalUnidades} unidades · Bs {total.toFixed(2)}
                     </p>
                   </div>
 
@@ -628,41 +633,6 @@ price: Number(it.catalog_products?.price ?? 0),
                     Abrir / descargar PDF
                   </button>
                 </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 mt-3">
-                  {p.items.map((it: ItemPedido) => (
-                    <div
-                      key={it.id}
-                      className="p-2 rounded"
-                      style={{ background: "#FFF", border: "1px solid #D9D0C2" }}
-                    >
-                      {it.image_url ? (
-                        <img
-                          src={it.image_url}
-                          alt={it.name}
-                          className="w-full aspect-square object-cover rounded cursor-zoom-in"
-                          onClick={() => {
-                            setImagenAmpliada(it.image_url);
-                            imagenAmpliadaRef.current = it.image_url;
-                            window.history.pushState({ fotoPedido: true }, "");
-                          }}
-                        />
-                      ) : (
-                        <div className="w-full aspect-square flex items-center justify-center text-xs">
-                          Sin foto
-                        </div>
-                      )}
-                      <p className="text-xs font-medium mt-1">{it.code} × {it.cantidadOriginal}</p>
-                      {it.variant_key && (
-                        <p className="text-xs font-bold mt-0.5" style={{ color: "#7A5F2D" }}>
-                          {it.variant_type === "ring_size"
-                            ? `Talla ${it.variant_key}`
-                            : `${it.variant_key} cm`}
-                        </p>
-                      )}
-                    </div>
-                  ))}
-                </div>
               </div>
             );
           })}
@@ -672,9 +642,65 @@ price: Number(it.catalog_products?.price ?? 0),
 
     {pedidosArchivados.length === 0 && (
       <p className="text-sm" style={{ color: "#5B4E5E" }}>
-        Todavía no hay pedidos archivados.
+        Todavía no hay pedidos aceptados archivados.
       </p>
     )}
+
+    <div className="mt-8 pt-5" style={{ borderTop: "1px solid #D9D0C2" }}>
+      <div className="flex items-center gap-2 mb-3">
+        <FolderOpen size={18} />
+        <div>
+          <p className="font-serif text-lg">Pedidos rechazados</p>
+          <p className="text-xs" style={{ color: "#5B4E5E" }}>
+            Subcarpeta separada para los pedidos rechazados, organizada por fecha.
+          </p>
+        </div>
+      </div>
+
+      {Object.entries(rechazadosPorFecha).map(([fecha, lista]) => (
+        <div key={fecha} className="mb-5">
+          <p
+            className="text-sm font-medium px-3 py-2 rounded-t-md"
+            style={{ background: "#F4E3E6", color: "#7A2540", border: "1px solid #E5C7CF" }}
+          >
+            {fecha} · {lista.length} rechazado{lista.length === 1 ? "" : "s"}
+          </p>
+
+          <div className="flex flex-col gap-2 mt-2">
+            {lista.map((p: any) => (
+              <div
+                key={p.id}
+                className="p-3 rounded-md flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                style={{ background: "#FFF7F8", border: "1px solid #E5C7CF" }}
+              >
+                <div>
+                  <p className="text-sm font-medium">Pedido {p.code} · {p.customer_name}</p>
+                  <p className="text-xs mt-1" style={{ color: "#5B4E5E" }}>
+                    {p.customer_phone} · {new Date(p.created_at).toLocaleString("es-BO")}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => abrirPdfPedido(p)}
+                  className="px-4 py-2 rounded-md text-xs font-medium flex items-center justify-center gap-2"
+                  style={{ background: "#7A2540", color: "#FFF" }}
+                >
+                  <FileText size={14} />
+                  Abrir / descargar PDF
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {pedidosRechazados.length === 0 && (
+        <p className="text-sm" style={{ color: "#5B4E5E" }}>
+          No hay pedidos rechazados.
+        </p>
+      )}
+    </div>
   </div>
 </div> 
      {imagenAmpliada && (
