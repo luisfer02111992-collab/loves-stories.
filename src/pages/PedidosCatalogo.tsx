@@ -1,7 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Check, X, Clock, Search } from "lucide-react";
+import { Check, X, Clock, Search, FileText, FolderOpen } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { CatalogSubmission, Customer } from "../lib/types";
+import { generarPdfCatalogo } from "../lib/pdf";
 
 interface ItemPedido {
   id: string;
@@ -66,7 +67,6 @@ useEffect(() => {
     const { data } = await supabase
       .from("catalog_submissions")
       .select("*, catalog_submission_items(id, catalog_product_id, quantity, variant_key, catalog_products(code, name, variant_type, image_url, price))")
-      .eq("status", "pending")
       .order("created_at", { ascending: false });
 
     const lista: PedidoConItems[] = (data ?? []).map((s: any) => ({
@@ -138,6 +138,47 @@ price: Number(it.catalog_products?.price ?? 0),
     cargar();
   }
 
+  async function abrirPdfPedido(pedido: PedidoConItems) {
+    const items = pedido.items.map((it) => ({
+      codigo: it.code,
+      nombre: it.name,
+      imagen: it.image_url,
+      cantidad: it.cantidadOriginal,
+      precio: it.price,
+      variante: it.variant_key
+        ? it.variant_type === "ring_size"
+          ? `Talla ${it.variant_key}`
+          : `${it.variant_key} cm`
+        : null,
+    }));
+
+    const totalUnidades = items.reduce((t, it) => t + it.cantidad, 0);
+    const total = items.reduce((t, it) => t + it.precio * it.cantidad, 0);
+
+    await generarPdfCatalogo({
+      negocio: "Love's Stories",
+      codigoPedido: pedido.code,
+      cliente: pedido.customer_name,
+      telefono: pedido.customer_phone,
+      fecha: new Date(pedido.created_at).toLocaleString("es-BO"),
+      items,
+      totalUnidades,
+      total,
+    });
+  }
+
+  const pedidosPendientes = pedidos.filter((p: any) => p.status === "pending");
+  const pedidosArchivados = pedidos.filter((p: any) => p.status !== "pending");
+
+  const archivadosPorFecha = pedidosArchivados.reduce<Record<string, PedidoConItems[]>>(
+    (acc, pedido) => {
+      const fecha = new Date(pedido.created_at).toLocaleDateString("es-BO");
+      (acc[fecha] ??= []).push(pedido);
+      return acc;
+    },
+    {}
+  );
+
   return (
     <div>
       <p className="font-serif text-lg mb-1">Pedidos del catálogo</p>
@@ -147,7 +188,7 @@ price: Number(it.catalog_products?.price ?? 0),
       </p>
 
      <div className="flex flex-col gap-3">
-  {pedidos.map((p) => {
+  {pedidosPendientes.map((p) => {
     const abierto = pedidoAbierto === p.id;
 
     const totalPedido = p.items.reduce(
@@ -517,7 +558,7 @@ price: Number(it.catalog_products?.price ?? 0),
     );
   })}
 
-  {pedidos.length === 0 && (
+  {pedidosPendientes.length === 0 && (
     <p
       className="text-sm"
       style={{ color: "#5B4E5E" }}
@@ -525,6 +566,116 @@ price: Number(it.catalog_products?.price ?? 0),
       No hay pedidos pendientes del catálogo.
     </p>
   )}
+
+  <div className="mt-7">
+    <div className="flex items-center gap-2 mb-3">
+      <FolderOpen size={18} />
+      <div>
+        <p className="font-serif text-lg">Archivo de pedidos del catálogo</p>
+        <p className="text-xs" style={{ color: "#5B4E5E" }}>
+          Pedidos ya procesados, conservados por fecha con fotos, cantidades y tallas/largos.
+        </p>
+      </div>
+    </div>
+
+    {Object.entries(archivadosPorFecha).map(([fecha, lista]) => (
+      <div key={fecha} className="mb-5">
+        <p
+          className="text-sm font-medium px-3 py-2 rounded-t-md"
+          style={{ background: "#EDE7DE", color: "#5B4E5E", border: "1px solid #D9D0C2" }}
+        >
+          {fecha} · {lista.length} pedido{lista.length === 1 ? "" : "s"}
+        </p>
+
+        <div className="flex flex-col gap-2 mt-2">
+          {lista.map((p: any) => {
+            const totalUnidades = p.items.reduce(
+              (t: number, it: ItemPedido) => t + it.cantidadOriginal,
+              0
+            );
+            const total = p.items.reduce(
+              (t: number, it: ItemPedido) => t + it.price * it.cantidadOriginal,
+              0
+            );
+
+            return (
+              <div
+                key={p.id}
+                className="p-3 rounded-md"
+                style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+              >
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-medium">Pedido {p.code} · {p.customer_name}</p>
+                    <p className="text-xs mt-1" style={{ color: "#5B4E5E" }}>
+                      {p.customer_phone} · {new Date(p.created_at).toLocaleTimeString("es-BO", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                    <p className="text-xs mt-1">
+                      {totalUnidades} unidades · Bs {total.toFixed(2)} · Estado: {p.status}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => abrirPdfPedido(p)}
+                    className="px-4 py-2 rounded-md text-xs font-medium flex items-center justify-center gap-2"
+                    style={{ background: "#9C7A3C", color: "#F7F3EC" }}
+                  >
+                    <FileText size={14} />
+                    Abrir / descargar PDF
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 mt-3">
+                  {p.items.map((it: ItemPedido) => (
+                    <div
+                      key={it.id}
+                      className="p-2 rounded"
+                      style={{ background: "#FFF", border: "1px solid #D9D0C2" }}
+                    >
+                      {it.image_url ? (
+                        <img
+                          src={it.image_url}
+                          alt={it.name}
+                          className="w-full aspect-square object-cover rounded cursor-zoom-in"
+                          onClick={() => {
+                            setImagenAmpliada(it.image_url);
+                            imagenAmpliadaRef.current = it.image_url;
+                            window.history.pushState({ fotoPedido: true }, "");
+                          }}
+                        />
+                      ) : (
+                        <div className="w-full aspect-square flex items-center justify-center text-xs">
+                          Sin foto
+                        </div>
+                      )}
+                      <p className="text-xs font-medium mt-1">{it.code} × {it.cantidadOriginal}</p>
+                      {it.variant_key && (
+                        <p className="text-xs font-bold mt-0.5" style={{ color: "#7A5F2D" }}>
+                          {it.variant_type === "ring_size"
+                            ? `Talla ${it.variant_key}`
+                            : `${it.variant_key} cm`}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    ))}
+
+    {pedidosArchivados.length === 0 && (
+      <p className="text-sm" style={{ color: "#5B4E5E" }}>
+        Todavía no hay pedidos archivados.
+      </p>
+    )}
+  </div>
 </div> 
      {imagenAmpliada && (
   <div
