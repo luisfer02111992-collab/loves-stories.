@@ -64,10 +64,22 @@ useEffect(() => {
   
   async function buscarYAgregar(e: React.FormEvent) {
     e.preventDefault();
-    if (!codigo.trim() || buscando) return;
+    const codigoLeido = codigo.trim();
+    if (!codigoLeido) return;
+
+    // Liberar el campo inmediatamente para que el lector pueda enviar la
+    // siguiente lectura aunque Supabase todavía esté procesando la anterior.
+    setCodigo("");
     setBuscando(true);
     setNoEncontrado(false);
-    const { data: producto } = await supabase.from("products").select("*").eq("code", codigo.trim()).is("deleted_at", null).maybeSingle();
+    inputRef.current?.focus();
+
+    const { data: producto } = await supabase
+      .from("products")
+      .select("*")
+      .eq("code", codigoLeido)
+      .is("deleted_at", null)
+      .maybeSingle();
     setBuscando(false);
     if (!producto) {
       setNoEncontrado(true);
@@ -148,7 +160,6 @@ if (productoCatalogo?.variant_type === "ring_size") {
   });
 
   setFilaSeleccionada(`${p.id}-${tallaLimpia}`);
-  setCodigo("");
   inputRef.current?.focus();
   return;
 }
@@ -161,7 +172,6 @@ if (productoCatalogo?.variant_type === "ring_size") {
       return [...prev, { product: p, cantidad: 1 }];
     });
     setFilaSeleccionada(p.id);
-    setCodigo("");
     inputRef.current?.focus();
   }
   useEffect(() => {
@@ -421,7 +431,7 @@ p_unit_price: precioPreview(l),
             <input ref={inputRef} autoFocus value={codigo} onChange={(e) => { setCodigo(e.target.value); setNoEncontrado(false); }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} placeholder="80-50"
               className="flex-1 px-3 py-3 rounded text-lg outline-none" style={{ background: "#F7F3EC", color: "#2B1E2E" }} />
-            <button type="submit" disabled={buscando} className="px-5 rounded flex items-center gap-1.5 ls-code-search-button">
+            <button type="submit" aria-busy={buscando} className="px-5 rounded flex items-center gap-1.5 ls-code-search-button">
               <Plus size={16} /> Agregar
             </button>
           </div>
@@ -473,7 +483,7 @@ p_unit_price: precioPreview(l),
           {carrito.map((l, i) => (
             <div
  key={`${l.product.id}-${l.ringSize ?? "normal"}`}
-id={`producto-carrito-${l.product.id}-${l.ringSize ?? "normal"}`}
+id={`producto-carrito-${l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id}`}
 onClick={() =>
   setFilaSeleccionada(
     l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id
