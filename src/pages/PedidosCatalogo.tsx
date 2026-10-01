@@ -298,6 +298,63 @@ export default function PedidosCatalogo() {
       {}
     );
 
+  function agruparItemsVisual(items: ItemPedido[]) {
+    const grupos = new Map<
+      string,
+      {
+        key: string;
+        code: string;
+        name: string;
+        image_url: string | null;
+        price: number;
+        cantidadTotal: number;
+        subtotal: number;
+        variantes: { texto: string; cantidad: number }[];
+      }
+    >();
+
+    items.forEach((it) => {
+      const clave = it.catalog_product_id || it.code;
+      let grupo = grupos.get(clave);
+
+      if (!grupo) {
+        grupo = {
+          key: clave,
+          code: it.code,
+          name: it.name,
+          image_url: it.image_url,
+          price: it.price,
+          cantidadTotal: 0,
+          subtotal: 0,
+          variantes: [],
+        };
+        grupos.set(clave, grupo);
+      }
+
+      grupo.cantidadTotal += it.cantidadOriginal;
+      grupo.subtotal += it.price * it.cantidadOriginal;
+
+      if (it.variant_key) {
+        const texto =
+          it.variant_type === "ring_size"
+            ? `Talla ${it.variant_key}`
+            : `${it.variant_key} cm`;
+
+        const existente = grupo.variantes.find((v) => v.texto === texto);
+        if (existente) {
+          existente.cantidad += it.cantidadOriginal;
+        } else {
+          grupo.variantes.push({
+            texto,
+            cantidad: it.cantidadOriginal,
+          });
+        }
+      }
+    });
+
+    return Array.from(grupos.values());
+  }
+
   function estaEnRango(pedido: PedidoConItems) {
     const fecha = new Date(pedido.created_at);
 
@@ -1000,121 +1057,82 @@ export default function PedidosCatalogo() {
                                 "1px solid #D9D0C2",
                             }}
                           >
-                            {p.items.map(
-                              (it: ItemPedido) => (
-                                <div
-                                  key={it.id}
-                                  className="p-2 rounded-md flex gap-3"
-                                  style={{
-                                    background:
-                                      "#EDE7DE",
-                                    border:
-                                      "1px solid #D9D0C2",
-                                  }}
-                                >
-                                  {it.image_url ? (
-                                    <img
-                                      src={
-                                        it.image_url
-                                      }
-                                      alt={it.name}
-                                      onClick={() => {
-                                        setImagenAmpliada(
-                                          it.image_url
-                                        );
-
-                                        imagenAmpliadaRef.current =
-                                          it.image_url;
-
-                                        window.history.pushState(
-                                          {
-                                            fotoPedido:
-                                              true,
-                                          },
-                                          ""
-                                        );
-                                      }}
-                                      className="w-24 h-24 rounded-md object-cover cursor-zoom-in shrink-0"
-                                      style={{
-                                        border:
-                                          "1px solid #D9D0C2",
-                                      }}
-                                    />
-                                  ) : (
-                                    <div
-                                      className="w-24 h-24 rounded-md flex items-center justify-center text-xs shrink-0"
-                                      style={{
-                                        background:
-                                          "#F7F3EC",
-                                        border:
-                                          "1px solid #D9D0C2",
-                                        color:
-                                          "#5B4E5E",
-                                      }}
-                                    >
-                                      Sin foto
-                                    </div>
-                                  )}
-
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-medium">
-                                      {it.code}
-                                    </p>
-
-                                    <p className="text-xs mt-1">
-                                      {it.name}
-                                    </p>
-
-                                    {it.variant_key && (
-                                      <p
-                                        className="text-xs mt-1 font-medium"
-                                        style={{
-                                          color:
-                                            "#7A5F2D",
-                                        }}
-                                      >
-                                        {it.variant_type ===
-                                        "ring_size"
-                                          ? `Talla ${it.variant_key}`
-                                          : `${it.variant_key} cm`}
-                                      </p>
-                                    )}
-
-                                    <p
-                                      className="text-xs mt-1"
-                                      style={{
-                                        color:
-                                          "#5B4E5E",
-                                      }}
-                                    >
-                                      Cantidad:{" "}
-                                      {
-                                        it.cantidadOriginal
-                                      }
-                                    </p>
-
-                                    <p
-                                      className="text-xs mt-1"
-                                      style={{
-                                        color:
-                                          "#5B4E5E",
-                                      }}
-                                    >
-                                      Precio: Bs{" "}
-                                      {it.price}
-                                    </p>
-
-                                    <p className="text-xs mt-1 font-medium">
-                                      Subtotal: Bs{" "}
-                                      {(
-                                        it.price *
-                                        it.cantidadOriginal
-                                      ).toFixed(2)}
-                                    </p>
+                            {agruparItemsVisual(p.items).map((grupo) => (
+                              <div
+                                key={grupo.key}
+                                className="p-2 rounded-md flex gap-3"
+                                style={{
+                                  background: "#EDE7DE",
+                                  border: "1px solid #D9D0C2",
+                                }}
+                              >
+                                {grupo.image_url ? (
+                                  <img
+                                    src={grupo.image_url}
+                                    alt={grupo.name}
+                                    onClick={() => {
+                                      setImagenAmpliada(grupo.image_url);
+                                      imagenAmpliadaRef.current = grupo.image_url;
+                                      window.history.pushState(
+                                        { fotoPedido: true },
+                                        ""
+                                      );
+                                    }}
+                                    className="w-24 h-24 rounded-md object-cover cursor-zoom-in shrink-0"
+                                    style={{ border: "1px solid #D9D0C2" }}
+                                  />
+                                ) : (
+                                  <div
+                                    className="w-24 h-24 rounded-md flex items-center justify-center text-xs shrink-0"
+                                    style={{
+                                      background: "#F7F3EC",
+                                      border: "1px solid #D9D0C2",
+                                      color: "#5B4E5E",
+                                    }}
+                                  >
+                                    Sin foto
                                   </div>
+                                )}
+
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-medium">
+                                    {grupo.code}
+                                  </p>
+
+                                  <p className="text-xs mt-1">
+                                    {grupo.name}
+                                  </p>
+
+                                  {grupo.variantes.map((v) => (
+                                    <p
+                                      key={v.texto}
+                                      className="text-xs mt-1 font-medium"
+                                      style={{ color: "#7A5F2D" }}
+                                    >
+                                      {v.texto} × {v.cantidad}
+                                    </p>
+                                  ))}
+
+                                  <p
+                                    className="text-xs mt-1"
+                                    style={{ color: "#5B4E5E" }}
+                                  >
+                                    Cantidad total: {grupo.cantidadTotal}
+                                  </p>
+
+                                  <p
+                                    className="text-xs mt-1"
+                                    style={{ color: "#5B4E5E" }}
+                                  >
+                                    Precio: Bs {grupo.price}
+                                  </p>
+
+                                  <p className="text-xs mt-1 font-medium">
+                                    Subtotal: Bs {grupo.subtotal.toFixed(2)}
+                                  </p>
                                 </div>
-                              )
-                            )}
+                              </div>
+                            ))}
                           </div>
                         )}
                       </div>
@@ -1264,113 +1282,82 @@ export default function PedidosCatalogo() {
                                   "1px solid #E5C7CF",
                               }}
                             >
-                              {p.items.map(
-                                (it: ItemPedido) => (
-                                  <div
-                                    key={it.id}
-                                    className="p-2 rounded-md flex gap-3"
-                                    style={{
-                                      background:
-                                        "#F7F3EC",
-                                      border:
-                                        "1px solid #D9D0C2",
-                                    }}
-                                  >
-                                    {it.image_url ? (
-                                      <img
-                                        src={
-                                          it.image_url
-                                        }
-                                        alt={it.name}
-                                        onClick={() => {
-                                          setImagenAmpliada(
-                                            it.image_url
-                                          );
-
-                                          imagenAmpliadaRef.current =
-                                            it.image_url;
-
-                                          window.history.pushState(
-                                            {
-                                              fotoPedido:
-                                                true,
-                                            },
-                                            ""
-                                          );
-                                        }}
-                                        className="w-24 h-24 rounded-md object-cover cursor-zoom-in shrink-0"
-                                        style={{
-                                          border:
-                                            "1px solid #D9D0C2",
-                                        }}
-                                      />
-                                    ) : (
-                                      <div
-                                        className="w-24 h-24 rounded-md flex items-center justify-center text-xs shrink-0"
-                                        style={{
-                                          background:
-                                            "#FFF",
-                                          border:
-                                            "1px solid #D9D0C2",
-                                          color:
-                                            "#5B4E5E",
-                                        }}
-                                      >
-                                        Sin foto
-                                      </div>
-                                    )}
-
-                                    <div className="min-w-0 flex-1">
-                                      <p className="text-sm font-medium">
-                                        {it.code}
-                                      </p>
-
-                                      <p className="text-xs mt-1">
-                                        {it.name}
-                                      </p>
-
-                                      {it.variant_key && (
-                                        <p
-                                          className="text-xs mt-1 font-medium"
-                                          style={{
-                                            color:
-                                              "#7A5F2D",
-                                          }}
-                                        >
-                                          {it.variant_type ===
-                                          "ring_size"
-                                            ? `Talla ${it.variant_key}`
-                                            : `${it.variant_key} cm`}
-                                        </p>
-                                      )}
-
-                                      <p
-                                        className="text-xs mt-1"
-                                        style={{
-                                          color:
-                                            "#5B4E5E",
-                                        }}
-                                      >
-                                        Cantidad:{" "}
-                                        {
-                                          it.cantidadOriginal
-                                        }
-                                      </p>
-
-                                      <p
-                                        className="text-xs mt-1"
-                                        style={{
-                                          color:
-                                            "#5B4E5E",
-                                        }}
-                                      >
-                                        Precio: Bs{" "}
-                                        {it.price}
-                                      </p>
+                              {agruparItemsVisual(p.items).map((grupo) => (
+                                <div
+                                  key={grupo.key}
+                                  className="p-2 rounded-md flex gap-3"
+                                  style={{
+                                    background: "#F7F3EC",
+                                    border: "1px solid #D9D0C2",
+                                  }}
+                                >
+                                  {grupo.image_url ? (
+                                    <img
+                                      src={grupo.image_url}
+                                      alt={grupo.name}
+                                      onClick={() => {
+                                        setImagenAmpliada(grupo.image_url);
+                                        imagenAmpliadaRef.current = grupo.image_url;
+                                        window.history.pushState(
+                                          { fotoPedido: true },
+                                          ""
+                                        );
+                                      }}
+                                      className="w-24 h-24 rounded-md object-cover cursor-zoom-in shrink-0"
+                                      style={{ border: "1px solid #D9D0C2" }}
+                                    />
+                                  ) : (
+                                    <div
+                                      className="w-24 h-24 rounded-md flex items-center justify-center text-xs shrink-0"
+                                      style={{
+                                        background: "#FFF",
+                                        border: "1px solid #D9D0C2",
+                                        color: "#5B4E5E",
+                                      }}
+                                    >
+                                      Sin foto
                                     </div>
+                                  )}
+
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-sm font-medium">
+                                      {grupo.code}
+                                    </p>
+
+                                    <p className="text-xs mt-1">
+                                      {grupo.name}
+                                    </p>
+
+                                    {grupo.variantes.map((v) => (
+                                      <p
+                                        key={v.texto}
+                                        className="text-xs mt-1 font-medium"
+                                        style={{ color: "#7A5F2D" }}
+                                      >
+                                        {v.texto} × {v.cantidad}
+                                      </p>
+                                    ))}
+
+                                    <p
+                                      className="text-xs mt-1"
+                                      style={{ color: "#5B4E5E" }}
+                                    >
+                                      Cantidad total: {grupo.cantidadTotal}
+                                    </p>
+
+                                    <p
+                                      className="text-xs mt-1"
+                                      style={{ color: "#5B4E5E" }}
+                                    >
+                                      Precio: Bs {grupo.price}
+                                    </p>
+
+                                    <p className="text-xs mt-1 font-medium">
+                                      Subtotal: Bs {grupo.subtotal.toFixed(2)}
+                                    </p>
                                   </div>
-                                )
-                              )}
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
