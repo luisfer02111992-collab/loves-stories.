@@ -380,66 +380,97 @@ export default function Clientes() {
 
   async function confirmarCierre() {
     if (!ordenId || !seleccionado || cerrando) return;
+
+    // Abrimos la pestaña AHORA, directamente desde el clic del usuario.
+    // Así Chrome no la bloquea después de esperar las operaciones async.
+    const ventanaWhatsapp = window.open("about:blank", "_blank");
+
     setCerrando(true);
-    // Seguridad financiera: el total que cerrará Supabase debe coincidir con
-    // el total que ve el usuario. Si no coincide, no consumimos depósitos.
-    const { data: totalServidor, error: errorTotal } = await supabase.rpc("calcular_total_pedido", { p_order_id: ordenId });
-    if (errorTotal) { alert(errorTotal.message); setCerrando(false); return; }
-    if (Math.abs(Number(totalServidor ?? 0) - total) > 0.01) {
-      alert(`No se cerró el pedido porque el total del servidor (Bs ${Number(totalServidor ?? 0).toFixed(2)}) no coincide con el total mostrado (Bs ${total.toFixed(2)}). Actualiza la página y vuelve a revisar.`);
+
+    try {
+      // Seguridad financiera: el total que cerrará Supabase debe coincidir con
+      // el total que ve el usuario. Si no coincide, no consumimos depósitos.
+      const { data: totalServidor, error: errorTotal } = await supabase.rpc("calcular_total_pedido", { p_order_id: ordenId });
+
+      if (errorTotal) {
+        ventanaWhatsapp?.close();
+        alert(errorTotal.message);
+        return;
+      }
+
+      if (Math.abs(Number(totalServidor ?? 0) - total) > 0.01) {
+        ventanaWhatsapp?.close();
+        alert(`No se cerró el pedido porque el total del servidor (Bs ${Number(totalServidor ?? 0).toFixed(2)}) no coincide con el total mostrado (Bs ${total.toFixed(2)}). Actualiza la página y vuelve a revisar.`);
+        return;
+      }
+
+      const { error } = await supabase.rpc("close_order", { p_order_id: ordenId });
+
+      if (error) {
+        ventanaWhatsapp?.close();
+        alert(error.message);
+        return;
+      }
+
+      // Sello explícito y verificable del usuario autenticado que hizo el cierre.
+      const { error: selloError } = await supabase.rpc("stamp_order_closer", { p_order_id: ordenId });
+
+      if (selloError) {
+        alert(`El pedido se cerró, pero no se pudo registrar quién lo cerró: ${selloError.message}`);
+      }
+
+      const blob = await generarPdfGrande({
+        negocio: nombreNegocio,
+        cliente: seleccionado.name,
+        telefono: seleccionado.phone,
+        fecha: new Date().toLocaleDateString("es-BO"),
+        titulo: "Cuenta cerrada",
+        grupos,
+        subtotalSinDescuento,
+        descuentoTotal,
+        total,
+        depositado,
+        saldoPendiente,
+        saldoAFavor,
+        mostrarPagos: true,
+      });
+
+      const textoWhatsapp = mensajeWhatsapp(true);
+
+      // Descargar automáticamente el PDF de la cuenta cerrada.
+      const urlPdf = URL.createObjectURL(blob);
+      const enlace = document.createElement("a");
+      enlace.href = urlPdf;
+      enlace.download = `pedido_cerrado_${seleccionado.name || "cliente"}.pdf`;
+      enlace.style.display = "none";
+      document.body.appendChild(enlace);
+      enlace.click();
+
+      setTimeout(() => {
+        if (enlace.parentNode) enlace.parentNode.removeChild(enlace);
+        URL.revokeObjectURL(urlPdf);
+      }, 2000);
+
+      // Reutilizamos la pestaña que se abrió al hacer clic.
+      const destinoWhatsapp = linkWhatsapp(seleccionado.phone, textoWhatsapp);
+      if (ventanaWhatsapp && !ventanaWhatsapp.closed) {
+        ventanaWhatsapp.location.href = destinoWhatsapp;
+      } else {
+        // Respaldo por si el navegador no permitió crear la pestaña.
+        window.location.href = destinoWhatsapp;
+      }
+
+      setUltimoPdf({ blob, texto: textoWhatsapp });
+      setMostrarResumenCierre(false);
+
+      await cargarPedido(seleccionado.id);
+      await cargarClientes();
+    } catch (err: any) {
+      ventanaWhatsapp?.close();
+      alert(`No se pudo completar el cierre: ${err?.message ?? "Error desconocido"}`);
+    } finally {
       setCerrando(false);
-      return;
     }
-    const { error } = await supabase.rpc("close_order", { p_order_id: ordenId });
-    if (error) {
-      alert(error.message);
-      setCerrando(false);
-      return;
-    }
-    // Sello explícito y verificable del usuario autenticado que hizo el cierre.
-    // Evita que un cierre nuevo quede como “No registrado”.
-    const { error: selloError } = await supabase.rpc("stamp_order_closer", { p_order_id: ordenId });
-    if (selloError) {
-      alert(`El pedido se cerró, pero no se pudo registrar quién lo cerró: ${selloError.message}`);
-    }
-    // close_order NUNCA registra un pago — el saldo que queda tras cerrar es
-    // exactamente el mismo saldo a favor / pendiente que ya se mostraba
-    // antes de cerrar (con dinero realmente depositado, nada inventado).
-    const blob = await generarPdfGrande({
-      negocio: nombreNegocio, cliente: seleccionado.name, telefono: seleccionado.phone,
-      fecha: new Date().toLocaleDateString("es-BO"), titulo: "Cuenta cerrada",
-      grupos, subtotalSinDescuento, descuentoTotal, total,
-      depositado, saldoPendiente, saldoAFavor, mostrarPagos: true,
-    });
-    const textoWhatsapp = mensajeWhatsapp(true);
-
-    // Descargar automáticamente el PDF del pedido cerrado.
-    const urlPdf = URL.createObjectURL(blob);
-    const enlace = document.createElement("a");
-    enlace.href = urlPdf;
-    enlace.download = `pedido_cerrado_${seleccionado.name || "cliente"}.pdf`;
-    enlace.style.display = "none";
-    document.body.appendChild(enlace);
-    enlace.click();
-
-    setTimeout(() => {
-      document.body.removeChild(enlace);
-      URL.revokeObjectURL(urlPdf);
-    }, 2000);
-
-    // Al cerrar el pedido, abrir directamente el WhatsApp del cliente
-    // con el mensaje de cierre listo para enviar. El PDF queda descargado
-    // para adjuntarlo en el chat.
-    window.open(
-      linkWhatsapp(seleccionado.phone, textoWhatsapp),
-      "_blank"
-    );
-
-    setUltimoPdf({ blob, texto: textoWhatsapp });
-    setCerrando(false);
-    setMostrarResumenCierre(false);
-    await cargarPedido(seleccionado.id);
-    await cargarClientes();
   }
 
   // Sobrante al cerrar: si queda saldo a favor, preguntar qué hacer (nunca decidir solo).
