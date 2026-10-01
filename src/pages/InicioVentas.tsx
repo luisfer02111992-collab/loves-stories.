@@ -29,6 +29,10 @@ export default function InicioVentas() {
   const [filaSeleccionada, setFilaSeleccionada] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listaCarritoRef = useRef<HTMLDivElement>(null);
+  const carritoRef = useRef<LineaCarrito[]>([]);
+  const hidratadoRef = useRef(false);
+  const productosCacheRef = useRef<Map<string, Product>>(new Map());
+  const catalogoAnillosCacheRef = useRef<Map<string, any>>(new Map());
   const [mostrarAsignar, setMostrarAsignar] = useState(false);
   const [modo, setModo] = useState<"cliente" | "nuevo" | "directa">("cliente");
   const [clientes, setClientes] = useState<Customer[]>([]);
@@ -47,132 +51,167 @@ export default function InicioVentas() {
   }, []);
 useEffect(() => {
   const guardado = sessionStorage.getItem("inicioVentasPendiente");
-  if (!guardado) return;
-
-  try {
-    const datos = JSON.parse(guardado);
-
-    if (Array.isArray(datos.carrito)) {
-      setCarrito(datos.carrito);
+  if (guardado) {
+    try {
+      const datos = JSON.parse(guardado);
+      if (Array.isArray(datos.carrito)) {
+        carritoRef.current = datos.carrito;
+        setCarrito(datos.carrito);
+      }
+    } catch (error) {
+      console.error("No se pudo recuperar la preasignación:", error);
     }
-  } catch (error) {
-    console.error("No se pudo recuperar la preasignación:", error);
   }
-
-  sessionStorage.removeItem("inicioVentasPendiente");
+  hidratadoRef.current = true;
 }, []);
-  
+
+useEffect(() => {
+  carritoRef.current = carrito;
+  if (!hidratadoRef.current) return;
+  if (carrito.length > 0) {
+    sessionStorage.setItem("inicioVentasPendiente", JSON.stringify({ carrito }));
+  } else {
+    sessionStorage.removeItem("inicioVentasPendiente");
+  }
+}, [carrito]);
+
   async function buscarYAgregar(e: React.FormEvent) {
     e.preventDefault();
     const codigoLeido = codigo.trim();
     if (!codigoLeido) return;
 
-    // Liberar el campo inmediatamente para que el lector pueda enviar la
-    // siguiente lectura aunque Supabase todavía esté procesando la anterior.
     setCodigo("");
-    setBuscando(true);
     setNoEncontrado(false);
+    setProductoSinStock(null);
     inputRef.current?.focus();
 
-    const { data: producto } = await supabase
-      .from("products")
-      .select("*")
-      .eq("code", codigoLeido)
-      .is("deleted_at", null)
-      .maybeSingle();
-    setBuscando(false);
-    if (!producto) {
-      setNoEncontrado(true);
-      return;
-    }
-    const p = producto as Product;
-    if (p.stock_available < 1) {
-  setProductoSinStock(p);
-  return;
-}
-    const { data: productoCatalogo, error: errorCatalogo } = await supabase
-  .from("catalog_products")
-  .select("variant_type, variant_stock")
-  .eq("product_id", p.id)
-  .eq("active", true)
-  .eq("variant_type", "ring_size")
-  .maybeSingle();
+    try {
+      let p = productosCacheRef.current.get(codigoLeido);
 
-if (errorCatalogo) {
-  alert(`No se pudo revisar las tallas: ${errorCatalogo.message}`);
-  return;
-}
-
-if (productoCatalogo?.variant_type === "ring_size") {
-  const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
-
-  const disponibles = Object.entries(tallas)
-    .filter(([, stock]) => Number(stock) > 0)
-    .sort(([a], [b]) => Number(a) - Number(b));
-
-  if (disponibles.length === 0) {
-    alert("Este anillo no tiene tallas disponibles.");
-    return;
-  }
-
-  const opciones = disponibles
-    .map(([talla, stock]) => `Talla ${talla} — ${stock} disponibles`)
-    .join("\n");
-
-  const talla = window.prompt(
-    `Selecciona la talla disponible:\n\n${opciones}\n\nEscribe solo el número de talla:`
-  );
-
-  if (talla === null) return;
-
-  const tallaLimpia = talla.trim();
-  const stockTalla = Number(tallas[tallaLimpia] ?? 0);
-
-  if (stockTalla <= 0) {
-    alert("La talla seleccionada no está disponible.");
-    return;
-  }
-
-  setCarrito((prev) => {
-    const existente = prev.find(
-      (l) => l.product.id === p.id && l.ringSize === tallaLimpia
-    );
-
-    if (existente) {
-      if (existente.cantidad >= stockTalla) return prev;
-
-      return prev.map((l) =>
-        l.product.id === p.id && l.ringSize === tallaLimpia
-          ? { ...l, cantidad: l.cantidad + 1 }
-          : l
-      );
-    }
-
-    return [
-      ...prev,
-      {
-        product: p,
-        cantidad: 1,
-        ringSize: tallaLimpia,
-        stockTalla,
-      },
-    ];
-  });
-
-  setFilaSeleccionada(`${p.id}-${tallaLimpia}`);
-  inputRef.current?.focus();
-  return;
-}
-    setCarrito((prev) => {
-      const existente = prev.find((l) => l.product.id === p.id);
-      if (existente) {
-        if (existente.cantidad >= p.stock_available) return prev;
-        return prev.map((l) => (l.product.id === p.id ? { ...l, cantidad: l.cantidad + 1 } : l));
+      // Si el producto normal ya fue leído una vez, las siguientes lecturas
+      // suman inmediatamente sin esperar otra consulta a Supabase.
+      if (p && catalogoAnillosCacheRef.current.has(p.id) &&
+          catalogoAnillosCacheRef.current.get(p.id) === null) {
+        const actual = carritoRef.current;
+        const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
+        if (existente) {
+          const siguiente = existente.cantidad >= p.stock_available
+            ? actual
+            : actual.map((l) =>
+                l.product.id === p!.id && !l.ringSize
+                  ? { ...l, cantidad: l.cantidad + 1 }
+                  : l
+              );
+          carritoRef.current = siguiente;
+          setCarrito(siguiente);
+          setFilaSeleccionada(null);
+          requestAnimationFrame(() => setFilaSeleccionada(p!.id));
+          return;
+        }
       }
-      return [...prev, { product: p, cantidad: 1 }];
-    });
-    setFilaSeleccionada(p.id);
-    inputRef.current?.focus();
+
+      setBuscando(true);
+
+      if (!p) {
+        const { data: producto, error } = await supabase
+          .from("products").select("*")
+          .eq("code", codigoLeido)
+          .is("deleted_at", null)
+          .maybeSingle();
+
+        if (error) throw new Error(error.message);
+        if (!producto) {
+          setNoEncontrado(true);
+          return;
+        }
+        p = producto as Product;
+        productosCacheRef.current.set(codigoLeido, p);
+      }
+
+      if (p.stock_available < 1) {
+        setProductoSinStock(p);
+        return;
+      }
+
+      let productoCatalogo: any;
+      if (catalogoAnillosCacheRef.current.has(p.id)) {
+        productoCatalogo = catalogoAnillosCacheRef.current.get(p.id);
+      } else {
+        const { data, error } = await supabase
+          .from("catalog_products")
+          .select("variant_type, variant_stock")
+          .eq("product_id", p.id)
+          .eq("active", true)
+          .eq("variant_type", "ring_size")
+          .maybeSingle();
+
+        if (error) throw new Error(`No se pudo revisar las tallas: ${error.message}`);
+        productoCatalogo = data ?? null;
+        catalogoAnillosCacheRef.current.set(p.id, productoCatalogo);
+      }
+
+      if (productoCatalogo?.variant_type === "ring_size") {
+        const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
+        const disponibles = Object.entries(tallas)
+          .filter(([, stock]) => Number(stock) > 0)
+          .sort(([a], [b]) => Number(a) - Number(b));
+
+        if (disponibles.length === 0) {
+          alert("Este anillo no tiene tallas disponibles.");
+          return;
+        }
+
+        const opciones = disponibles
+          .map(([talla, stock]) => `Talla ${talla} — ${stock} disponibles`)
+          .join("\n");
+        const talla = window.prompt(
+          `Selecciona la talla disponible:\n\n${opciones}\n\nEscribe solo el número de talla:`
+        );
+        if (talla === null) return;
+
+        const tallaLimpia = talla.trim();
+        const stockTalla = Number(tallas[tallaLimpia] ?? 0);
+        if (stockTalla <= 0) {
+          alert("La talla seleccionada no está disponible.");
+          return;
+        }
+
+        const actual = carritoRef.current;
+        const existente = actual.find(
+          (l) => l.product.id === p!.id && l.ringSize === tallaLimpia
+        );
+        const siguiente = existente
+          ? (existente.cantidad >= stockTalla ? actual : actual.map((l) =>
+              l.product.id === p!.id && l.ringSize === tallaLimpia
+                ? { ...l, cantidad: l.cantidad + 1 } : l))
+          : [...actual, { product: p, cantidad: 1, ringSize: tallaLimpia, stockTalla }];
+
+        carritoRef.current = siguiente;
+        setCarrito(siguiente);
+        const clave = `${p.id}-${tallaLimpia}`;
+        setFilaSeleccionada(null);
+        requestAnimationFrame(() => setFilaSeleccionada(clave));
+        return;
+      }
+
+      const actual = carritoRef.current;
+      const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
+      const siguiente = existente
+        ? (existente.cantidad >= p.stock_available ? actual : actual.map((l) =>
+            l.product.id === p!.id && !l.ringSize
+              ? { ...l, cantidad: l.cantidad + 1 } : l))
+        : [...actual, { product: p, cantidad: 1 }];
+
+      carritoRef.current = siguiente;
+      setCarrito(siguiente);
+      setFilaSeleccionada(null);
+      requestAnimationFrame(() => setFilaSeleccionada(p!.id));
+    } catch (error: any) {
+      alert(error?.message ?? "No se pudo agregar el producto.");
+    } finally {
+      setBuscando(false);
+      inputRef.current?.focus();
+    }
   }
   useEffect(() => {
   if (!filaSeleccionada || !listaCarritoRef.current) return;
@@ -186,7 +225,7 @@ if (productoCatalogo?.variant_type === "ring_size") {
       const contenedor = listaCarritoRef.current;
 
       fila.scrollIntoView({
-  behavior: "smooth",
+  behavior: "auto",
   block: "nearest",
 });
     }
@@ -476,7 +515,7 @@ p_unit_price: precioPreview(l),
     border: "1px solid #D9D0C2",
     maxHeight: "calc(100vh - 330px)",
     overflowY: "auto",
-    scrollBehavior: "smooth",
+    scrollBehavior: "auto",
   }}
 >
           {carrito.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Escanea o escribe un código para empezar. Selecciona una fila y presiona Supr para quitarla.</p>}
