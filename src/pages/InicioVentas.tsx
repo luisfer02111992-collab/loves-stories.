@@ -1,1001 +1,636 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, Wallet, Printer, Bell, Search } from "lucide-react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Plus, Minus, Trash2, Search, ScanBarcode, UserPlus, ShoppingCart, Users } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
-import { useAuth } from "../hooks/useAuth";
-import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido, GrupoProducto } from "../lib/pricing";
-import { generarPdfGrande } from "../lib/pdf";
-import type { Customer } from "../lib/types";
-import { imprimirTicket } from "../lib/print";
+import type { Customer, Product, Category } from "../lib/types";
+import { precioNegocioPorCantidad } from "../lib/pricing";
 
-interface DepositoDetalle {
-  id: string;
-  amount: number; // saldo todavía disponible de este depósito
-  original_amount?: number;
-  applied_amount?: number;
-  method: string;
-  paid_at: string;
+interface LineaCarrito {
+  product: Product;
+  cantidad: number;
+  precioPersonalizado?: number;
+  ringSize?: string | null;
+  stockTalla?: number | null;
 }
 
-const PLAZO_DIAS = 5;
-
-export default function Clientes() {
-  const { vendedorActivoId, sesionActivaId } = useSellerSession();
-  const { userId, profile } = useAuth();
-  const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
-  const [depositoSeleccionado, setDepositoSeleccionado] = useState<string | null>(null);
-  const [guardandoDeposito, setGuardandoDeposito] = useState(false);
+// Pantalla inicial: escanear/buscar productos a una lista temporal (nada se
+// descuenta todavía), y recién al presionar "Asignar cliente" (eligiendo un
+// cliente existente, creando uno nuevo, o como venta directa sin cliente) se
+// realiza la asignación real contra Supabase, de una sola vez.
+export default function InicioVentas() {
+  const navigate = useNavigate();
+  const { vendedorActivoId, vendedorActivoNombre, sesionActivaId } = useSellerSession();
+  const [codigo, setCodigo] = useState("");
+  const [buscando, setBuscando] = useState(false);
+  const [noEncontrado, setNoEncontrado] = useState(false);
+  const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
+  const [productoSinStock, setProductoSinStock] = useState<Product | null>(null);
+  const [filaSeleccionada, setFilaSeleccionada] = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listaCarritoRef = useRef<HTMLDivElement>(null);
+  const [mostrarAsignar, setMostrarAsignar] = useState(false);
+  const [modo, setModo] = useState<"cliente" | "nuevo" | "directa">("cliente");
   const [clientes, setClientes] = useState<Customer[]>([]);
-  const [pestanaClientes, setPestanaClientes] = useState<"abiertas" | "cerradas">("abiertas");
-  const [clientesAbiertos, setClientesAbiertos] = useState<Set<string>>(new Set());
-  const [seleccionado, setSeleccionado] = useState<Customer | null>(null);
-  const [ordenId, setOrdenId] = useState<string | null>(null);
-  const [fechaApertura, setFechaApertura] = useState<string | null>(null);
-  const [items, setItems] = useState<LineaPedido[]>([]);
-  const [depositos, setDepositos] = useState<DepositoDetalle[]>([]);
-  const [disponible, setDisponible] = useState(0);
-  const [reglas, setReglas] = useState<PricingRule[]>([]);
-  const [nombreNegocio, setNombreNegocio] = useState("Loves Stories");
-  const [telefonoNegocio, setTelefonoNegocio] = useState("");
+  const [busquedaCliente, setBusquedaCliente] = useState("");
+  const [clienteElegido, setClienteElegido] = useState<Customer | null>(null);
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoTelefono, setNuevoTelefono] = useState("");
-  const [mostrarNuevo, setMostrarNuevo] = useState(false);
-  const [inactivos, setInactivos] = useState<{ name: string; phone: string; ultima: string | null }[]>([]);
-  const [editando, setEditando] = useState(false);
-  const [edicion, setEdicion] = useState({ name: "", phone: "", notes: "" });
-  const [mostrarDeposito, setMostrarDeposito] = useState(false);
-  const [montoDeposito, setMontoDeposito] = useState(0);
-  const [metodoDeposito, setMetodoDeposito] = useState("efectivo");
-  const [ultimoPdf, setUltimoPdf] = useState<{ blob: Blob; texto: string } | null>(null);
-  const [cerrando, setCerrando] = useState(false);
-  const [mostrarResumenCierre, setMostrarResumenCierre] = useState(false);
-  const [mostrarRecibo, setMostrarRecibo] = useState(false);
-  const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
-  const [mensajeRecordatorio, setMensajeRecordatorio] = useState("");
-  const [pendienteSobrante, setPendienteSobrante] = useState(false);
-  const [generandoPdf, setGenerandoPdf] = useState(false);
-  const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
-  const [editandoPrecio, setEditandoPrecio] = useState<string | null>(null);
-  const [precioManual, setPrecioManual] = useState(0);
-  const [guardandoPrecio, setGuardandoPrecio] = useState(false);
-  const [busquedaCliente, setBusquedaCliente] = useState("");
-  const [indiceBusqueda, setIndiceBusqueda] = useState(0);
-
-  const clientesVisibles = useMemo(() => {
-    const q = busquedaCliente.trim().toLowerCase();
-    const base = q ? clientes : clientes.filter(c => pestanaClientes === "abiertas" ? clientesAbiertos.has(c.id) : !clientesAbiertos.has(c.id));
-    if (!q) return base;
-    return base.filter(c => (c.name ?? "").toLowerCase().includes(q) || (c.phone ?? "").toLowerCase().includes(q));
-  }, [clientes, clientesAbiertos, pestanaClientes, busquedaCliente]);
-
-  function tecladoBusquedaCliente(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!clientesVisibles.length) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); setIndiceBusqueda(i => Math.min(i + 1, clientesVisibles.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setIndiceBusqueda(i => Math.max(i - 1, 0)); }
-    else if (e.key === "Enter") { e.preventDefault(); setSeleccionado(clientesVisibles[Math.min(indiceBusqueda, clientesVisibles.length - 1)]); }
-  }
-
-  useEffect(() => { setIndiceBusqueda(0); }, [busquedaCliente, pestanaClientes]);
+  const [metodoPago, setMetodoPago] = useState("efectivo");
+  const [procesando, setProcesando] = useState(false);
+  const [ultimoResultado, setUltimoResultado] = useState<string | null>(null);
+  const [categorias, setCategorias] = useState<Category[]>([]);
 
   useEffect(() => {
-    cargarClientes();
-    loadPricingRules().then(setReglas);
-    supabase.from("app_settings").select("business_name, whatsapp_number").eq("id", 1).single().then(({ data }) => {
-      if (data?.business_name) setNombreNegocio(data.business_name);
-      setTelefonoNegocio(data?.whatsapp_number ?? "");
-    });
-    cargarInactivos();
+    supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
+    supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
   }, []);
+useEffect(() => {
+  const guardado = sessionStorage.getItem("inicioVentasPendiente");
+  if (!guardado) return;
 
-  useEffect(() => {
-    const visibles=clientes.filter(c=>pestanaClientes==="abiertas"?clientesAbiertos.has(c.id):!clientesAbiertos.has(c.id));
-    if (!seleccionado || !visibles.some(c=>c.id===seleccionado.id)) setSeleccionado(visibles[0] ?? null);
-  }, [pestanaClientes, clientesAbiertos]);
+  try {
+    const datos = JSON.parse(guardado);
 
-  useEffect(() => {
-    if (seleccionado) {
-      cargarPedido(seleccionado.id);
-      setEdicion({ name: seleccionado.name, phone: seleccionado.phone, notes: seleccionado.notes ?? "" });
-      setEditando(false);
-      setMostrarDeposito(false);
-      setUltimoPdf(null);
-      setMostrarResumenCierre(false);
-      setMostrarRecibo(false);
-      setMostrarRecordatorio(false);
+    if (Array.isArray(datos.carrito)) {
+      setCarrito(datos.carrito);
     }
-  }, [seleccionado]);
-
-  async function cargarClientes() {
-    // Una cuenta solo se considera abierta cuando tiene actividad REAL:
-    // 1) al menos un producto asignado en un pedido open/reopened, o
-    // 2) al menos un depósito con saldo todavía disponible.
-    // Un pedido vacío por sí solo NO mantiene al cliente en Cuentas abiertas.
-    const [{ data }, { data: ordenesAbiertas }, { data: pagos }] = await Promise.all([
-      supabase.from("customers").select("*").is("deleted_at", null).order("name"),
-      supabase
-        .from("orders")
-        .select("id, customer_id, order_items(id)")
-        .in("status", ["open", "reopened"]),
-      supabase
-        .from("payments")
-        .select("customer_id, amount, applied_amount, method")
-    ]);
-
-    const lista = (data as Customer[]) ?? [];
-    const ids = new Set<string>();
-
-    for (const o of ordenesAbiertas ?? []) {
-      if ((o as any).customer_id && (((o as any).order_items ?? []).length > 0)) {
-        ids.add((o as any).customer_id);
-      }
-    }
-
-    for (const p of pagos ?? []) {
-      const pago = p as any;
-      if (!pago.customer_id) continue;
-      if (pago.method === "cierre_pedido" || pago.method === "devolucion_sobrante") continue;
-      const saldoDisponible = Math.max(0, Number(pago.amount ?? 0) - Number(pago.applied_amount ?? 0));
-      if (saldoDisponible > 0.0001) ids.add(pago.customer_id);
-    }
-
-    setClientes(lista);
-    setClientesAbiertos(ids);
-    const visibles = lista.filter(c => pestanaClientes === "abiertas" ? ids.has(c.id) : !ids.has(c.id));
-    if (!seleccionado || !visibles.some(c => c.id === seleccionado.id)) setSeleccionado(visibles[0] ?? null);
+  } catch (error) {
+    console.error("No se pudo recuperar la preasignación:", error);
   }
 
-  async function cargarInactivos() {
-    const limite = new Date();
-    limite.setDate(limite.getDate() - 60);
-    const { data } = await supabase.from("customers").select("name, phone, payments(paid_at)").is("deleted_at", null);
-    const lista = (data ?? [])
-      .map((c: any) => {
-        const fechas = (c.payments ?? []).map((p: any) => p.paid_at).sort();
-        const ultima = fechas.length ? fechas[fechas.length - 1] : null;
-        return { name: c.name, phone: c.phone, ultima };
-      })
-      .filter((c: any) => !c.ultima || new Date(c.ultima) < limite)
-      .slice(0, 5);
-    setInactivos(lista);
-  }
+  sessionStorage.removeItem("inicioVentasPendiente");
+}, []);
+  
+  async function buscarYAgregar(e: React.FormEvent) {
+    e.preventDefault();
+    const codigoLeido = codigo.trim();
+    if (!codigoLeido) return;
 
-  async function cargarPedido(customerId: string) {
-    const { data: orden } = await supabase
-      .from("orders")
-      .select("id, opened_at")
-      .eq("customer_id", customerId)
-      .in("status", ["open", "reopened"])
-      .order("opened_at", { ascending: false })
-      .limit(1)
+    // Liberar el campo inmediatamente para que el lector pueda enviar la
+    // siguiente lectura aunque Supabase todavía esté procesando la anterior.
+    setCodigo("");
+    setBuscando(true);
+    setNoEncontrado(false);
+    inputRef.current?.focus();
+
+    const { data: producto } = await supabase
+      .from("products")
+      .select("*")
+      .eq("code", codigoLeido)
+      .is("deleted_at", null)
       .maybeSingle();
+    setBuscando(false);
+    if (!producto) {
+      setNoEncontrado(true);
+      return;
+    }
+    const p = producto as Product;
+    if (p.stock_available < 1) {
+  setProductoSinStock(p);
+  return;
+}
+    const { data: productoCatalogo, error: errorCatalogo } = await supabase
+  .from("catalog_products")
+  .select("variant_type, variant_stock")
+  .eq("product_id", p.id)
+  .eq("active", true)
+  .eq("variant_type", "ring_size")
+  .maybeSingle();
 
-    if (!orden) {
-      setOrdenId(null);
-      setFechaApertura(null);
-      setItems([]);
-    } else {
-      setOrdenId(orden.id);
-      setFechaApertura(orden.opened_at);
-      const { data: filas } = await supabase
-        .from("order_items")
-        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id, image_url)")
-        .eq("order_id", orden.id)
-        .order("assigned_at", { ascending: true });
-      const detalle: LineaPedido[] = (filas ?? []).map((f: any) => ({
-        id: f.id,
-        product_id: f.product_id,
-        codigo: f.products?.code ?? "",
-        nombre: f.products?.name ?? "",
-        categoria_id: f.products?.category_id ?? null,
-        imagen: f.products?.image_url ?? null,
-        cantidad: f.quantity,
-        precio_base: f.unit_price,
-        fecha: new Date(f.assigned_at).toLocaleDateString("es-BO"),
-      }));
-      setItems(detalle);
+if (errorCatalogo) {
+  alert(`No se pudo revisar las tallas: ${errorCatalogo.message}`);
+  return;
+}
+
+if (productoCatalogo?.variant_type === "ring_size") {
+  const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
+
+  const disponibles = Object.entries(tallas)
+    .filter(([, stock]) => Number(stock) > 0)
+    .sort(([a], [b]) => Number(a) - Number(b));
+
+  if (disponibles.length === 0) {
+    alert("Este anillo no tiene tallas disponibles.");
+    return;
+  }
+
+  const opciones = disponibles
+    .map(([talla, stock]) => `Talla ${talla} — ${stock} disponibles`)
+    .join("\n");
+
+  const talla = window.prompt(
+    `Selecciona la talla disponible:\n\n${opciones}\n\nEscribe solo el número de talla:`
+  );
+
+  if (talla === null) return;
+
+  const tallaLimpia = talla.trim();
+  const stockTalla = Number(tallas[tallaLimpia] ?? 0);
+
+  if (stockTalla <= 0) {
+    alert("La talla seleccionada no está disponible.");
+    return;
+  }
+
+  setCarrito((prev) => {
+    const existente = prev.find(
+      (l) => l.product.id === p.id && l.ringSize === tallaLimpia
+    );
+
+    if (existente) {
+      if (existente.cantidad >= stockTalla) return prev;
+
+      return prev.map((l) =>
+        l.product.id === p.id && l.ringSize === tallaLimpia
+          ? { ...l, cantidad: l.cantidad + 1 }
+          : l
+      );
     }
 
-    // Dinero realmente disponible: cada depósito conserva cuánto ya fue
-    // aplicado a ciclos cerrados. Así un depósito usado NO reaparece en el
-    // siguiente pedido y un sobrante real sí continúa como saldo a favor.
-    const { data: pagos } = await supabase
-      .from("payments")
-      .select("id, amount, applied_amount, method, paid_at")
-      .eq("customer_id", customerId)
-      .order("paid_at", { ascending: false });
-    const disponibles: DepositoDetalle[] = (pagos ?? [])
-      .filter((p: any) => p.method !== "cierre_pedido" && p.method !== "devolucion_sobrante")
-      .map((p: any) => ({
-        id: p.id, method: p.method, paid_at: p.paid_at,
-        original_amount: Number(p.amount ?? 0),
-        applied_amount: Number(p.applied_amount ?? 0),
-        amount: Math.max(0, Number(p.amount ?? 0) - Number(p.applied_amount ?? 0)),
-      }))
-      .filter((p) => p.amount > 0.0001);
-    setDepositos(disponibles);
-    setDisponible(disponibles.reduce((a, p) => a + p.amount, 0));
+    return [
+      ...prev,
+      {
+        product: p,
+        cantidad: 1,
+        ringSize: tallaLimpia,
+        stockTalla,
+      },
+    ];
+  });
+
+  setFilaSeleccionada(`${p.id}-${tallaLimpia}`);
+  inputRef.current?.focus();
+  return;
+}
+    setCarrito((prev) => {
+      const existente = prev.find((l) => l.product.id === p.id);
+      if (existente) {
+        if (existente.cantidad >= p.stock_available) return prev;
+        return prev.map((l) => (l.product.id === p.id ? { ...l, cantidad: l.cantidad + 1 } : l));
+      }
+      return [...prev, { product: p, cantidad: 1 }];
+    });
+    setFilaSeleccionada(p.id);
+    inputRef.current?.focus();
   }
-
-  const grupos: GrupoProducto[] = useMemo(() => agruparPorProducto(reglas, items), [items, reglas]);
-
-  function resumenFechas(g: GrupoProducto) {
-    const porFecha = new Map<string, number>();
-    for (const d of g.detalle) porFecha.set(d.fecha, (porFecha.get(d.fecha) ?? 0) + d.cantidad);
-    return Array.from(porFecha.entries()).map(([fecha, cantidad]) => `${fecha}: ${cantidad} un.`).join(" · ");
-  }
-
-  // Supr/Delete: quita el producto o el depósito seleccionado (con la misma
-  // confirmación que el botón correspondiente), sin interferir con lo que
-  // se esté escribiendo en un campo de texto.
   useEffect(() => {
+  if (!filaSeleccionada || !listaCarritoRef.current) return;
+
+  requestAnimationFrame(() => {
+    const fila = listaCarritoRef.current?.querySelector(
+      `#producto-carrito-${filaSeleccionada}`
+    ) as HTMLElement | null;
+
+    if (fila && listaCarritoRef.current) {
+      const contenedor = listaCarritoRef.current;
+
+      fila.scrollIntoView({
+  behavior: "smooth",
+  block: "nearest",
+});
+    }
+  });
+}, [filaSeleccionada, carrito]);
+    function cambiarCantidad(productId: string, delta: number, ringSize?: string | null) {
+  setCarrito((prev) =>
+    prev
+      .map((l) => {
+        const mismaLinea =
+          l.product.id === productId &&
+          (l.ringSize ?? null) === (ringSize ?? null);
+
+        if (!mismaLinea) return l;
+
+        const limite =
+          l.ringSize && l.stockTalla != null
+            ? Math.min(l.product.stock_available, l.stockTalla)
+            : l.product.stock_available;
+
+        return {
+          ...l,
+          cantidad: Math.max(0, Math.min(limite, l.cantidad + delta)),
+        };
+      })
+      .filter((l) => l.cantidad > 0)
+  );
+}
+ function quitarLinea(productId: string, ringSize?: string | null) {
+  setCarrito((prev) =>
+    prev.filter(
+      (l) =>
+        !(
+          l.product.id === productId &&
+          (l.ringSize ?? null) === (ringSize ?? null)
+        )
+    )
+  );
+  setFilaSeleccionada(null);
+}
+function cambiarPrecio(
+  productId: string,
+  valor: string,
+  ringSize?: string | null
+) {
+  setCarrito((prev) =>
+    prev.map((l) => {
+      const mismaLinea =
+        l.product.id === productId &&
+        (l.ringSize ?? null) === (ringSize ?? null);
+
+      if (!mismaLinea) return l;
+
+      if (valor === "") {
+        return { ...l, precioPersonalizado: undefined };
+      }
+
+      const precio = Number(valor);
+      if (!Number.isFinite(precio) || precio < 0) return l;
+
+      return { ...l, precioPersonalizado: precio };
+    })
+  );
+}
+        useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== "Delete" && e.key !== "Backspace") return;
-      const activo = document.activeElement;
-      const enCampoDeTexto = activo && (activo.tagName === "INPUT" || activo.tagName === "TEXTAREA" || activo.tagName === "SELECT");
-      if (enCampoDeTexto) return;
-      if (productoSeleccionado) {
+      if ((e.key === "Delete" || e.key === "Backspace") && filaSeleccionada) {
+        const activo = document.activeElement;
+        const enCampoDeTexto = activo && (activo.tagName === "INPUT" || activo.tagName === "TEXTAREA" || activo.tagName === "SELECT");
+        if (enCampoDeTexto) return;
         e.preventDefault();
-        const g = grupos.find((x) => x.product_id === productoSeleccionado);
-        if (g) quitarProductoCompleto(g);
-      } else if (depositoSeleccionado) {
-        e.preventDefault();
-        const d = depositos.find((x) => x.id === depositoSeleccionado);
-        if (d) eliminarDeposito(d);
+        const linea = carrito.find(
+  (l) =>
+    (l.ringSize
+      ? `${l.product.id}-${l.ringSize}`
+      : l.product.id) === filaSeleccionada
+);
+
+if (linea) {
+  quitarLinea(linea.product.id, linea.ringSize);
+}
       }
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [productoSeleccionado, depositoSeleccionado, grupos, depositos]);
-  const subtotalSinDescuento = grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0);
-  const total = grupos.reduce((a, g) => a + g.subtotalConDescuento, 0);
-  const cantidadTotal = grupos.reduce((a, g) => a + g.cantidadTotal, 0);
-  const descuentoTotal = subtotalSinDescuento - total;
-  const depositado = depositos.reduce((a, d) => a + d.amount, 0);
-  // Nunca se muestra un número negativo: se separa en "saldo a favor" (pagó de
-  // más) o "saldo pendiente" (falta pagar), nunca los dos a la vez. Usa el
-  // "banco del cliente" (disponible), no la simple suma de depósitos, para
-  // no volver a contar dinero que ya se consumió en un pedido cerrado anterior.
-  const diferencia = total - disponible; // > 0 = pendiente, < 0 = a favor
-  const saldoPendiente = Math.max(0, diferencia);
-  const saldoAFavor = Math.max(0, -diferencia);
+  }, [filaSeleccionada, carrito]);
 
-  // Semáforo de plazo: verde/amarillo/rojo según los días desde la apertura.
-  // El rojo es solo una advertencia visual — nunca bloquea nada.
-  const diasApertura = fechaApertura ? Math.floor((Date.now() - new Date(fechaApertura).getTime()) / 86400000) : 0;
-  const semaforo = diasApertura >= PLAZO_DIAS ? "rojo" : diasApertura >= PLAZO_DIAS - 1 ? "amarillo" : "verde";  const colorSemaforo = { verde: "#4F6F52", amarillo: "#B7791F", rojo: "#7A2540" }[semaforo];
-  const textoSemaforo = { verde: "Plazo vigente", amarillo: "Se acerca al vencimiento", rojo: "Plazo vencido (aviso, no bloquea)" }[semaforo];
-
-  async function guardarPrecioManual(productId: string) {
-    if (!ordenId || guardandoPrecio || precioManual < 0) return;
-    setGuardandoPrecio(true);
-    const { error } = await supabase.rpc("update_open_order_product_price", {
-      p_order_id: ordenId, p_product_id: productId, p_unit_price: precioManual,
-    });
-    setGuardandoPrecio(false);
-    if (error) { alert(error.message); return; }
-    setEditandoPrecio(null);
-    if (seleccionado) await cargarPedido(seleccionado.id);
-  }
-
-  async function cerrarPedidoVacioSinDeposito(customerId: string, orderId: string) {
-    const [{ count: cantidadItems, error: errorItems }, { data: pagos, error: errorPagos }] = await Promise.all([
-      supabase.from("order_items").select("id", { count: "exact", head: true }).eq("order_id", orderId),
-      supabase.from("payments").select("amount, applied_amount, method").eq("customer_id", customerId),
-    ]);
-
-    if (errorItems) throw new Error(errorItems.message);
-    if (errorPagos) throw new Error(errorPagos.message);
-
-    const saldoDisponible = (pagos ?? [])
-      .filter((p: any) => p.method !== "cierre_pedido" && p.method !== "devolucion_sobrante")
-      .reduce((total: number, p: any) => total + Math.max(0, Number(p.amount ?? 0) - Number(p.applied_amount ?? 0)), 0);
-
-    if ((cantidadItems ?? 0) === 0 && saldoDisponible <= 0.0001) {
-      const { error: errorCerrar } = await supabase
-        .from("orders")
-        .update({ status: "closed" })
-        .eq("id", orderId)
-        .in("status", ["open", "reopened"]);
-
-      if (errorCerrar) throw new Error(errorCerrar.message);
+  useEffect(() => {
+    function confirmarConEnter(e: KeyboardEvent) {
+      if (e.key !== "Enter" || !mostrarAsignar || procesando || carrito.length === 0) return;
+      const el = e.target as HTMLElement | null;
+      // Los campos del formulario conservan Enter para confirmar, pero evitamos
+      // interferir con botones/selects y con el buscador mientras aún no hay cliente elegido.
+      if (el?.tagName === "BUTTON" || el?.tagName === "SELECT" || el?.tagName === "TEXTAREA") return;
+      if (modo === "cliente" && !clienteElegido) return;
+      if (modo === "nuevo" && (!nuevoNombre.trim() || !nuevoTelefono.trim())) return;
+      e.preventDefault();
+      confirmarAsignacion();
     }
+    window.addEventListener("keydown", confirmarConEnter);
+    return () => window.removeEventListener("keydown", confirmarConEnter);
+  }, [mostrarAsignar, procesando, carrito, modo, clienteElegido, nuevoNombre, nuevoTelefono]);
+
+ function precioPreview(l: LineaCarrito) {
+  if (l.precioPersonalizado !== undefined) {
+    return l.precioPersonalizado;
   }
 
-  async function quitarUnidad(itemId: string) {
-    const pedidoActualId = ordenId;
-    const clienteActualId = seleccionado?.id ?? null;
+  const categoria =
+    categorias.find((c) => c.id === l.product.category_id)?.name ?? null;
 
-    const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
-    if (error) { alert(`No se pudo disminuir: ${error.message}`); return; }
+  return precioNegocioPorCantidad(
+    categoria,
+    l.product.name,
+    l.cantidad,
+    Number(l.product.price),
+    l.product.description
+  );
+}
+  const total = carrito.reduce((a, l) => a + precioPreview(l) * l.cantidad, 0);
+  const unidades = carrito.reduce((a, l) => a + l.cantidad, 0);
 
+  const coincidenciasCliente = useMemo(() => {
+    const q = busquedaCliente.trim().toLowerCase();
+    if (!q) return clientes.slice(0, 8);
+    return clientes.filter((c) => c.name.toLowerCase().includes(q) || c.phone.includes(q)).slice(0, 8);
+  }, [busquedaCliente, clientes]);
+
+  async function obtenerOrdenAbierta(customerId: string) {
+    const { data: existente } = await supabase
+      .from("orders").select("id").eq("customer_id", customerId).in("status", ["open", "reopened"]).maybeSingle();
+    if (existente) return existente.id as string;
+    const { data: nueva } = await supabase.from("orders").insert({ customer_id: customerId }).select().single();
+    return nueva!.id as string;
+  }
+
+  // Único momento en que se escribe de verdad en Supabase (con protección
+  // contra doble ejecución vía "procesando").
+  async function confirmarAsignacion(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (procesando || carrito.length === 0) return;
+
+    if (modo === "cliente" && !clienteElegido) { alert("Elige un cliente de la lista."); return; }
+    if (modo === "nuevo" && (!nuevoNombre.trim() || !nuevoTelefono.trim())) { alert("Completa nombre y teléfono del cliente nuevo."); return; }
+
+    setProcesando(true);
     try {
-      if (pedidoActualId && clienteActualId) await cerrarPedidoVacioSinDeposito(clienteActualId, pedidoActualId);
+      // Validar stock de TODAS las líneas antes de escribir nada, para no
+      // dejar una asignación a medias si algo cambió justo antes de confirmar.
+      const ids = carrito.map((l) => l.product.id);
+      const { data: stockActual, error: errStock } = await supabase.from("products").select("id, code, stock_available").in("id", ids);
+      if (errStock) throw new Error(errStock.message);
+      for (const l of carrito) {
+        const actual = stockActual?.find((p: any) => p.id === l.product.id);
+        if (!actual || actual.stock_available < l.cantidad) {
+          throw new Error(`Ya no hay stock suficiente de ${l.product.code} (disponible: ${actual?.stock_available ?? 0}, pedido: ${l.cantidad}). No se asignó nada.`);
+        }
+      }
+
+      let customerId: string | null = null;
+      let nombreDestino = "Venta directa";
+
+      if (modo === "cliente" && clienteElegido) {
+        customerId = clienteElegido.id;
+        nombreDestino = clienteElegido.name;
+      } else if (modo === "nuevo") {
+        const { data: creado, error } = await supabase.from("customers").insert({ name: nuevoNombre.trim(), phone: nuevoTelefono.trim() }).select().single();
+        if (error || !creado) throw new Error(error?.message ?? "No se pudo crear el cliente");
+        customerId = creado.id;
+        nombreDestino = creado.name;
+      }
+
+      if (modo === "directa") {
+        const { data: orden, error } = await supabase.from("orders").insert({ customer_id: null, direct_sale: true }).select().single();
+        if (error || !orden) throw new Error(error?.message ?? "No se pudo iniciar la venta directa");
+        for (const l of carrito) {
+          const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
+            p_order_id: orden.id, p_product_id: l.product.id, p_quantity: l.cantidad, p_origin: "manual",
+            p_seller_id: vendedorActivoId,
+p_session_id: sesionActivaId,
+p_unit_price: precioPreview(l),
+            p_ring_size: l.ringSize ?? null,
+          });
+          if (errAsig) throw new Error(errAsig.message);
+        }
+        const { data: totalReal, error: errCalc } = await supabase.rpc("calcular_total_pedido", { p_order_id: orden.id });
+        if (errCalc) throw new Error(errCalc.message);
+        if ((totalReal ?? 0) > 0) {
+          await supabase.from("payments").insert({ customer_id: null, order_id: orden.id, amount: totalReal, method: metodoPago });
+        }
+        const { error: errCierre } = await supabase.rpc("close_order", { p_order_id: orden.id });
+        if (errCierre) throw new Error(errCierre.message);
+        setUltimoResultado(`Venta directa finalizada — Total Bs ${(totalReal ?? 0).toFixed(2)}`);
+      } else if (customerId) {
+        const orderId = await obtenerOrdenAbierta(customerId);
+        for (const l of carrito) {
+          const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
+            p_order_id: orderId, p_product_id: l.product.id, p_quantity: l.cantidad, p_origin: "manual",
+            p_seller_id: vendedorActivoId,
+p_session_id: sesionActivaId,
+p_unit_price: precioPreview(l),
+            p_ring_size: l.ringSize ?? null,
+          });
+          if (errAsig) throw new Error(errAsig.message);
+        }
+        setUltimoResultado(`Asignado a ${nombreDestino}: ${unidades} unidad(es) — Bs ${total.toFixed(2)}. El pedido sigue abierto hasta que se cierre desde Clientes.`);
+      }
+
+      setCarrito([]);
+      setMostrarAsignar(false);
+      setClienteElegido(null);
+      setBusquedaCliente("");
+      setNuevoNombre("");
+      setNuevoTelefono("");
+      setModo("cliente");
     } catch (err: any) {
-      alert(`Se quitó la unidad, pero no se pudo actualizar el estado de la cuenta: ${err.message}`);
+      alert(err.message);
+    } finally {
+      setProcesando(false);
     }
-
-    if (seleccionado) {
-      await cargarPedido(seleccionado.id);
-      await cargarClientes();
-    }
-  }
-
-  async function aumentarUnidad(productId: string) {
-    if (!ordenId) return;
-    await supabase.rpc("assign_product_to_order", {
-      p_order_id: ordenId, p_product_id: productId, p_quantity: 1, p_origin: "manual",
-      p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
-    });
-    if (seleccionado) cargarPedido(seleccionado.id);
-  }
-
-  async function quitarProductoCompleto(g: GrupoProducto) {
-    if (!confirm(`¿Quitar "${g.nombre}" completo (${g.cantidadTotal} unidades) de este pedido? Se devuelve todo al inventario.`)) return;
-
-    const pedidoActualId = ordenId;
-    const clienteActualId = seleccionado?.id ?? null;
-
-    for (const d of g.detalle) {
-      const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: d.id, p_quantity: d.cantidad });
-      if (error) { alert(`No se pudo eliminar el producto: ${error.message}`); return; }
-    }
-
-    try {
-      if (pedidoActualId && clienteActualId) await cerrarPedidoVacioSinDeposito(clienteActualId, pedidoActualId);
-    } catch (err: any) {
-      alert(`Se quitó el producto, pero no se pudo actualizar el estado de la cuenta: ${err.message}`);
-    }
-
-    setProductoSeleccionado(null);
-    if (seleccionado) {
-      await cargarPedido(seleccionado.id);
-      await cargarClientes();
-    }
-  }
-
-  // Eliminar un depósito registrado por error: pide confirmación, deja
-  // constancia en audit_log de qué se borró y por qué (nunca se borra en
-  // silencio), y recalcula solo automáticamente porque saldo/disponible
-  // se recalculan a partir de la lista de depósitos.
-  async function eliminarDeposito(d: DepositoDetalle) {
-    if ((d.applied_amount ?? 0) > 0) {
-      alert("Este depósito ya fue utilizado total o parcialmente en un pedido cerrado y no puede eliminarse desde el pedido abierto. Su historial debe conservarse.");
-      return;
-    }
-    const motivo = prompt(`¿Eliminar el depósito de Bs ${d.amount} (${d.method}, ${new Date(d.paid_at).toLocaleDateString("es-BO")})? Escribe el motivo para continuar:`);
-    if (!motivo) return;
-    await supabase.from("audit_log").insert({
-      actor: userId,
-      action: "deposito_eliminado",
-      details: { payment_id: d.id, customer_id: seleccionado?.id, amount: d.amount, method: d.method, paid_at: d.paid_at, motivo },
-    });
-    await supabase.from("payments").delete().eq("id", d.id);
-    setDepositoSeleccionado(null);
-    if (seleccionado) {
-      await cargarPedido(seleccionado.id);
-      await cargarClientes();
-    }
-  }
-
-  async function confirmarCierre() {
-    if (!ordenId || !seleccionado || cerrando) return;
-    setCerrando(true);
-    // Seguridad financiera: el total que cerrará Supabase debe coincidir con
-    // el total que ve el usuario. Si no coincide, no consumimos depósitos.
-    const { data: totalServidor, error: errorTotal } = await supabase.rpc("calcular_total_pedido", { p_order_id: ordenId });
-    if (errorTotal) { alert(errorTotal.message); setCerrando(false); return; }
-    if (Math.abs(Number(totalServidor ?? 0) - total) > 0.01) {
-      alert(`No se cerró el pedido porque el total del servidor (Bs ${Number(totalServidor ?? 0).toFixed(2)}) no coincide con el total mostrado (Bs ${total.toFixed(2)}). Actualiza la página y vuelve a revisar.`);
-      setCerrando(false);
-      return;
-    }
-    const { error } = await supabase.rpc("close_order", { p_order_id: ordenId });
-    if (error) {
-      alert(error.message);
-      setCerrando(false);
-      return;
-    }
-    // Sello explícito y verificable del usuario autenticado que hizo el cierre.
-    // Evita que un cierre nuevo quede como “No registrado”.
-    const { error: selloError } = await supabase.rpc("stamp_order_closer", { p_order_id: ordenId });
-    if (selloError) {
-      alert(`El pedido se cerró, pero no se pudo registrar quién lo cerró: ${selloError.message}`);
-    }
-    // close_order NUNCA registra un pago — el saldo que queda tras cerrar es
-    // exactamente el mismo saldo a favor / pendiente que ya se mostraba
-    // antes de cerrar (con dinero realmente depositado, nada inventado).
-    const blob = await generarPdfGrande({
-      negocio: nombreNegocio, cliente: seleccionado.name, telefono: seleccionado.phone,
-      fecha: new Date().toLocaleDateString("es-BO"), titulo: "Cuenta cerrada",
-      grupos, subtotalSinDescuento, descuentoTotal, total,
-      depositado, saldoPendiente, saldoAFavor, mostrarPagos: true,
-    });
-    const textoWhatsapp = mensajeWhatsapp(true);
-
-    // Descargar automáticamente el PDF del pedido cerrado.
-    const urlPdf = URL.createObjectURL(blob);
-    const enlace = document.createElement("a");
-    enlace.href = urlPdf;
-    enlace.download = `pedido_cerrado_${seleccionado.name || "cliente"}.pdf`;
-    enlace.style.display = "none";
-    document.body.appendChild(enlace);
-    enlace.click();
-
-    setTimeout(() => {
-      document.body.removeChild(enlace);
-      URL.revokeObjectURL(urlPdf);
-    }, 2000);
-
-    // Al cerrar el pedido, abrir directamente el WhatsApp del cliente
-    // con el mensaje de cierre listo para enviar. El PDF queda descargado
-    // para adjuntarlo en el chat.
-    window.open(
-      linkWhatsapp(seleccionado.phone, textoWhatsapp),
-      "_blank"
-    );
-
-    setUltimoPdf({ blob, texto: textoWhatsapp });
-    setCerrando(false);
-    setMostrarResumenCierre(false);
-    await cargarPedido(seleccionado.id);
-    await cargarClientes();
-  }
-
-  // Sobrante al cerrar: si queda saldo a favor, preguntar qué hacer (nunca decidir solo).
-  async function devolverSobrante() {
-    if (!seleccionado || saldoAFavor <= 0) return;
-    if (!confirm(`¿Confirmas que devolviste Bs ${saldoAFavor.toFixed(2)} al cliente?`)) return;
-    const { error } = await supabase.rpc("refund_customer_credit", { p_customer_id: seleccionado.id, p_amount: saldoAFavor });
-    if (error) { alert(error.message); return; }
-    setPendienteSobrante(false);
-    await cargarPedido(seleccionado.id);
-  }
-
-  async function generarPdfAbierto() {
-  if (!seleccionado) return;
-
-  setGenerandoPdf(true);
-
-  try {
-    const blob = await generarPdfGrande({
-      negocio: nombreNegocio,
-      cliente: seleccionado.name,
-      telefono: seleccionado.phone,
-      fecha: new Date().toLocaleDateString("es-BO"),
-      titulo: "Pedido acumulado",
-      grupos,
-      subtotalSinDescuento,
-      descuentoTotal,
-      total,
-      depositado,
-      saldoPendiente,
-      saldoAFavor,
-      mostrarPagos: true,
-    });
-
-    const texto = mensajeWhatsapp(false);
-
-    const archivo = new File(
-      [blob],
-      `pedido_acumulado_${seleccionado.name || "cliente"}.pdf`,
-      { type: "application/pdf" }
-    );
-
-const urlPdf = URL.createObjectURL(blob);
-const enlace = document.createElement("a");
-enlace.href = urlPdf;
-enlace.download = `pedido_total_${seleccionado.name || "cliente"}.pdf`;
-document.body.appendChild(enlace);
-enlace.click();
-document.body.removeChild(enlace);
-URL.revokeObjectURL(urlPdf);
-
-window.open(
-  linkWhatsapp(seleccionado.phone, texto),
-  "_blank"
-);
-  } finally {
-    setGenerandoPdf(false);
-  }
-}
-
-  // PDF por fecha: solo lo asignado ese día puntual, no todo el acumulado.
-  // No modifica ni cierra el pedido.
-  const fechasConAsignaciones = useMemo(() => Array.from(new Set(items.map((it) => it.fecha))).sort().reverse(), [items]);
-
-async function generarPdfPorFecha(fechaElegida: string) {
-  if (!seleccionado) return;
-
-  const itemsDeEseDia = items.filter((it) => it.fecha === fechaElegida);
-  const gruposDia = agruparPorProducto(reglas, itemsDeEseDia);
-  const subDia = gruposDia.reduce((a, g) => a + g.subtotalSinDescuento, 0);
-  const totalDia = gruposDia.reduce((a, g) => a + g.subtotalConDescuento, 0);
-
-  setGenerandoPdf(true);
-
-  try {
-    const blob = await generarPdfGrande({
-      negocio: nombreNegocio,
-      cliente: seleccionado.name,
-      telefono: seleccionado.phone,
-      fecha: fechaElegida,
-      titulo: `Detalle del ${fechaElegida}`,
-      grupos: gruposDia,
-      subtotalSinDescuento: subDia,
-      descuentoTotal: subDia - totalDia,
-      total: totalDia,
-      depositado: 0,
-      saldoPendiente: 0,
-      saldoAFavor: 0,
-      mostrarPagos: false,
-    });
-
-    const archivo = new File(
-      [blob],
-      `pedido_${fechaElegida}_${seleccionado.name || "cliente"}.pdf`,
-      { type: "application/pdf" }
-    );
-
-const texto = `Hola ${seleccionado.name}. Te comparto tu pedido del ${fechaElegida}. Total: Bs ${totalDia.toFixed(2)}.`;
-
-const urlPdf = URL.createObjectURL(blob);
-const enlace = document.createElement("a");
-
-enlace.href = urlPdf;
-enlace.download = `pedido_${fechaElegida}_${seleccionado.name || "cliente"}.pdf`;
-enlace.style.display = "none";
-
-document.body.appendChild(enlace);
-enlace.click();
-
-setTimeout(() => {
-  document.body.removeChild(enlace);
-  URL.revokeObjectURL(urlPdf);
-}, 2000);
-
-window.open(
-  linkWhatsapp(seleccionado.phone, texto),
-  "_blank"
-);
-
-    setMostrarSelectorFecha(false);
-  } finally {
-    setGenerandoPdf(false);
-  }
-}
-
-  function mensajeWhatsapp(cerrado: boolean) {
-    if (!seleccionado) return "";
-    if (cerrado) {
-      return `Hola ${seleccionado.name}. Te comparto el recibo de tu compra en ${nombreNegocio}. Total: Bs ${total.toFixed(2)}. Depositado: Bs ${depositado.toFixed(2)}. ${saldoAFavor > 0 ? `Saldo a favor: Bs ${saldoAFavor.toFixed(2)}` : `Saldo pendiente: Bs ${saldoPendiente.toFixed(2)}`}. Te adjunto el PDF que acabamos de descargar.`;
-    }
-    return `Hola ${seleccionado.name}. Te comparto el detalle de tu pedido en ${nombreNegocio} hasta hoy. Total: Bs ${total.toFixed(2)}. Depósitos: Bs ${depositado.toFixed(2)}. ${saldoAFavor > 0 ? `Saldo a favor: Bs ${saldoAFavor.toFixed(2)}` : `Saldo pendiente: Bs ${saldoPendiente.toFixed(2)}`}. Te adjunto el PDF que acabamos de descargar.`;
-  }
-  function mensajeWhatsappHoy() {
-  if (!seleccionado) return "";
-
-  const hoy = new Date().toLocaleDateString("es-BO");
-  const itemsHoy = items.filter((it) => it.fecha === hoy);
-  const gruposHoy = agruparPorProducto(reglas, itemsHoy);
-  const totalHoy = gruposHoy.reduce((a, g) => a + g.subtotalConDescuento, 0);
-
-  return `Hola ${seleccionado.name}. Te comparto el pedido realizado hoy en ${nombreNegocio}. Total de hoy: Bs ${totalHoy.toFixed(2)}.`;
-}
-  function abrirRecordatorio() {
-    if (!seleccionado) return;
-    const msg = `Hola ${seleccionado.name}, te escribimos de ${nombreNegocio}. Tu pedido: Bs ${total.toFixed(2)}. Pagado: Bs ${depositado.toFixed(2)}. Saldo pendiente: Bs ${saldoPendiente.toFixed(2)}. Llevas ${diasApertura} día(s) desde la apertura` +
-      (semaforo === "rojo" ? " y tu plazo de 5 días ya se cumplió." : semaforo === "amarillo" ? ", tu plazo de 5 días está por cumplirse." : ".") +
-      ` Te pedimos completar el pago cuando puedas. ¡Gracias!`;
-    setMensajeRecordatorio(msg);
-    setMostrarRecordatorio(true);
-  }
-
-  function linkWhatsapp(telefono: string, mensaje: string) {
-    const limpio = telefono.replace(/\D/g, "");
-    return `https://wa.me/${limpio}?text=${encodeURIComponent(mensaje)}`;
-  }
-
-  async function crearCliente(e: React.FormEvent) {
-    e.preventDefault();
-    if (!nuevoNombre || !nuevoTelefono) return;
-    const { data } = await supabase.from("customers").insert({ name: nuevoNombre, phone: nuevoTelefono }).select().single();
-    setMostrarNuevo(false);
-    setNuevoNombre("");
-    setNuevoTelefono("");
-    await cargarClientes();
-    if (data) setSeleccionado(data as Customer);
-  }
-
-  async function guardarEdicion() {
-    if (!seleccionado) return;
-    await supabase.from("customers").update({ name: edicion.name, phone: edicion.phone, notes: edicion.notes || null }).eq("id", seleccionado.id);
-    setEditando(false);
-    await cargarClientes();
-  }
-
-  async function eliminarCliente() {
-    if (!seleccionado) return;
-    const nombre = seleccionado.name;
-    if (!confirm(`¿ELIMINAR POR COMPLETO a "${nombre}"?\n\nEsta acción es permanente y eliminará también sus pedidos, pagos, depósitos y movimientos asociados. Los productos de pedidos que todavía estén abiertos volverán al inventario.\n\nNo se podrá restaurar.`)) return;
-
-    const { error } = await supabase.rpc("delete_customer_completely", { p_customer_id: seleccionado.id });
-    if (error) {
-      alert(`No se pudo eliminar el cliente: ${error.message}`);
-      return;
-    }
-
-    setSeleccionado(null);
-    setOrdenId(null);
-    setItems([]);
-    setDepositos([]);
-    await cargarClientes();
-    await cargarInactivos();
-    alert(`Cliente "${nombre}" eliminado por completo.`);
-  }
-
-  async function registrarDeposito() {
-    if (!seleccionado || montoDeposito <= 0 || guardandoDeposito) return;
-    setGuardandoDeposito(true);
-    const { error } = await supabase.rpc("register_customer_deposit", { p_customer_id: seleccionado.id, p_amount: montoDeposito, p_method: metodoDeposito });
-    if (error) { alert(error.message); setGuardandoDeposito(false); return; }
-    setMontoDeposito(0);
-    setMostrarDeposito(false);
-    setGuardandoDeposito(false);
-    // Registrar un pago renueva el plazo de 5 días (vuelve a verde) y NUNCA cierra el pedido.
-    await cargarClientes();
-    await cargarPedido(seleccionado.id);
-    await cargarInactivos();
   }
 
   return (
     <div className="grid md:grid-cols-3 gap-4">
-      <div className="md:col-span-1">
-        <div className="flex items-center justify-between mb-3">
-          <p className="font-serif text-lg">Clientes</p>
-          <button onClick={() => setMostrarNuevo((v) => !v)} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-            <Plus size={13} /> Nuevo
-          </button>
+      <div className="md:col-span-2">
+        <div className="flex items-center justify-between mb-3 px-1">
+          <p className="font-serif text-lg flex items-center gap-2"><ShoppingCart size={18} /> Asignación rápida / Venta directa</p>
+          <span className="text-xs" style={{ color: "#5B4E5E" }}>
+            {vendedorActivoNombre ? `Vendedor: ${vendedorActivoNombre}` : "Sin vendedor activo"}
+          </span>
         </div>
 
-        {mostrarNuevo && (
-          <form onSubmit={crearCliente} className="p-3 mb-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-            <input value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} placeholder="Nombre" required
-              className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
-            <input value={nuevoTelefono} onChange={(e) => setNuevoTelefono(e.target.value)} placeholder="Teléfono / WhatsApp" required
-              className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
-            <button type="submit" className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar cliente</button>
-          </form>
-        )}
-
-        <div className="flex gap-1 mb-2">
-          <button onClick={()=>setPestanaClientes("abiertas")} className="text-xs px-3 py-2 rounded" style={{background:pestanaClientes==="abiertas"?"#9C7A3C":"#EDE7DE",color:pestanaClientes==="abiertas"?"white":"#5B4E5E"}}>Cuentas abiertas</button>
-          <button onClick={()=>setPestanaClientes("cerradas")} className="text-xs px-3 py-2 rounded" style={{background:pestanaClientes==="cerradas"?"#9C7A3C":"#EDE7DE",color:pestanaClientes==="cerradas"?"white":"#5B4E5E"}}>Cuentas cerradas</button>
-        </div>
-        <div className="relative mb-2">
-          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:"#9C7A3C"}}/>
-          <input value={busquedaCliente} onChange={e=>setBusquedaCliente(e.target.value)} onKeyDown={tecladoBusquedaCliente} placeholder="Buscar cliente por nombre o teléfono..." className="w-full pl-9 pr-3 py-2 rounded text-sm outline-none" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}/>
-        </div>
-        <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-          {clientesVisibles.map((c, i, arr) => (
-            <div key={c.id} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id || (busquedaCliente && i===indiceBusqueda) ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-              <button onClick={() => setSeleccionado(c)} className="flex-1 text-left">
-                <p className="text-sm">{c.name}</p>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
-              </button>
-              <a href={`https://wa.me/${c.phone.replace(/\D/g, "").replace(/^0+/, "")}`} target="_blank" rel="noreferrer" onClick={(e)=>e.stopPropagation()} className="w-8 h-8 rounded-full flex items-center justify-center" style={{background:"#E4F3E7",color:"#2F6B3A"}} title={`WhatsApp de ${c.name}`}>
-                <MessageCircle size={15}/>
-              </a>
-            </div>
-          ))}
-          {clientesVisibles.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay clientes en esta lista.</p>}
-        </div>
-
-        {inactivos.length > 0 && (
-          <div className="mt-3">
-            <p className="text-xs mb-1.5 flex items-center gap-1.5" style={{ color: "#5B4E5E" }}><UserX size={12} /> Clientes inactivos</p>
-            <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-              {inactivos.map((c, i) => (
-                <div key={c.phone} className="px-3.5 py-2" style={{ borderBottom: i < inactivos.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-                  <p className="text-sm">{c.name}</p>
-                  <p className="text-xs" style={{ color: "#5B4E5E" }}>
-                    {c.ultima ? `Último depósito: ${new Date(c.ultima).toLocaleDateString("es-BO")}` : "Sin depósitos registrados"}
-                  </p>
-                </div>
-              ))}
-            </div>
+        {ultimoResultado && (
+          <div className="p-3 mb-3 rounded-md" style={{ background: "#E4EBE1", border: "1px solid #4F6F52" }}>
+            <p className="text-xs" style={{ color: "#4F6F52" }}>{ultimoResultado}</p>
           </div>
         )}
+
+        <form onSubmit={buscarYAgregar} className="p-4 rounded-md mb-3 ls-code-search">
+          <p className="text-xs mb-2 flex items-center gap-1.5" className="ls-code-search-label"><ScanBarcode size={14} /> Escanear o escribir código — Enter agrega a la lista</p>
+          <div className="flex gap-2">
+            <input ref={inputRef} autoFocus value={codigo} onChange={(e) => { setCodigo(e.target.value); setNoEncontrado(false); }}
+              onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} placeholder="80-50"
+              className="flex-1 px-3 py-3 rounded text-lg outline-none" style={{ background: "#F7F3EC", color: "#2B1E2E" }} />
+            <button type="submit" aria-busy={buscando} className="px-5 rounded flex items-center gap-1.5 ls-code-search-button">
+              <Plus size={16} /> Agregar
+            </button>
+          </div>
+          {noEncontrado && (
+            <div className="mt-3 p-3 rounded" style={{ background: "#F4E3E6" }}>
+              <p className="text-xs" style={{ color: "#7A2540" }}>No se encontró ningún producto con ese código.</p>
+            </div>
+          )}
+          {productoSinStock && (
+  <div className="mt-3 p-3 rounded" style={{ background: "#F4E3E6" }}>
+    <p className="text-xs mb-2" style={{ color: "#7A2540" }}>
+      Este producto está agotado.
+    </p>
+
+    <button
+      type="button"
+      onClick={() => {
+        sessionStorage.setItem(
+          "inicioVentasPendiente",
+          JSON.stringify({
+            carrito,
+            codigo: productoSinStock.code,
+          })
+        );
+
+        navigate(
+          `/productos?desde=asignar&codigo=${encodeURIComponent(productoSinStock.code)}`
+        );
+      }}
+      className="px-3 py-2 rounded text-xs font-medium"
+      style={{ background: "#9C7A3C", color: "#F7F3EC" }}
+    >
+      Editar stock en Productos
+    </button>
+  </div>
+)}
+        </form>
+
+        <div ref={listaCarritoRef}
+  style={{
+    background: "#F7F3EC",
+    border: "1px solid #D9D0C2",
+    maxHeight: "calc(100vh - 330px)",
+    overflowY: "auto",
+    scrollBehavior: "smooth",
+  }}
+>
+          {carrito.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Escanea o escribe un código para empezar. Selecciona una fila y presiona Supr para quitarla.</p>}
+          {carrito.map((l, i) => (
+            <div
+ key={`${l.product.id}-${l.ringSize ?? "normal"}`}
+id={`producto-carrito-${l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id}`}
+onClick={() =>
+  setFilaSeleccionada(
+    l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id
+  )
+}
+              className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer"
+style={{
+  borderBottom: i < carrito.length - 1 ? "1px solid #D9D0C2" : "none",
+  background:
+    filaSeleccionada ===
+    (l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id)
+      ? "#EDE7DE"
+      : "transparent",
+}}>
+                    <div>
+                <p className="text-sm">
+  {l.product.code} · {l.product.name}
+  {l.ringSize ? ` · Talla ${l.ringSize}` : ""} × {l.cantidad}
+</p>
+<div className="flex items-center gap-2 mt-1">
+  <span className="text-xs" style={{ color: "#5B4E5E" }}>
+    Precio Bs
+  </span>
+  <input
+    type="number"
+    min="0"
+    step="0.01"
+    value={l.precioPersonalizado ?? precioPreview(l)}
+    onClick={(e) => e.stopPropagation()}
+    onChange={(e) =>
+  cambiarPrecio(l.product.id, e.target.value, l.ringSize)
+}
+    className="w-20 px-2 py-1 rounded text-xs outline-none"
+    style={{
+      background: "#FFFFFF",
+      border: "1px solid #D9D0C2",
+      color: "#2B1E2E",
+    }}
+  />
+  <span className="text-xs" style={{ color: "#5B4E5E" }}>
+    c/u · {l.product.stock_available} disponibles
+  </span>
+</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-serif text-sm">Bs {(precioPreview(l) * l.cantidad).toFixed(2)}</span>
+                <button
+  onClick={(e) => {
+    e.stopPropagation();
+    cambiarCantidad(l.product.id, -1, l.ringSize);
+  }}
+  className="w-7 h-7 rounded-full flex items-center justify-center"
+  style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
+>
+  <Minus size={13} />
+</button>
+
+<button
+  onClick={(e) => {
+    e.stopPropagation();
+    cambiarCantidad(l.product.id, 1, l.ringSize);
+  }}
+  disabled={
+    l.cantidad >=
+    (l.ringSize && l.stockTalla != null
+      ? Math.min(l.product.stock_available, l.stockTalla)
+      : l.product.stock_available)
+  }
+  className="w-7 h-7 rounded-full flex items-center justify-center"
+  style={{ background: "#9C7A3C", color: "#F7F3EC" }}
+>
+  <Plus size={13} />
+</button>
+                <button onClick={(e) => { e.stopPropagation(); quitarLinea(l.product.id, l.ringSize); }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }} title="Quitar (Supr)">
+                  <Trash2 size={13} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
-      <div className="md:col-span-2">
-        {!seleccionado ? (
-          <p className="text-sm" style={{ color: "#5B4E5E" }}>Selecciona o crea un cliente.</p>
+      <div className="p-4 h-fit" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Resumen</p>
+        <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Unidades</span><span>{unidades}</span></div>
+        <div className="flex justify-between text-sm mb-3 pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total</span><span className="font-serif">Bs {total.toFixed(2)}</span></div>
+        <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>El descuento por cantidad acumulada se calcula al asignarlo al pedido del cliente (o al cerrar la venta directa).</p>
+
+        {!mostrarAsignar ? (
+          <button onClick={() => setMostrarAsignar(true)} disabled={carrito.length === 0} className="w-full py-2.5 rounded-md text-sm flex items-center justify-center gap-2"
+            style={{ background: carrito.length > 0 ? "#2B1E2E" : "#D9D0C2", color: "#F7F3EC" }}>
+            <Users size={15} /> Asignar cliente
+          </button>
         ) : (
-          <>
-            <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-              {editando ? (
-                <div>
-                  <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Nombre</p>
-                  <input value={edicion.name} onChange={(e) => setEdicion({ ...edicion, name: e.target.value })}
-                    className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
-                  <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Teléfono</p>
-                  <input value={edicion.phone} onChange={(e) => setEdicion({ ...edicion, phone: e.target.value })}
-                    className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
-                  <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Notas</p>
-                  <input value={edicion.notes} onChange={(e) => setEdicion({ ...edicion, notes: e.target.value })}
-                    className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
-                  <div className="flex gap-2">
-                    <button onClick={guardarEdicion} className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar</button>
-                    <button onClick={() => setEditando(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
-                  </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between mb-1">
-                  <div>
-                    <p className="font-serif text-lg">{seleccionado.name}</p>
-                    <p className="text-xs" style={{ color: "#5B4E5E" }}>{seleccionado.phone}</p>
-                    {fechaApertura && (
-                      <div className="flex items-center gap-1.5 mt-1">
-                        <span className="w-2 h-2 rounded-full" style={{ background: colorSemaforo }} />
-                        <p className="text-xs" style={{ color: colorSemaforo }}>
-                          Apertura: {new Date(fechaApertura).toLocaleDateString("es-BO")} · día {diasApertura} de {PLAZO_DIAS} · {textoSemaforo}
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex flex-col gap-1.5 items-end">
-                    <div className="flex gap-1.5">
-                      <button onClick={() => setEditando(true)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                        <Pencil size={12} /> Editar
-                      </button>
-                      <button onClick={eliminarCliente} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
-                        <Trash2 size={12} /> Eliminar
-                      </button>
-                    </div>
-                    {fechaApertura && (semaforo === "amarillo" || semaforo === "rojo") && (
-                      <button onClick={abrirRecordatorio} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
-                        <Bell size={12} /> Enviar recordatorio
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )}
+          <form onSubmit={confirmarAsignacion} className="p-3 rounded-md" style={{ background: "#EDE7DE" }}>
+            <div className="flex gap-1.5 mb-2">
+              <button type="button" onClick={() => setModo("cliente")} className="flex-1 text-xs px-2 py-1.5 rounded-md" style={{ background: modo === "cliente" ? "#9C7A3C" : "#F7F3EC", color: modo === "cliente" ? "#F7F3EC" : "#2B1E2E", border: "1px solid #D9D0C2" }}>Cliente</button>
+              <button type="button" onClick={() => setModo("nuevo")} className="flex-1 text-xs px-2 py-1.5 rounded-md" style={{ background: modo === "nuevo" ? "#9C7A3C" : "#F7F3EC", color: modo === "nuevo" ? "#F7F3EC" : "#2B1E2E", border: "1px solid #D9D0C2" }}>Nuevo</button>
+              <button type="button" onClick={() => setModo("directa")} className="flex-1 text-xs px-2 py-1.5 rounded-md" style={{ background: modo === "directa" ? "#9C7A3C" : "#F7F3EC", color: modo === "directa" ? "#F7F3EC" : "#2B1E2E", border: "1px solid #D9D0C2" }}>Directa</button>
             </div>
 
-            {mostrarRecordatorio && (
-              <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                <p className="text-xs mb-1.5" style={{ color: "#5B4E5E" }}>Mensaje (puedes editarlo antes de enviar)</p>
-                <textarea value={mensajeRecordatorio} onChange={(e) => setMensajeRecordatorio(e.target.value)} rows={4}
-                  className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
-                <div className="flex gap-2">
-                  <a href={linkWhatsapp(seleccionado.phone, mensajeRecordatorio)} target="_blank" rel="noreferrer"
-                    className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
-                    <MessageCircle size={13} /> Enviar por WhatsApp
-                  </a>
-                  <button onClick={() => setMostrarRecordatorio(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
+            {modo === "cliente" && (
+              <div className="mb-2">
+                <div className="flex items-center gap-2 px-2 py-1.5 rounded mb-1" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                  <Search size={13} style={{ color: "#5B4E5E" }} />
+                  <input value={clienteElegido ? clienteElegido.name : busquedaCliente} onChange={(e) => { setBusquedaCliente(e.target.value); setClienteElegido(null); }}
+                    placeholder="Buscar cliente…" className="flex-1 text-sm outline-none bg-transparent" />
                 </div>
-              </div>
-            )}
-
-            <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-              <div className="flex items-center justify-between mb-2">
-                <p className="font-serif text-base flex items-center gap-2"><Wallet size={15} style={{ color: "#5B4E5E" }} /> Depósitos / amortizaciones</p>
-                <button onClick={() => setMostrarDeposito((v) => !v)} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
-                  <Plus size={13} /> Registrar depósito
-                </button>
-              </div>
-              <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Puedes abrir una cuenta con cualquier monto — Bs 300 es solo la garantía habitual, no un mínimo obligatorio.</p>
-              {mostrarDeposito && (
-                <form onSubmit={(e) => { e.preventDefault(); registrarDeposito(); }} className="flex items-end gap-2 mb-3 p-3 rounded" style={{ background: "#EDE7DE" }}>
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Monto (Bs)</p>
-                    <input type="number" min={1} autoFocus value={montoDeposito} onChange={(e) => setMontoDeposito(Number(e.target.value))}
-                      className="w-28 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                  </div>
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Método</p>
-                    <select value={metodoDeposito} onChange={(e) => setMetodoDeposito(e.target.value)}
-                      className="px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                      <option value="efectivo">Efectivo</option>
-                      <option value="bancosol">Depósito BancoSol</option>
-                      <option value="transferencia">Transferencia</option>
-                      <option value="qr">QR</option>
-                    </select>
-                  </div>
-                  <button type="submit" disabled={montoDeposito <= 0 || guardandoDeposito} className="text-xs px-3 py-2 rounded-md" style={{ background: montoDeposito > 0 ? "#9C7A3C" : "#D9D0C2", color: "#F7F3EC" }}>
-                    {guardandoDeposito ? "Guardando..." : "Guardar (Enter)"}
-                  </button>
-                </form>
-              )}
-              {depositos.length === 0 ? (
-                <p className="text-sm" style={{ color: "#5B4E5E" }}>Este cliente todavía no tiene depósitos registrados.</p>
-              ) : (
-                depositos.map((d, i) => (
-                  <div key={d.id} onClick={() => setDepositoSeleccionado(d.id)}
-                    className="flex justify-between text-sm py-1.5 px-1.5 cursor-pointer items-center" style={{ borderBottom: i < depositos.length - 1 ? "1px solid #D9D0C2" : "none", background: depositoSeleccionado === d.id ? "#EDE7DE" : "transparent" }}>
-                    <span style={{ color: "#5B4E5E" }}>{new Date(d.paid_at).toLocaleDateString("es-BO")} · {d.method}</span>
-                    <span className="flex items-center gap-2">
-                      <span className="font-serif">Bs {d.amount}</span>
-                      <button onClick={(e) => { e.stopPropagation(); eliminarDeposito(d); }} className="p-1 rounded" style={{ color: "#7A2540" }} title="Eliminar depósito (Supr)">
-                        <Trash2 size={13} />
+                {!clienteElegido && (
+                  <div className="max-h-32 overflow-y-auto rounded" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                    {coincidenciasCliente.map((c) => (
+                      <button key={c.id} type="button" onClick={() => setClienteElegido(c)} className="w-full text-left px-2 py-1.5 text-xs hover:bg-black/5" style={{ borderBottom: "1px solid #D9D0C2" }}>
+                        {c.name} <span style={{ color: "#5B4E5E" }}>({c.phone})</span>
                       </button>
-                    </span>
+                    ))}
+                    {coincidenciasCliente.length === 0 && <p className="text-xs p-2" style={{ color: "#5B4E5E" }}>Sin resultados.</p>}
                   </div>
-                ))
-              )}
-              <div className="flex justify-between text-sm mt-2 pt-2" style={{ borderTop: "1px solid #D9D0C2" }}>
-                <span style={{ color: "#5B4E5E" }}>Disponible para este pedido</span>
-                <span className="font-serif" style={{ color: "#4F6F52" }}>Bs {depositado.toFixed(2)}</span>
+                )}
               </div>
+            )}
+
+            {modo === "nuevo" && (
+              <div className="mb-2 flex flex-col gap-1.5">
+                <p className="text-xs flex items-center gap-1" style={{ color: "#5B4E5E" }}><UserPlus size={12} /> Cliente nuevo</p>
+                <input value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} placeholder="Nombre" className="px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+                <input value={nuevoTelefono} onChange={(e) => setNuevoTelefono(e.target.value)} placeholder="Teléfono / WhatsApp" className="px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+              </div>
+            )}
+
+            {modo === "directa" && (
+              <div className="mb-2">
+                <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Método de pago (venta directa, se cierra de inmediato)</p>
+                <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                  <option value="efectivo">Efectivo</option>
+                  <option value="transferencia">Transferencia</option>
+                  <option value="qr">QR</option>
+                </select>
+              </div>
+            )}
+
+            <div className="flex gap-2">
+              <button type="submit" disabled={procesando} className="flex-1 text-xs py-2 rounded-md" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
+                {procesando ? "Procesando..." : "Confirmar (Enter)"}
+              </button>
+              <button type="button" onClick={() => setMostrarAsignar(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
             </div>
-
-            {grupos.length === 0 ? (
-              <p className="text-sm mb-3" style={{ color: "#5B4E5E" }}>Este cliente no tiene un pedido abierto.</p>
-            ) : (
-              <div className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                {grupos.map((g, i) => (
-                  <div key={g.product_id} onClick={() => setProductoSeleccionado(g.product_id)}
-                    className="px-3.5 py-2.5 cursor-pointer" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none", background: productoSeleccionado === g.product_id ? "#EDE7DE" : "transparent" }}>
-                    <div className="flex items-center justify-between">
-                      <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
-                      <div className="flex items-center gap-2">
-                        {editandoPrecio === g.product_id ? (
-                          <form onSubmit={(e) => { e.preventDefault(); guardarPrecioManual(g.product_id); }} onClick={(e) => e.stopPropagation()} className="flex items-center gap-1">
-                            <input autoFocus type="number" min={0} step="0.01" value={precioManual} onChange={(e) => setPrecioManual(Number(e.target.value))}
-                              className="w-20 px-1.5 py-1 rounded text-xs outline-none" style={{ background: "#fff", border: "1px solid #D9D0C2" }} />
-                            <button type="submit" disabled={guardandoPrecio} className="text-xs px-2 py-1 rounded" style={{ background: "#4F6F52", color: "#F7F3EC" }}>{guardandoPrecio ? "..." : "Guardar"}</button>
-                          </form>
-                        ) : (
-                          <button onClick={(e) => { e.stopPropagation(); setEditandoPrecio(g.product_id); setPrecioManual(Number((g.subtotalSinDescuento / g.cantidadTotal).toFixed(2))); }}
-                            className="font-serif text-sm flex items-center gap-1" title="Editar precio unitario de este producto">
-                            Bs {g.subtotalConDescuento.toFixed(2)} <Pencil size={11} />
-                          </button>
-                        )}
-                        <button onClick={(e) => { e.stopPropagation(); quitarUnidad(g.detalle[g.detalle.length - 1].id); }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Quitar 1 unidad">
-                          <Minus size={12} />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); aumentarUnidad(g.product_id); }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "#9C7A3C", color: "#F7F3EC" }} title="Agregar 1 unidad">
-                          <Plus size={12} />
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); quitarProductoCompleto(g); }} className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }} title="Quitar producto completo (Supr)">
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-                    </div>
-                    <p className="text-xs mt-0.5" style={{ color: "#5B4E5E" }}>
-                      {g.detalle.length === 1
-                        ? `${g.detalle[0].cantidad} unidad(es) — ${g.detalle[0].fecha}`
-                        : resumenFechas(g)}
-                      {g.descuento > 0 && ` · descuento aplicado: Bs ${g.descuento.toFixed(2)}`}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-              <div className="flex justify-between text-sm mb-1.5">
-  <span style={{ color: "#5B4E5E" }}>Cantidad total de joyas</span>
-  <span className="font-serif">{cantidadTotal} unidades</span>
-</div>
-              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Subtotal sin descuento</span><span>Bs {subtotalSinDescuento.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#4F6F52" }}>Descuento por cantidad</span><span style={{ color: "#4F6F52" }}>− Bs {descuentoTotal.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm mb-1.5 pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total seleccionado</span><span className="font-serif">Bs {total.toFixed(2)}</span></div>
-              <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Dinero disponible</span><span>Bs {depositado.toFixed(2)}</span></div>
-              {saldoAFavor > 0 ? (
-                <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#4F6F52" }}>Saldo a favor</span><span className="font-serif" style={{ color: "#4F6F52" }}>Bs {saldoAFavor.toFixed(2)}</span></div>
-              ) : (
-                <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#7A2540" }}>Saldo pendiente</span><span className="font-serif" style={{ color: "#7A2540" }}>Bs {saldoPendiente.toFixed(2)}</span></div>
-              )}
-            </div>
-
-            {ordenId && (
-              <div className="flex gap-2 mb-3 flex-wrap">
-                <button onClick={() => setMostrarResumenCierre(true)} className="flex-1 py-2.5 rounded-md text-sm" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
-                  Cerrar pedido
-                </button>
-                <button onClick={generarPdfAbierto} disabled={generandoPdf} className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                  <FileDown size={15} /> {generandoPdf ? "Generando PDF..." : "Pedido total / WhatsApp"}
-                </button>
-<button
-  type="button"
-  onClick={() => {
-    const hoy = new Date().toLocaleDateString("es-BO");
-    generarPdfPorFecha(hoy);
-  }}
-  disabled={generandoPdf}
-  className="flex-1 py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2"
-  style={{ background: "#25D366", color: "white" }}
->
-  <FileDown size={15} />
-  {generandoPdf ? "Generando PDF..." : "Pedido de hoy / WhatsApp"}
-</button>                <button onClick={() => setMostrarSelectorFecha((v) => !v)} disabled={fechasConAsignaciones.length === 0} className="py-2.5 px-3 rounded-md text-sm flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                  <FileDown size={15} /> PDF por fecha
-                </button>
-                <button onClick={() => setMostrarRecibo(true)} className="py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Ticket térmico 80 mm, sin imágenes">
-                  <Printer size={15} />
-                </button>
-              </div>
-            )}
-
-            {mostrarSelectorFecha && (
-              <div className="p-3 mb-3 rounded-md flex items-center gap-2 flex-wrap" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>Elige una fecha para generar el PDF solo de ese día:</p>
-                {fechasConAsignaciones.map((f) => (
-                  <button key={f} onClick={() => generarPdfPorFecha(f)} disabled={generandoPdf} className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                    {f}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {mostrarResumenCierre && (
-              <div className="p-4 mb-3 rounded-md" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
-                <p className="text-sm font-medium mb-2" style={{ color: "#7A5F2D" }}>Confirmar cierre de pedido</p>
-                <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Total del pedido: Bs {total.toFixed(2)} (incluye Bs {descuentoTotal.toFixed(2)} de descuento)</div>
-                <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Dinero disponible para este pedido: Bs {depositado.toFixed(2)}</div>
-                {saldoAFavor > 0 ? <div className="text-xs mb-2" style={{ color: "#4F6F52" }}>Saldo a favor: Bs {saldoAFavor.toFixed(2)} — al cerrar se registrará automáticamente como dinero devuelto y la cuenta terminará en Bs 0.</div> : <div className="text-xs mb-2" style={{ color: "#7A2540" }}>Saldo pendiente: Bs {saldoPendiente.toFixed(2)} — al cerrar se registrará automáticamente como pagado y la cuenta terminará en Bs 0.</div>}
-                <div className="flex gap-2">
-                  <button onClick={confirmarCierre} disabled={cerrando} className="text-xs px-4 py-2 rounded-md"
-                    style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
-                    {cerrando ? "Cerrando..." : "Confirmar y cerrar pedido"}
-                  </button>
-                  <button onClick={() => { setMostrarResumenCierre(false); setPendienteSobrante(false); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
-                </div>
-              </div>
-            )}
-
-            {mostrarRecibo && (
-              <div className="flex flex-col items-center mb-3">
-                <div id="recibo-termico" style={{ background: "#fff", color: "#111", width: 302, fontFamily: "monospace" }} className="p-2 text-xs shadow-md">
-                  <p className="text-center font-bold ticket-brand" style={{ fontSize: "1.08rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
-                  {telefonoNegocio && <p className="text-center">CEL: {telefonoNegocio}</p>}
-                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  <p>Fecha: {new Date().toLocaleDateString("es-BO")}</p>
-                  <p>Hora: {new Date().toLocaleTimeString("es-BO", { hour: "2-digit", minute: "2-digit" })}</p>
-                  <p>Responsable: {profile?.full_name || "No registrado"}</p>
-                  <p>Rol: {profile?.role === "admin" ? "Administrador" : "Vendedor"}</p>
-                  <p>Cliente: {seleccionado.name}</p>
-                  {seleccionado.phone && <p>Teléfono: {seleccionado.phone}</p>}
-                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  <div className="flex justify-between font-bold"><span>CANT.  CÓDIGO  PRODUCTO</span><span>IMPORTE</span></div>
-                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  {grupos.map((g) => (
-                    <div key={g.product_id}>
-                      <div className="flex justify-between"><span>{g.cantidadTotal}  {g.codigo}  {g.nombre}</span><span>Bs {g.subtotalConDescuento.toFixed(2)}</span></div>
-                      </div>
-                  ))}
-                  <div style={{ borderTop: "1px dashed #999" }} className="my-1" />
-                  <div><span>N.º DE ARTÍCULOS: {grupos.reduce((a, g) => a + g.cantidadTotal, 0)}</span></div>
-                  <div className="flex justify-between"><span>SUBTOTAL</span><span>Bs {subtotalSinDescuento.toFixed(2)}</span></div>
-                  <div className="flex justify-between"><span>DESCUENTO</span><span>Bs {descuentoTotal.toFixed(2)}</span></div>
-                  <div className="flex justify-between font-bold"><span>TOTAL</span><span>Bs {total.toFixed(2)}</span></div>
-                  <p className="text-center" style={{ marginTop: 8 }}>GRACIAS POR SU COMPRA</p>
-                  <p className="text-center font-bold ticket-brand" style={{ fontSize: "1rem", fontFamily: "Georgia, Times New Roman, serif", fontStyle: "italic" }}>{nombreNegocio}</p>
-                </div>
-                <div className="flex gap-2 mt-3">
-                  <button onClick={() => imprimirTicket()} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-                    <Printer size={13} /> Ticket térmico 80 mm
-                  </button>
-                  <button onClick={() => setMostrarRecibo(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cerrar</button>
-                </div>
-              </div>
-            )}
-
-            {ultimoPdf && (
-              <div className="p-3 rounded-md flex items-center justify-between" style={{ background: "#EDE7DE", border: "1px dashed #9C7A3C" }}>
-                <p className="text-xs" style={{ color: "#5B4E5E" }}>
-                  PDF descargado. WhatsApp Web no permite adjuntarlo automáticamente desde el navegador:
-                  abre el chat y adjunta el archivo que se acaba de descargar.
-                </p>
-                <a href={linkWhatsapp(seleccionado.phone, ultimoPdf.texto)} target="_blank" rel="noreferrer"
-                  className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5 shrink-0 ml-2" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
-                  <MessageCircle size={13} /> Abrir chat
-                </a>
-              </div>
-            )}
-          </>
+          </form>
         )}
       </div>
     </div>
