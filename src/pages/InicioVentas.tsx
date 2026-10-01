@@ -549,7 +549,7 @@ style={{
   <input
     type="number"
     min="0"
-    step="0.01"
+    step="1"
     value={l.precioPersonalizado ?? precioPreview(l)}
     onClick={(e) => e.stopPropagation()}
     onChange={(e) =>
