@@ -72,47 +72,10 @@ export default function Catalogo() {
 
     const cat = (catalogoData as CatalogProduct[]) ?? [];
 
-    const idsInventario = new Set(inventario.map((p) => p.id));
-
-    const stockInventarioPorId = new Map(
-      inventario.map((p) => [p.id, Number(p.stock_available) || 0])
-    );
-
-    const catalogoValido = cat.filter(
-      (it) =>
-        it.active &&
-        idsInventario.has(it.product_id) &&
-        (stockInventarioPorId.get(it.product_id) ?? 0) > 0
-    );
-
-    // Si el stock REAL del inventario llega a 0,
-    // el modelo se retira automáticamente del catálogo.
-    const agotadosActivos = cat.filter(
-      (it) =>
-        it.active &&
-        idsInventario.has(it.product_id) &&
-        (stockInventarioPorId.get(it.product_id) ?? 0) <= 0
-    );
-
-    if (agotadosActivos.length > 0) {
-      const { error: errorAgotados } = await supabase
-        .from("catalog_products")
-        .update({
-          active: false,
-          stock_available: 0,
-        })
-        .in(
-          "id",
-          agotadosActivos.map((it) => it.id)
-        );
-
-      if (errorAgotados) {
-        console.error(
-          "Error retirando productos agotados del catálogo:",
-          errorAgotados
-        );
-      }
-    }
+    // Mostrar todos los productos que siguen activos en el catálogo.
+    // No los ocultamos aquí por el stock del inventario, porque esa
+    // comprobación puede hacer desaparecer publicaciones válidas.
+    const catalogoValido = cat.filter((it) => it.active);
 
     setItems(catalogoValido);
     setProductos(inventario);
