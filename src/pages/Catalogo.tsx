@@ -761,9 +761,15 @@ export default function Catalogo() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {items.map((p) => {
-              const productoInventario = productos.find(
-                (producto) => producto.id === p.product_id
-              );
+              // Primero relaciona por product_id. Si una publicación antigua
+              // tiene un product_id distinto, usa el código como respaldo.
+              const productoInventario =
+                productos.find((producto) => producto.id === p.product_id) ??
+                productos.find(
+                  (producto) =>
+                    String(producto.code).trim().toLowerCase() ===
+                    String(p.code).trim().toLowerCase()
+                );
 
               const stockInventario =
                 Number(productoInventario?.stock_available) || 0;
