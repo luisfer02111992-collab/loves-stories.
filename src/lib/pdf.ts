@@ -1,5 +1,13 @@
 import { jsPDF } from "jspdf";
 import type { GrupoProducto } from "./pricing";
+function textoPdf(valor: unknown): string {
+  return String(valor ?? "")
+    .normalize("NFC")
+    .replace(/[\u2018\u2019]/g, "'")
+    .replace(/[\u201C\u201D]/g, '"')
+    .replace(/\u2013|\u2014/g, "-")
+    .replace(/\u00A0/g, " ");
+}
 
 interface DatosPdfPedido {
   negocio: string;
@@ -224,7 +232,7 @@ export async function generarPdfGrande(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(11);
 
-  doc.text(`Cliente: ${datos.cliente}`, margen, y);
+  doc.text(textoPdf(`Cliente: ${datos.cliente}`), margen, y);
 
   y += 6;
 
@@ -425,7 +433,7 @@ export async function generarPdfGrande(
     doc.setFontSize(7.5);
 
     doc.text(
-      `${g.codigo} · ${g.nombre}`,
+      textoPdf(`${g.codigo} · ${g.nombre}`),
       xProducto,
       yInicio + 4.8,
       {
@@ -608,7 +616,47 @@ y += 7;
   );
 
   y += 8;
+doc.setFont("helvetica", "normal");
+doc.setFontSize(11);
+doc.setTextColor(20, 20, 20);
 
+doc.text(
+  "APERTURA / PAGADO",
+  margen,
+  y
+);
+
+doc.text(
+  `Bs ${datos.depositado.toFixed(2)}`,
+  margen + anchoUtil,
+  y,
+  {
+    align: "right",
+  }
+);
+
+y += 7;
+
+doc.setFont("helvetica", "bold");
+doc.setFontSize(13);
+
+doc.text(
+  "SALDO PENDIENTE",
+  margen,
+  y
+);
+
+doc.text(
+  `Bs ${datos.saldoPendiente.toFixed(2)}`,
+  margen + anchoUtil,
+  y,
+  {
+    align: "right",
+  }
+);
+
+y += 8;
+  
   // ==========================================================
   // PIE
   // ==========================================================
