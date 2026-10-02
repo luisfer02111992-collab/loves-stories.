@@ -419,10 +419,10 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
                 {verPrecios ? (
                   <>
                     <Campo label="Costo (Bs)">
-                      <input type="number" step="0.01" inputMode="decimal" value={form.cost ?? 0} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} className="w-full bg-transparent outline-none" />
+                      <input type="number" step="1" inputMode="decimal" value={form.cost ?? 0} onChange={(e) => setForm({ ...form, cost: Number(e.target.value) })} className="w-full bg-transparent outline-none" />
                     </Campo>
                     <Campo label="Precio de venta (Bs)">
-                      <input type="number" step="0.01" inputMode="decimal" value={form.price ?? 0} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} className="w-full bg-transparent outline-none" />
+                      <input type="number" step="1" inputMode="decimal" value={form.price ?? 0} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} className="w-full bg-transparent outline-none" />
                     </Campo>
                   </>
                 ) : (
@@ -468,4 +468,3 @@ function Campo({ label, children }: { label: string; children: React.ReactNode }
     </div>
   );
 }
-
