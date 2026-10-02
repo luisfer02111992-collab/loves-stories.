@@ -343,6 +343,67 @@ const itemsCatalogoFiltrados = items.filter((p) => {
     p.name.toLowerCase().includes(q)
   );
 });
+
+  useEffect(() => {
+    function moverEntreItems(e: KeyboardEvent) {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+
+      const elemento = e.target as HTMLElement | null;
+      const tag = elemento?.tagName;
+
+      // En catálogo, las flechas siempre navegan por productos completos.
+      // No deben entrar ni modificar cantidades, tallas, largos o descripciones.
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        elemento?.isContentEditable
+      ) {
+        elemento?.blur();
+      }
+
+      const tarjetas = Array.from(
+        document.querySelectorAll<HTMLElement>('[data-catalogo-item="true"]')
+      );
+
+      if (tarjetas.length === 0) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      const referencia = 120;
+      let actual = -1;
+
+      for (let i = 0; i < tarjetas.length; i++) {
+        const rect = tarjetas[i].getBoundingClientRect();
+        if (rect.top <= referencia && rect.bottom > referencia) {
+          actual = i;
+          break;
+        }
+      }
+
+      if (actual === -1) {
+        actual = tarjetas.findIndex(
+          (tarjeta) => tarjeta.getBoundingClientRect().top >= referencia
+        );
+        if (actual === -1) actual = tarjetas.length - 1;
+      }
+
+      const destino =
+        e.key === "ArrowDown"
+          ? Math.min(actual + 1, tarjetas.length - 1)
+          : Math.max(actual - 1, 0);
+
+      tarjetas[destino].scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+
+    window.addEventListener("keydown", moverEntreItems, true);
+    return () => window.removeEventListener("keydown", moverEntreItems, true);
+  }, []);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -407,15 +468,12 @@ const itemsCatalogoFiltrados = items.filter((p) => {
               setIndiceProducto(-1);
             }}
             onKeyDown={(e) => {
-           
-
               if (e.key === "Enter") {
                 e.preventDefault();
                 e.stopPropagation();
 
                 if (coincidenciasProducto.length > 0) {
-                  const indice =
-                    indiceProducto >= 0 ? indiceProducto : 0;
+                  const indice = indiceProducto >= 0 ? indiceProducto : 0;
                   elegirProducto(coincidenciasProducto[indice]);
                 }
               }
@@ -750,6 +808,7 @@ const itemsCatalogoFiltrados = items.filter((p) => {
           return (
             <div
               key={p.id}
+              data-catalogo-item="true"
               className="p-3"
               style={{
                 borderBottom:
