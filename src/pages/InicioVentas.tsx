@@ -397,6 +397,36 @@ if (linea) {
   }, [filaSeleccionada, carrito]);
 
   useEffect(() => {
+    function desplazarListaConFlechas(e: KeyboardEvent) {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      if (mostrarAsignar) return;
+
+      const activo = document.activeElement as HTMLElement | null;
+      const tag = activo?.tagName;
+
+      // Si se estaba editando un precio o escribiendo un código, salir del campo
+      // para que las flechas desplacen la lista y no cambien el valor numérico.
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || activo?.isContentEditable) {
+        activo?.blur();
+      }
+
+      const contenedor = listaCarritoRef.current;
+      if (!contenedor) return;
+
+      e.preventDefault();
+      e.stopPropagation();
+
+      contenedor.scrollBy({
+        top: e.key === "ArrowDown" ? 120 : -120,
+        behavior: "smooth",
+      });
+    }
+
+    window.addEventListener("keydown", desplazarListaConFlechas, true);
+    return () => window.removeEventListener("keydown", desplazarListaConFlechas, true);
+  }, [mostrarAsignar]);
+
+  useEffect(() => {
     function volverAlBuscadorConEnter(e: KeyboardEvent) {
       if (e.key !== "Enter" || mostrarAsignar) return;
       const activo = document.activeElement as HTMLElement | null;
