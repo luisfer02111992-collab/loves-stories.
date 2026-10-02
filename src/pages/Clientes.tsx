@@ -622,11 +622,10 @@ window.open(
     setMostrarRecordatorio(true);
   }
 
- function linkWhatsapp(telefono: string, mensaje: string) {
-  let limpio = telefono.replace(/\D/g, "").replace(/^0+/, "");
+function linkWhatsapp(telefono: string, mensaje: string) {
+  let limpio = String(telefono ?? "").replace(/\D/g, "").replace(/^0+/, "");
 
-  // Números bolivianos guardados con 8 dígitos
-  if (limpio.length === 8) {
+  if (!limpio.startsWith("591")) {
     limpio = `591${limpio}`;
   }
 
@@ -720,7 +719,7 @@ window.open(
                 <p className="text-sm">{c.name}</p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
               </button>
-              <a href={`https://wa.me/${c.phone.replace(/\D/g, "").replace(/^0+/, "")}`} target="_blank" rel="noreferrer" onClick={(e)=>e.stopPropagation()} className="w-8 h-8 rounded-full flex items-center justify-center" style={{background:"#E4F3E7",color:"#2F6B3A"}} title={`WhatsApp de ${c.name}`}>
+              <a href={linkWhatsapp(c.phone, "")} target="_blank" rel="noreferrer" onClick={(e)=>e.stopPropagation()} className="w-8 h-8 rounded-full flex items-center justify-center" style={{background:"#E4F3E7",color:"#2F6B3A"}} title={`WhatsApp de ${c.name}`}>
                 <MessageCircle size={15}/>
               </a>
             </div>
