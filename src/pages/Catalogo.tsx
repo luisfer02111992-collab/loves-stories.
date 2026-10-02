@@ -29,6 +29,7 @@ export default function Catalogo() {
   const [clientes, setClientes] = useState<Customer[]>([]);
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [mostrarListaProducto, setMostrarListaProducto] = useState(false);
+  const [indiceProducto, setIndiceProducto] = useState(0);
   const [pendiente, setPendiente] = useState("");
   const [subiendoId, setSubiendoId] = useState<string | null>(null);
   const [busquedaCliente, setBusquedaCliente] = useState("");
@@ -393,13 +394,38 @@ const itemsCatalogoFiltrados = items.filter((p) => {
               setDescripcionPendiente("");
               setImagenPendiente(null);
               setCantidadPendiente(1);
+              setIndiceProducto(0);
             }}
             onKeyDown={(e) => {
+              if (e.key === "ArrowDown") {
+                e.preventDefault();
+                if (coincidenciasProducto.length > 0) {
+                  setMostrarListaProducto(true);
+                  setIndiceProducto((i) =>
+                    Math.min(i + 1, coincidenciasProducto.length - 1)
+                  );
+                }
+                return;
+              }
+
+              if (e.key === "ArrowUp") {
+                e.preventDefault();
+                if (coincidenciasProducto.length > 0) {
+                  setMostrarListaProducto(true);
+                  setIndiceProducto((i) => Math.max(i - 1, 0));
+                }
+                return;
+              }
+
               if (e.key === "Enter") {
                 e.preventDefault();
 
-                if (!pendiente && coincidenciasProducto.length > 0) {
-                  elegirProducto(coincidenciasProducto[0]);
+                if (coincidenciasProducto.length > 0) {
+                  const elegido =
+                    coincidenciasProducto[
+                      Math.min(indiceProducto, coincidenciasProducto.length - 1)
+                    ];
+                  elegirProducto(elegido);
                 }
               }
             }}
@@ -414,13 +440,17 @@ const itemsCatalogoFiltrados = items.filter((p) => {
             className="absolute left-4 right-4 mt-1 rounded-md z-20 shadow-md"
             style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
           >
-            {coincidenciasProducto.map((p) => (
+            {coincidenciasProducto.map((p, index) => (
               <button
                 key={p.id}
                 type="button"
+                onMouseEnter={() => setIndiceProducto(index)}
                 onClick={() => elegirProducto(p)}
-                className="w-full text-left px-3 py-2 text-sm hover:bg-black/5"
-                style={{ borderBottom: "1px solid #D9D0C2" }}
+                className="w-full text-left px-3 py-2 text-sm"
+                style={{
+                  borderBottom: "1px solid #D9D0C2",
+                  background: index === indiceProducto ? "#E8DED0" : "transparent",
+                }}
               >
                 {p.code} · {p.name}
                 <span style={{ color: "#5B4E5E" }}>
