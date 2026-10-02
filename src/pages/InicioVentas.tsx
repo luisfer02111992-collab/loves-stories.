@@ -397,34 +397,51 @@ if (linea) {
   }, [filaSeleccionada, carrito]);
 
   useEffect(() => {
-    function desplazarListaConFlechas(e: KeyboardEvent) {
+    function moverEntreItemsConFlechas(e: KeyboardEvent) {
       if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
-      if (mostrarAsignar) return;
+      if (mostrarAsignar || carrito.length === 0) return;
 
       const activo = document.activeElement as HTMLElement | null;
       const tag = activo?.tagName;
 
-      // Si se estaba editando un precio o escribiendo un código, salir del campo
-      // para que las flechas desplacen la lista y no cambien el valor numérico.
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || activo?.isContentEditable) {
+      // Las flechas navegan por filas completas; nunca modifican precios ni otros campos.
+      if (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        activo?.isContentEditable
+      ) {
         activo?.blur();
       }
-
-      const contenedor = listaCarritoRef.current;
-      if (!contenedor) return;
 
       e.preventDefault();
       e.stopPropagation();
 
-      contenedor.scrollBy({
-        top: e.key === "ArrowDown" ? 120 : -120,
-        behavior: "smooth",
+      const claves = carrito.map((l) =>
+        l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id
+      );
+
+      let indiceActual = filaSeleccionada ? claves.indexOf(filaSeleccionada) : -1;
+      let indiceDestino: number;
+
+      if (e.key === "ArrowDown") {
+        indiceDestino = indiceActual < 0 ? 0 : Math.min(indiceActual + 1, claves.length - 1);
+      } else {
+        indiceDestino = indiceActual < 0 ? 0 : Math.max(indiceActual - 1, 0);
+      }
+
+      const claveDestino = claves[indiceDestino];
+      setFilaSeleccionada(claveDestino);
+
+      requestAnimationFrame(() => {
+        const fila = document.getElementById(`producto-carrito-${claveDestino}`);
+        fila?.scrollIntoView({ behavior: "auto", block: "nearest" });
       });
     }
 
-    window.addEventListener("keydown", desplazarListaConFlechas, true);
-    return () => window.removeEventListener("keydown", desplazarListaConFlechas, true);
-  }, [mostrarAsignar]);
+    window.addEventListener("keydown", moverEntreItemsConFlechas, true);
+    return () => window.removeEventListener("keydown", moverEntreItemsConFlechas, true);
+  }, [mostrarAsignar, carrito, filaSeleccionada]);
 
   useEffect(() => {
     function volverAlBuscadorConEnter(e: KeyboardEvent) {
