@@ -113,16 +113,26 @@ const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
     inventario.push(...((r.data as Product[]) ?? []));
   }
 
-  const idsInventario = new Set(inventario.map((p) => p.id));
+  // Un producto solo debe mostrarse en catálogo cuando se cumplen LAS DOS condiciones:
+  // 1) todavía existe stock real en inventario;
+  // 2) todavía queda cantidad publicada en catálogo.
+  // No cambiamos `active` automáticamente: así, si el inventario vuelve a tener stock
+  // y todavía existe cantidad publicada, el producto puede volver a mostrarse.
+  const stockInventarioPorId = new Map(
+    inventario.map((p) => [p.id, Math.max(0, Number(p.stock_available) || 0)])
+  );
 
   const { data: cat } = await supabase
     .from("catalog_products")
     .select("*")
     .order("created_at");
 
-  const catalogoValido = ((cat as CatalogProduct[]) ?? []).filter(
-    (it) => it.active && idsInventario.has(it.product_id)
-  );
+  const catalogoValido = ((cat as CatalogProduct[]) ?? []).filter((it) => {
+    const stockInventario = stockInventarioPorId.get(it.product_id) ?? 0;
+    const stockCatalogo = Math.max(0, Number(it.stock_available) || 0);
+
+    return it.active && stockInventario > 0 && stockCatalogo > 0;
+  });
 
   setItems(catalogoValido);
   setProductos(inventario);
