@@ -29,7 +29,7 @@ export default function Catalogo() {
   const [clientes, setClientes] = useState<Customer[]>([]);
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [mostrarListaProducto, setMostrarListaProducto] = useState(false);
-  const [indiceProducto, setIndiceProducto] = useState(0);
+  const [indiceProducto, setIndiceProducto] = useState(-1);
   const [pendiente, setPendiente] = useState("");
   const [subiendoId, setSubiendoId] = useState<string | null>(null);
   const [busquedaCliente, setBusquedaCliente] = useState("");
@@ -394,7 +394,7 @@ const itemsCatalogoFiltrados = items.filter((p) => {
               setDescripcionPendiente("");
               setImagenPendiente(null);
               setCantidadPendiente(1);
-              setIndiceProducto(0);
+              setIndiceProducto(-1);
             }}
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
@@ -402,7 +402,7 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                 if (coincidenciasProducto.length > 0) {
                   setMostrarListaProducto(true);
                   setIndiceProducto((i) =>
-                    Math.min(i + 1, coincidenciasProducto.length - 1)
+                    i < 0 ? 0 : Math.min(i + 1, coincidenciasProducto.length - 1)
                   );
                 }
                 return;
@@ -421,10 +421,11 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                 e.preventDefault();
 
                 if (coincidenciasProducto.length > 0) {
-                  const elegido =
-                    coincidenciasProducto[
-                      Math.min(indiceProducto, coincidenciasProducto.length - 1)
-                    ];
+                  const indice =
+                    indiceProducto < 0
+                      ? 0
+                      : Math.min(indiceProducto, coincidenciasProducto.length - 1);
+                  const elegido = coincidenciasProducto[indice];
                   elegirProducto(elegido);
                 }
               }
@@ -598,6 +599,11 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                           <input
                             type="number"
                             min={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                                e.preventDefault();
+                              }
+                            }}
                             value={variantesPendientes[op] ?? 0}
                             onChange={(e) => {
                               const n = Math.max(
@@ -885,6 +891,11 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                           <input
                             type="number"
                             min={0}
+                            onKeyDown={(e) => {
+                              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                                e.preventDefault();
+                              }
+                            }}
                             value={p.variant_stock?.[op] ?? 0}
                             onChange={(e) =>
                               actualizarVarianteLocal(
@@ -952,6 +963,11 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                       type="number"
                       min={0}
                       max={maximo}
+                      onKeyDown={(e) => {
+                        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                          e.preventDefault();
+                        }
+                      }}
                       value={p.stock_available}
                       onChange={(e) =>
                         actualizarCantidadLocal(
