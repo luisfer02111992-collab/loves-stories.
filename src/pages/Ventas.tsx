@@ -325,9 +325,9 @@ export default function Ventas() {
       subtotalSinDescuento: t.grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0),
       descuentoTotal: t.grupos.reduce((a, g) => a + g.descuento, 0),
       total: t.bruta,
-      depositado: t.cobrado,
-      saldoPendiente: 0,
-      saldoAFavor: Math.max(0, t.cobrado - t.bruta),
+      depositado: Math.max(0, t.cobrado - t.bruta),
+saldoPendiente: Math.max(0, t.bruta - Math.max(0, t.cobrado - t.bruta)),
+saldoAFavor: 0,
       mostrarPagos: true,
     });
   }
