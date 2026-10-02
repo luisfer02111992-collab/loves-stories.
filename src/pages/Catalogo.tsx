@@ -47,35 +47,90 @@ export default function Catalogo() {
   }, []);
 
   async function cargar() {
-    const { data: productosData, error: productosError } = await supabase
-      .from("products")
-      .select("id, code, name, image_url, price, stock_available, active")
-      .eq("active", true)
-      .order("code");
+    // Supabase devuelve como máximo 1000 filas por consulta.
+    // Como el inventario tiene miles de productos, cargamos TODAS las páginas.
+    const inventario: Product[] = [];
+    const TAMANO_PAGINA = 1000;
 
-    if (productosError) {
-      console.error(productosError);
-      return;
+    for (let desde = 0; ; desde += TAMANO_PAGINA) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("id, code, name, image_url, price, stock_available, active")
+        .eq("active", true)
+        .order("code")
+        .range(desde, desde + TAMANO_PAGINA - 1);
+
+      if (error) {
+        console.error("Error cargando inventario:", error);
+        return;
+      }
+
+      const pagina = (data as Product[]) ?? [];
+      inventario.push(...pagina);
+
+      if (pagina.length < TAMANO_PAGINA) break;
     }
 
-    const inventario = (productosData as Product[]) ?? [];
+    // Hacemos lo mismo con el catálogo para no perder publicaciones
+    // si algún día supera las 1000 filas.
+    const cat: CatalogProduct[] = [];
 
-    const { data: catalogoData, error: catalogoError } = await supabase
-      .from("catalog_products")
-      .select("*")
-      .order("created_at", { ascending: false });
+    for (let desde = 0; ; desde += TAMANO_PAGINA) {
+      const { data, error } = await supabase
+        .from("catalog_products")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .range(desde, desde + TAMANO_PAGINA - 1);
 
-    if (catalogoError) {
-      console.error(catalogoError);
-      return;
+      if (error) {
+        console.error("Error cargando catálogo:", error);
+        return;
+      }
+
+      const pagina = (data as CatalogProduct[]) ?? [];
+      cat.push(...pagina);
+
+      if (pagina.length < TAMANO_PAGINA) break;
     }
 
-    const cat = (catalogoData as CatalogProduct[]) ?? [];
+    const stockInventarioPorId = new Map(
+      inventario.map((p) => [p.id, Number(p.stock_available) || 0])
+    );
 
-    // Mostrar todos los productos que siguen activos en el catálogo.
-    // No los ocultamos aquí por el stock del inventario, porque esa
-    // comprobación puede hacer desaparecer publicaciones válidas.
-    const catalogoValido = cat.filter((it) => it.active);
+    // Solo mostramos publicaciones activas cuyo producto todavía tiene stock real.
+    const catalogoValido = cat.filter(
+      (it) =>
+        it.active &&
+        (stockInventarioPorId.get(it.product_id) ?? 0) > 0
+    );
+
+    // Si el stock REAL llega a 0, retiramos ese modelo del catálogo.
+    const agotadosActivos = cat.filter(
+      (it) =>
+        it.active &&
+        stockInventarioPorId.has(it.product_id) &&
+        (stockInventarioPorId.get(it.product_id) ?? 0) <= 0
+    );
+
+    if (agotadosActivos.length > 0) {
+      const { error: errorAgotados } = await supabase
+        .from("catalog_products")
+        .update({
+          active: false,
+          stock_available: 0,
+        })
+        .in(
+          "id",
+          agotadosActivos.map((it) => it.id)
+        );
+
+      if (errorAgotados) {
+        console.error(
+          "Error retirando productos agotados del catálogo:",
+          errorAgotados
+        );
+      }
+    }
 
     setItems(catalogoValido);
     setProductos(inventario);
@@ -761,15 +816,9 @@ export default function Catalogo() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {items.map((p) => {
-              // Primero relaciona por product_id. Si una publicación antigua
-              // tiene un product_id distinto, usa el código como respaldo.
-              const productoInventario =
-                productos.find((producto) => producto.id === p.product_id) ??
-                productos.find(
-                  (producto) =>
-                    String(producto.code).trim().toLowerCase() ===
-                    String(p.code).trim().toLowerCase()
-                );
+              const productoInventario = productos.find(
+                (producto) => producto.id === p.product_id
+              );
 
               const stockInventario =
                 Number(productoInventario?.stock_available) || 0;
