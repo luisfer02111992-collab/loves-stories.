@@ -35,6 +35,7 @@ export default function Ventas() {
   const [cantidadNueva, setCantidadNueva] = useState(1);
   const [devoluciones, setDevoluciones] = useState<Record<string, (Devolucion & { items: DevolucionItem[] })[]>>({});
   const [pagos, setPagos] = useState<Record<string, number>>({});
+  const [aperturasEditadas, setAperturasEditadas] = useState<Record<string, number>>({});
   const [banner, setBanner] = useState<{ orderId: string; original: number; anterior: number; nuevo: number; pagado: number; diferencia: number } | null>(null);
   const [reciboVenta, setReciboVenta] = useState<string | null>(null);
   const [nombreNegocio, setNombreNegocio] = useState("Loves Stories");
@@ -211,36 +212,100 @@ export default function Ventas() {
   }
 
   async function guardarCambios(orderId: string) {
-    const cambios=Object.entries(cambiosPendientes[orderId]??{}).filter(([,x])=>x.delta!==0).map(([product_id,x])=>({product_id,delta:x.delta}));
-    if(!cambios.length){setEditando(null);return;}
+  const cambios = Object.entries(cambiosPendientes[orderId] ?? {})
+    .filter(([, x]) => x.delta !== 0)
+    .map(([product_id, x]) => ({
+      product_id,
+      delta: x.delta
+    }));
 
-    // Última comprobación de stock justo antes de confirmar.
-    const positivos=cambios.filter(x=>x.delta>0);
-    if(positivos.length){
-      const {data:stock,error:stockError}=await supabase.from("products")
-        .select("id,code,stock_available")
-        .in("id",positivos.map(x=>x.product_id));
-      if(stockError){alert(`No se pudo verificar el inventario: ${stockError.message}`);return;}
-      for(const cambio of positivos){
-        const p=(stock??[]).find((x:any)=>x.id===cambio.product_id);
-        const disponible=Number(p?.stock_available??0);
-        if(cambio.delta>disponible){
-          alert(`No se puede guardar. ${p?.code??"El producto"} tiene ${disponible} unidad${disponible===1?"":"es"} disponible${disponible===1?"":"s"} y estás intentando agregar ${cambio.delta}.`);
-          return;
-        }
-      }
+  const venta = ventas.find(v => v.id === orderId);
+  if (!venta) return;
+
+  const t = totalesVenta(venta);
+
+  const aperturaActual = Math.max(0, t.cobrado - t.bruta);
+  const nuevaApertura = aperturasEditadas[orderId] ?? aperturaActual;
+  const cambioApertura = Math.abs(nuevaApertura - aperturaActual) > 0.001;
+
+  if (!cambios.length && !cambioApertura) {
+    setEditando(null);
+    return;
+  }
+
+  const positivos = cambios.filter(x => x.delta > 0);
+
+  if (positivos.length) {
+    const { data: stock, error: stockError } = await supabase
+      .from("products")
+      .select("id,code,stock_available")
+      .in("id", positivos.map(x => x.product_id));
+
+    if (stockError) {
+      alert(`No se pudo verificar el inventario: ${stockError.message}`);
+      return;
     }
 
-    // Esta RPC confirma en una sola operación la corrección del pedido y su inventario.
-    // + descuenta inventario; - devuelve unidades al inventario.
-    const {error}=await supabase.rpc("save_closed_sale_corrections",{p_order_id:orderId,p_changes:cambios});
-    if(error){alert(`No se pudieron guardar los cambios: ${error.message}`);return;}
+    for (const cambio of positivos) {
+      const p = (stock ?? []).find((x: any) => x.id === cambio.product_id);
+      const disponible = Number(p?.stock_available ?? 0);
 
-    setCambiosPendientes(prev=>{const n={...prev};delete n[orderId];return n});
-    setCambiosSinGuardar(prev=>{const n=new Set(prev);n.delete(orderId);return n});
-    setEditando(null);
-    await cargar();
-    alert("Modificación guardada. El pedido y el inventario fueron actualizados.");
+      if (cambio.delta > disponible) {
+        alert(
+          `No se puede guardar. ${p?.code ?? "El producto"} tiene ${disponible} unidad${disponible === 1 ? "" : "es"} disponible${disponible === 1 ? "" : "s"} y estás intentando agregar ${cambio.delta}.`
+        );
+        return;
+      }
+    }
+  }
+
+  if (cambios.length) {
+    const { error } = await supabase.rpc("save_closed_sale_corrections", {
+      p_order_id: orderId,
+      p_changes: cambios
+    });
+
+    if (error) {
+      alert(`No se pudieron guardar los cambios de productos: ${error.message}`);
+      return;
+    }
+  }
+
+  if (cambioApertura) {
+    const { error } = await supabase.rpc("corregir_apertura_venta", {
+      p_order_id: orderId,
+      p_nueva_apertura: nuevaApertura
+    });
+
+    if (error) {
+      alert(`No se pudo corregir la apertura: ${error.message}`);
+      return;
+    }
+  }
+
+  setCambiosPendientes(prev => {
+    const n = { ...prev };
+    delete n[orderId];
+    return n;
+  });
+
+  setAperturasEditadas(prev => {
+    const n = { ...prev };
+    delete n[orderId];
+    return n;
+  });
+
+  setCambiosSinGuardar(prev => {
+    const n = new Set(prev);
+    n.delete(orderId);
+    return n;
+  });
+
+  setEditando(null);
+  await cargar();
+
+  alert("Modificación guardada correctamente.");
+}
   }
 
   function cancelarCambios(orderId:string){
@@ -538,6 +603,38 @@ saldoAFavor: 0,
 
               {abierto && t && <div className="p-3 mb-2 rounded" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
                 <p className="text-xs mb-2" style={{color:"#5B4E5E"}}>Usa − / + o agrega otro producto. Nada se modifica hasta pulsar <strong>Guardar cambios</strong>.</p>
+                <div className="mb-3">
+  <p className="text-xs mb-1">Monto de apertura (Bs)</p>
+
+  <input
+    type="number"
+    min={0}
+    step="0.01"
+    value={
+      aperturasEditadas[v.id] ??
+      Math.max(0, t.cobrado - t.bruta)
+    }
+    onChange={(e) => {
+      const valor = Math.max(0, Number(e.target.value));
+
+      setAperturasEditadas(prev => ({
+        ...prev,
+        [v.id]: valor
+      }));
+
+      setCambiosSinGuardar(prev => new Set(prev).add(v.id));
+    }}
+    className="w-32 px-2 py-1.5 rounded text-sm"
+    style={{
+      background: "#F7F3EC",
+      border: "1px solid #D9D0C2"
+    }}
+  />
+
+  <p className="text-xs mt-1" style={{color:"#5B4E5E"}}>
+    Apertura registrada: Bs {Math.max(0, t.cobrado - t.bruta).toFixed(2)}
+  </p>
+</div>
                 <div className="flex flex-wrap gap-2 items-end"><div><p className="text-xs mb-1">Código de otro producto</p><input value={codigoNuevo} onChange={e=>setCodigoNuevo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();agregarItem(v.id)}}} className="px-2 py-1.5 rounded text-sm" placeholder="Código"/></div><div><p className="text-xs mb-1">Cantidad</p><input type="number" min={1} value={cantidadNueva} onChange={e=>setCantidadNueva(Math.max(1,Number(e.target.value)))} className="w-20 px-2 py-1.5 rounded text-sm"/></div><button onClick={()=>agregarItem(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#4F6F52",color:"white"}}><Plus size={12} className="inline"/> Agregar</button><button onClick={()=>guardarCambios(v.id)} className="text-xs px-3 py-2 rounded flex items-center gap-1" style={{background:"#9C7A3C",color:"white"}}><Save size={12}/> Guardar cambios</button><button onClick={()=>cancelarCambios(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>Cancelar</button></div>
                 {Object.entries(cambiosPendientes[v.id]??{}).filter(([pid,x])=>x.delta>0 && !t.grupos.some(g=>g.product_id===pid)).map(([pid,x])=><p key={pid} className="text-xs mt-2" style={{color:"#4F6F52"}}>+ {x.delta} × {x.codigo} · {x.nombre}</p>)}
               </div>}
