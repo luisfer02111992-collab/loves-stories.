@@ -49,6 +49,37 @@ export default function InicioVentas() {
     supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
     supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
   }, []);
+  useEffect(() => {
+  let cancelado = false;
+
+  async function precargarProductos() {
+    const TAMANO = 1000;
+    let desde = 0;
+
+    while (!cancelado) {
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .is("deleted_at", null)
+        .range(desde, desde + TAMANO - 1);
+
+      if (error || !data || data.length === 0) break;
+
+      for (const producto of data as Product[]) {
+        productosCacheRef.current.set(producto.code, producto);
+      }
+
+      if (data.length < TAMANO) break;
+      desde += TAMANO;
+    }
+  }
+
+  precargarProductos();
+
+  return () => {
+    cancelado = true;
+  };
+}, []);
 useEffect(() => {
   let cancelado = false;
 
