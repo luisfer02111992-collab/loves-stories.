@@ -407,36 +407,7 @@ const itemsCatalogoFiltrados = items.filter((p) => {
               setIndiceProducto(-1);
             }}
             onKeyDown={(e) => {
-              if (e.key === "ArrowDown") {
-                e.preventDefault();
-                e.stopPropagation();
-
-                if (coincidenciasProducto.length > 0) {
-                  setMostrarListaProducto(true);
-                  setIndiceProducto((actual) =>
-                    actual < 0
-                      ? 0
-                      : (actual + 1) % coincidenciasProducto.length
-                  );
-                }
-                return;
-              }
-
-              if (e.key === "ArrowUp") {
-                e.preventDefault();
-                e.stopPropagation();
-
-                if (coincidenciasProducto.length > 0) {
-                  setMostrarListaProducto(true);
-                  setIndiceProducto((actual) =>
-                    actual < 0
-                      ? coincidenciasProducto.length - 1
-                      : (actual - 1 + coincidenciasProducto.length) %
-                        coincidenciasProducto.length
-                  );
-                }
-                return;
-              }
+           
 
               if (e.key === "Enter") {
                 e.preventDefault();
