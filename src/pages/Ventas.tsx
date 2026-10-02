@@ -306,8 +306,7 @@ export default function Ventas() {
 
   alert("Modificación guardada correctamente.");
 }
-  }
-
+  
   function cancelarCambios(orderId:string){
     setCambiosPendientes(prev=>{const n={...prev};delete n[orderId];return n});
     setCambiosSinGuardar(prev=>{const n=new Set(prev);n.delete(orderId);return n}); setEditando(null);
