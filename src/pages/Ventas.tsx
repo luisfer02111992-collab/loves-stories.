@@ -35,6 +35,7 @@ export default function Ventas() {
   const [cantidadNueva, setCantidadNueva] = useState(1);
   const [devoluciones, setDevoluciones] = useState<Record<string, (Devolucion & { items: DevolucionItem[] })[]>>({});
   const [pagos, setPagos] = useState<Record<string, number>>({});
+  const [aperturas, setAperturas] = useState<Record<string, number>>({});
   const [aperturasEditadas, setAperturasEditadas] = useState<Record<string, number>>({});
   const [banner, setBanner] = useState<{ orderId: string; original: number; anterior: number; nuevo: number; pagado: number; diferencia: number } | null>(null);
   const [reciboVenta, setReciboVenta] = useState<string | null>(null);
@@ -128,14 +129,42 @@ export default function Ventas() {
       });
       setDevoluciones(porOrden);
 
-      const { data: pagosData } = await supabase.from("payments").select("order_id, amount").in("order_id", ids);
-      const sumaPagos: Record<string, number> = {};
-      (pagosData ?? []).forEach((p: any) => { sumaPagos[p.order_id] = (sumaPagos[p.order_id] ?? 0) + p.amount; });
-      setPagos(sumaPagos);
+    const { data: pagosData } = await supabase
+  .from("payments")
+  .select("id, order_id, amount, paid_at")
+  .in("order_id", ids)
+  .order("paid_at", { ascending: true });
+
+const sumaPagos: Record<string, number> = {};
+const aperturaPorOrden: Record<string, number> = {};
+
+(ids ?? []).forEach((orderId) => {
+  const pagosOrden = (pagosData ?? []).filter(
+    (p: any) => p.order_id === orderId
+  );
+
+  sumaPagos[orderId] = pagosOrden.reduce(
+    (suma: number, p: any) => suma + Number(p.amount ?? 0),
+    0
+  );
+
+  // El último pago es el pago del cierre.
+  // Todo lo anterior corresponde a apertura/depósitos.
+  const pagosAntesDelCierre = pagosOrden.slice(0, -1);
+
+  aperturaPorOrden[orderId] = pagosAntesDelCierre.reduce(
+    (suma: number, p: any) => suma + Number(p.amount ?? 0),
+    0
+  );
+});
+
+setPagos(sumaPagos);
+setAperturas(aperturaPorOrden);
     } else {
-      setDevoluciones({});
-      setPagos({});
-    }
+  setDevoluciones({});
+  setPagos({});
+  setAperturas({});
+}
   }
 
   function totalesVenta(v: VentaCerrada) {
@@ -224,7 +253,7 @@ export default function Ventas() {
 
   const t = totalesVenta(venta);
 
-  const aperturaActual = Math.max(0, t.cobrado - t.bruta);
+  const aperturaActual = aperturas[orderId] ?? 0;
   const nuevaApertura = aperturasEditadas[orderId] ?? aperturaActual;
   const cambioApertura = Math.abs(nuevaApertura - aperturaActual) > 0.001;
 
@@ -389,8 +418,8 @@ export default function Ventas() {
       subtotalSinDescuento: t.grupos.reduce((a, g) => a + g.subtotalSinDescuento, 0),
       descuentoTotal: t.grupos.reduce((a, g) => a + g.descuento, 0),
       total: t.bruta,
-      depositado: Math.max(0, t.cobrado - t.bruta),
-saldoPendiente: Math.max(0, t.bruta - Math.max(0, t.cobrado - t.bruta)),
+   depositado: aperturas[v.id] ?? 0,
+saldoPendiente: Math.max(0, t.bruta - (aperturas[v.id] ?? 0)),
 saldoAFavor: 0,
       mostrarPagos: true,
     });
@@ -610,9 +639,10 @@ saldoAFavor: 0,
     min={0}
     step="0.01"
     value={
-      aperturasEditadas[v.id] ??
-      Math.max(0, t.cobrado - t.bruta)
-    }
+  aperturasEditadas[v.id] ??
+  aperturas[v.id] ??
+  0
+}
     onChange={(e) => {
       const valor = Math.max(0, Number(e.target.value));
 
@@ -631,7 +661,7 @@ saldoAFavor: 0,
   />
 
   <p className="text-xs mt-1" style={{color:"#5B4E5E"}}>
-    Apertura registrada: Bs {Math.max(0, t.cobrado - t.bruta).toFixed(2)}
+    Apertura registrada: Bs {(aperturas[v.id] ?? 0).toFixed(2)}
   </p>
 </div>
                 <div className="flex flex-wrap gap-2 items-end"><div><p className="text-xs mb-1">Código de otro producto</p><input value={codigoNuevo} onChange={e=>setCodigoNuevo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();agregarItem(v.id)}}} className="px-2 py-1.5 rounded text-sm" placeholder="Código"/></div><div><p className="text-xs mb-1">Cantidad</p><input type="number" min={1} value={cantidadNueva} onChange={e=>setCantidadNueva(Math.max(1,Number(e.target.value)))} className="w-20 px-2 py-1.5 rounded text-sm"/></div><button onClick={()=>agregarItem(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#4F6F52",color:"white"}}><Plus size={12} className="inline"/> Agregar</button><button onClick={()=>guardarCambios(v.id)} className="text-xs px-3 py-2 rounded flex items-center gap-1" style={{background:"#9C7A3C",color:"white"}}><Save size={12}/> Guardar cambios</button><button onClick={()=>cancelarCambios(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>Cancelar</button></div>
