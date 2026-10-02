@@ -198,56 +198,76 @@ return;
     window.removeEventListener("popstate", manejarAtras);
   };
 }, []);
+  useEffect(() => {
+    const manejarTecladoCatalogo = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && imagenAmpliadaRef.current) {
+        e.preventDefault();
+        imagenAmpliadaRef.current = null;
+        setImagenAmpliada(null);
+        return;
+      }
+
+      if (imagenAmpliadaRef.current) return;
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+
+      const objetivo = e.target as HTMLElement | null;
+      const tag = objetivo?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || objetivo?.isContentEditable) {
+        return;
+      }
+
+      e.preventDefault();
+      window.scrollBy({
+        top: e.key === "ArrowDown" ? 180 : -180,
+        behavior: "smooth",
+      });
+    };
+
+    window.addEventListener("keydown", manejarTecladoCatalogo);
+    return () => window.removeEventListener("keydown", manejarTecladoCatalogo);
+  }, []);
+
   async function descargarPdfCatalogo(codigoPedido: string) {
-    const itemsPdf = seleccion.map((p) => {
-      if (!p.variant_type) {
-        return {
+  const itemsPdf = seleccion.flatMap((p) => {
+    if (!p.variant_type) {
+      return [
+        {
           codigo: p.code,
           nombre: p.name,
           imagen: p.image_url ?? null,
           cantidad: Number(cant[p.id] ?? 0),
           precio: Number(p.price ?? 0),
           variante: null,
-        };
-      }
+        },
+      ];
+    }
 
-      const variantesSeleccionadas = Object.entries(cantVariante[p.id] ?? {})
-        .filter(([, q]) => Number(q) > 0);
-
-      const cantidadTotalModelo = variantesSeleccionadas.reduce(
-        (total, [, q]) => total + Number(q),
-        0
-      );
-
-      const detalleVariantes = variantesSeleccionadas
-        .map(([clave, cantidad]) =>
-          p.variant_type === "ring_size"
-            ? `Talla ${clave} - ${cantidad} u.`
-            : `${clave} cm - ${cantidad} u.`
-        )
-        .join("\n");
-
-      return {
+    return Object.entries(cantVariante[p.id] ?? {})
+      .filter(([, q]) => Number(q) > 0)
+      .map(([clave, cantidad]) => ({
         codigo: p.code,
         nombre: p.name,
         imagen: p.image_url ?? null,
-        cantidad: cantidadTotalModelo,
+        cantidad: Number(cantidad),
         precio: Number(p.price ?? 0),
-        variante: detalleVariantes,
-      };
-    });
+        variante:
+          p.variant_type === "ring_size"
+            ? `Talla ${clave}`
+            : `${clave} cm`,
+      }));
+  });
 
-    await generarPdfCatalogo({
-      negocio: nombreNegocio,
-      codigoPedido,
-      cliente: nombre.trim(),
-      telefono: telefono.trim(),
-      fecha: new Date().toLocaleString("es-BO"),
-      items: itemsPdf,
-      totalUnidades,
-      total: totalBs,
-    });
-  }
+  await generarPdfCatalogo({
+    negocio: nombreNegocio,
+    codigoPedido,
+    cliente: nombre.trim(),
+    telefono: telefono.trim(),
+    fecha: new Date().toLocaleString("es-BO"),
+    items: itemsPdf,
+    totalUnidades,
+    total: totalBs,
+  });
+}
  async function enviarPedido(e: React.FormEvent) {
   e.preventDefault();
 
