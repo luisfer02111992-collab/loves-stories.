@@ -50,19 +50,102 @@ export default function InicioVentas() {
     supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
   }, []);
 useEffect(() => {
-  const guardado = sessionStorage.getItem("inicioVentasPendiente");
-  if (guardado) {
+  let cancelado = false;
+
+  async function restaurarCarritoActualizado() {
+    const guardado = sessionStorage.getItem("inicioVentasPendiente");
+
+    if (!guardado) {
+      hidratadoRef.current = true;
+      return;
+    }
+
     try {
       const datos = JSON.parse(guardado);
-      if (Array.isArray(datos.carrito)) {
-        carritoRef.current = datos.carrito;
-        setCarrito(datos.carrito);
+      if (!Array.isArray(datos.carrito) || datos.carrito.length === 0) {
+        hidratadoRef.current = true;
+        return;
+      }
+
+      const carritoGuardado = datos.carrito as LineaCarrito[];
+      const ids = Array.from(new Set(carritoGuardado.map((l) => l.product.id)));
+
+      const { data: productosActuales, error: errorProductos } = await supabase
+        .from("products")
+        .select("*")
+        .in("id", ids)
+        .is("deleted_at", null);
+
+      if (errorProductos) throw new Error(errorProductos.message);
+
+      const { data: catalogoAnillos, error: errorCatalogo } = await supabase
+        .from("catalog_products")
+        .select("product_id, variant_type, variant_stock")
+        .in("product_id", ids)
+        .eq("active", true)
+        .eq("variant_type", "ring_size");
+
+      if (errorCatalogo) throw new Error(errorCatalogo.message);
+
+      const productosPorId = new Map(
+        ((productosActuales as Product[]) ?? []).map((p) => [p.id, p])
+      );
+      const anillosPorProducto = new Map(
+        (catalogoAnillos ?? []).map((c: any) => [c.product_id, c])
+      );
+
+      const actualizado = carritoGuardado.flatMap((linea) => {
+        const productoActual = productosPorId.get(linea.product.id);
+        if (!productoActual) return [];
+
+        productosCacheRef.current.set(productoActual.code, productoActual);
+
+        let stockTalla = linea.stockTalla ?? null;
+        if (linea.ringSize) {
+          const catalogo = anillosPorProducto.get(productoActual.id) as any;
+          stockTalla = Number(catalogo?.variant_stock?.[linea.ringSize] ?? 0);
+          catalogoAnillosCacheRef.current.set(productoActual.id, catalogo ?? null);
+        } else {
+          catalogoAnillosCacheRef.current.delete(productoActual.id);
+        }
+
+        const limite = linea.ringSize
+          ? Math.min(productoActual.stock_available, stockTalla ?? 0)
+          : productoActual.stock_available;
+
+        if (limite <= 0) return [];
+
+        return [{
+          ...linea,
+          product: productoActual,
+          stockTalla,
+          cantidad: Math.min(linea.cantidad, limite),
+        }];
+      });
+
+      if (!cancelado) {
+        carritoRef.current = actualizado;
+        hidratadoRef.current = true;
+        setCarrito(actualizado);
       }
     } catch (error) {
-      console.error("No se pudo recuperar la preasignación:", error);
+      console.error("No se pudo actualizar la preasignación:", error);
+      if (!cancelado) {
+        try {
+          const datos = JSON.parse(guardado);
+          const carritoGuardado = Array.isArray(datos.carrito) ? datos.carrito : [];
+          carritoRef.current = carritoGuardado;
+          hidratadoRef.current = true;
+          setCarrito(carritoGuardado);
+        } catch {
+          hidratadoRef.current = true;
+        }
+      }
     }
   }
-  hidratadoRef.current = true;
+
+  restaurarCarritoActualizado();
+  return () => { cancelado = true; };
 }, []);
 
 useEffect(() => {
@@ -448,7 +531,17 @@ p_unit_price: precioPreview(l),
         setUltimoResultado(`Asignado a ${nombreDestino}: ${unidades} unidad(es) — Bs ${total.toFixed(2)}. El pedido sigue abierto hasta que se cierre desde Clientes.`);
       }
 
+      // La asignación ya terminó correctamente: recién aquí limpiamos
+      // por completo la lista temporal y su respaldo de sesión.
+      carritoRef.current = [];
       setCarrito([]);
+      sessionStorage.removeItem("inicioVentasPendiente");
+      productosCacheRef.current.clear();
+      catalogoAnillosCacheRef.current.clear();
+      setFilaSeleccionada(null);
+      setCodigo("");
+      setProductoSinStock(null);
+      setNoEncontrado(false);
       setMostrarAsignar(false);
       setClienteElegido(null);
       setBusquedaCliente("");
