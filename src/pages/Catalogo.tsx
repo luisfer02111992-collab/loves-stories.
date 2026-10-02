@@ -1,1076 +1,1027 @@
-import { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import { X, Upload, Image as ImageIcon, Search, MessageCircle, Copy, Check } from "lucide-react";
 import { supabase } from "../lib/supabase";
-import { Search, Trash2, Upload, Save, X } from "lucide-react";
+import { subirImagen } from "../lib/imagenes";
+import type { CatalogProduct, Product, Customer } from "../lib/types";
 
-type VariantType = "ring_size" | "length_cm" | null;
+const TALLAS_ANILLO = ["5","6","7","8","9","10","11","12","13"];
+const LARGOS_CM = ["40","45","50","55","60","65","70","75","80"];
 
-interface Product {
-  id: string;
-  code: string;
-  name: string;
-  image_url: string | null;
-  price: number;
-  stock_available: number;
-  active: boolean;
+function tipoVariante(nombre: string): "ring_size" | "length_cm" | null {
+  const n = (nombre || "").toLowerCase();
+  if (n.includes("anillo")) return "ring_size";
+  if (n.includes("cadena") || n.includes("collar")) return "length_cm";
+  return null;
 }
-
-interface CatalogProduct {
-  id: string;
-  product_id: string;
-  code: string;
-  name: string;
-  image_url: string | null;
-  price: number;
-  stock_available: number;
-  active: boolean;
-  variant_type: VariantType;
-  variant_stock: Record<string, number> | null;
-  display_description?: string | null;
+function opcionesVariante(tipo: "ring_size" | "length_cm" | null) {
+  return tipo === "ring_size" ? TALLAS_ANILLO : tipo === "length_cm" ? LARGOS_CM : [];
+}
+function sumaVariantes(stock: Record<string, number> | null | undefined) {
+  return Object.values(stock ?? {}).reduce((a, n) => a + Math.max(0, Number(n) || 0), 0);
+}
+function etiquetaVariante(tipo: "ring_size" | "length_cm" | null, valor: string) {
+  return tipo === "ring_size" ? `Talla ${valor}` : tipo === "length_cm" ? `${valor} cm` : valor;
 }
 
 export default function Catalogo() {
   const [items, setItems] = useState<CatalogProduct[]>([]);
   const [productos, setProductos] = useState<Product[]>([]);
-  const [busqueda, setBusqueda] = useState("");
-  const [productoSeleccionado, setProductoSeleccionado] =
-    useState<Product | null>(null);
-
-  const [cantidad, setCantidad] = useState(1);
-  const [descripcion, setDescripcion] = useState("");
-  const [variantType, setVariantType] = useState<VariantType>(null);
-  const [variantStock, setVariantStock] = useState<Record<string, number>>({});
+  const [clientes, setClientes] = useState<Customer[]>([]);
+  const [busquedaProducto, setBusquedaProducto] = useState("");
+  const [mostrarListaProducto, setMostrarListaProducto] = useState(false);
+  const [pendiente, setPendiente] = useState("");
   const [subiendoId, setSubiendoId] = useState<string | null>(null);
-  const [guardando, setGuardando] = useState(false);
+  const [busquedaCliente, setBusquedaCliente] = useState("");
+  const [mostrarListaCliente, setMostrarListaCliente] = useState(false);
+  const [copiado, setCopiado] = useState(false);
+  const [variantesPendientes, setVariantesPendientes] = useState<Record<string, number>>({});
+  const [descripcionPendiente, setDescripcionPendiente] = useState("");
+const [imagenPendiente, setImagenPendiente] = useState<File | null>(null);
+const [cantidadPendiente, setCantidadPendiente] = useState(1);
+const [busquedaCatalogo, setBusquedaCatalogo] = useState("");
+const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
+  useEffect(() => {
+  if (!imagenAmpliada) return;
 
+  const cerrarConEscape = (e: KeyboardEvent) => {
+    if (e.key === "Escape") {
+      setImagenAmpliada(null);
+    }
+  };
+
+  const cerrarConAtras = () => {
+    setImagenAmpliada(null);
+  };
+
+  window.addEventListener("keydown", cerrarConEscape);
+  window.history.pushState({ imagenCatalogo: true }, "");
+
+  window.addEventListener("popstate", cerrarConAtras);
+
+  return () => {
+    window.removeEventListener("keydown", cerrarConEscape);
+    window.removeEventListener("popstate", cerrarConAtras);
+  };
+}, [imagenAmpliada]);
+  
   useEffect(() => {
     cargar();
+    supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
   }, []);
 
   async function cargar() {
-    // Supabase devuelve como máximo 1000 filas por consulta.
-    // Como el inventario tiene miles de productos, cargamos TODAS las páginas.
-    const inventario: Product[] = [];
-    const TAMANO_PAGINA = 1000;
+  const TAMANO_PAGINA = 1000;
 
-    for (let desde = 0; ; desde += TAMANO_PAGINA) {
-      const { data, error } = await supabase
+  const { count, error: countError } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .is("deleted_at", null);
+
+  if (countError) {
+    console.error("Error contando productos:", countError);
+    return;
+  }
+
+  const total = count ?? 0;
+
+  const consultas = Array.from(
+    { length: Math.ceil(total / TAMANO_PAGINA) },
+    (_, i) =>
+      supabase
         .from("products")
-        .select("id, code, name, image_url, price, stock_available, active")
-        .eq("active", true)
-        .order("code")
-        .range(desde, desde + TAMANO_PAGINA - 1);
-
-      if (error) {
-        console.error("Error cargando inventario:", error);
-        return;
-      }
-
-      const pagina = (data as Product[]) ?? [];
-      inventario.push(...pagina);
-
-      if (pagina.length < TAMANO_PAGINA) break;
-    }
-
-    // Hacemos lo mismo con el catálogo para no perder publicaciones
-    // si algún día supera las 1000 filas.
-    const cat: CatalogProduct[] = [];
-
-    for (let desde = 0; ; desde += TAMANO_PAGINA) {
-      const { data, error } = await supabase
-        .from("catalog_products")
         .select("*")
-        .order("created_at", { ascending: false })
-        .range(desde, desde + TAMANO_PAGINA - 1);
+        .is("deleted_at", null)
+        .order("name")
+        .order("id")
+        .range(
+          i * TAMANO_PAGINA,
+          Math.min(total - 1, (i + 1) * TAMANO_PAGINA - 1)
+        )
+  );
 
-      if (error) {
-        console.error("Error cargando catálogo:", error);
-        return;
-      }
+  const paginas = await Promise.all(consultas);
+  const inventario: Product[] = [];
 
-      const pagina = (data as CatalogProduct[]) ?? [];
-      cat.push(...pagina);
-
-      if (pagina.length < TAMANO_PAGINA) break;
+  for (const r of paginas) {
+    if (r.error) {
+      console.error("Error cargando productos:", r.error);
+      continue;
     }
+    inventario.push(...((r.data as Product[]) ?? []));
+  }
 
-    const stockInventarioPorId = new Map(
-      inventario.map((p) => [p.id, Number(p.stock_available) || 0])
+  const idsInventario = new Set(inventario.map((p) => p.id));
+
+  const { data: cat } = await supabase
+    .from("catalog_products")
+    .select("*")
+    .order("created_at");
+
+  const catalogoValido = ((cat as CatalogProduct[]) ?? []).filter(
+    (it) => it.active && idsInventario.has(it.product_id)
+  );
+
+  setItems(catalogoValido);
+  setProductos(inventario);
+}
+
+  const disponiblesParaPublicar = productos.filter((p) => p.stock_available > 0 && !items.some((it) => it.product_id === p.id));
+  const coincidenciasProducto = useMemo(() => {
+    const q = busquedaProducto.trim().toLowerCase();
+    if (!q) return [];
+    return disponiblesParaPublicar.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)).slice(0, 8);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busquedaProducto, disponiblesParaPublicar.length]);
+
+  function elegirProducto(p: Product) {
+  setPendiente(p.id);
+  setBusquedaProducto(`${p.code} · ${p.name}`);
+  setVariantesPendientes({});
+  setDescripcionPendiente("");
+  setImagenPendiente(null);
+  setCantidadPendiente(1);
+  setMostrarListaProducto(false);
+}
+
+ async function publicar() {
+  const producto = productos.find((p) => p.id === pendiente);
+  if (!producto) return;
+
+  const tipo = tipoVariante(producto.name);
+  const totalVariantes = sumaVariantes(variantesPendientes);
+
+  if (tipo && totalVariantes <= 0) {
+    alert(
+      tipo === "ring_size"
+        ? "Indica al menos una talla disponible."
+        : "Indica al menos un largo disponible."
     );
+    return;
+  }
 
-    // Solo mostramos publicaciones activas cuyo producto todavía tiene stock real.
-    const catalogoValido = cat.filter(
-      (it) =>
-        it.active &&
-        (stockInventarioPorId.get(it.product_id) ?? 0) > 0
+  if (tipo && totalVariantes > producto.stock_available) {
+    alert(
+      `La suma de variantes (${totalVariantes}) no puede superar las ${producto.stock_available} unidades disponibles.`
     );
-
-    // Si el stock REAL llega a 0, retiramos ese modelo del catálogo.
-    const agotadosActivos = cat.filter(
-      (it) =>
-        it.active &&
-        stockInventarioPorId.has(it.product_id) &&
-        (stockInventarioPorId.get(it.product_id) ?? 0) <= 0
-    );
-
-    if (agotadosActivos.length > 0) {
-      const { error: errorAgotados } = await supabase
-        .from("catalog_products")
-        .update({
-          active: false,
-          stock_available: 0,
-        })
-        .in(
-          "id",
-          agotadosActivos.map((it) => it.id)
-        );
-
-      if (errorAgotados) {
-        console.error(
-          "Error retirando productos agotados del catálogo:",
-          errorAgotados
-        );
-      }
-    }
-
-    setItems(catalogoValido);
-    setProductos(inventario);
+    return;
   }
 
-  const resultados = useMemo(() => {
-    const texto = busqueda.trim().toLowerCase();
-
-    if (!texto) return [];
-
-    return productos
-      .filter((p) => {
-        return (
-          p.code.toLowerCase().includes(texto) ||
-          p.name.toLowerCase().includes(texto)
-        );
-      })
-      .slice(0, 20);
-  }, [busqueda, productos]);
-
-  function seleccionarProducto(producto: Product) {
-    setProductoSeleccionado(producto);
-    setBusqueda(producto.code);
-    setCantidad(1);
-    setDescripcion("");
-    setVariantType(null);
-    setVariantStock({});
+  if (!tipo && (cantidadPendiente <= 0 || cantidadPendiente > producto.stock_available)) {
+    alert(`La cantidad debe estar entre 1 y ${producto.stock_available}.`);
+    return;
   }
 
-  function limpiarSeleccion() {
-    setProductoSeleccionado(null);
-    setBusqueda("");
-    setCantidad(1);
-    setDescripcion("");
-    setVariantType(null);
-    setVariantStock({});
-  }
+  let imagenFinal = producto.image_url;
 
-  function cambiarCantidadVariante(clave: string, valor: number) {
-    const numero = Math.max(0, Number(valor) || 0);
+  if (imagenPendiente) {
+    const nuevaImagen = await subirImagen(imagenPendiente, "catalogo");
 
-    setVariantStock((prev) => ({
-      ...prev,
-      [clave]: numero,
-    }));
-  }
-
-  const totalVariantes = useMemo(() => {
-    return Object.values(variantStock).reduce(
-      (total, valor) => total + (Number(valor) || 0),
-      0
-    );
-  }, [variantStock]);
-
-  async function guardarCatalogo() {
-    if (!productoSeleccionado) {
-      alert("Selecciona un producto.");
-      return;
-    }
-
-    const stockInventario = Number(productoSeleccionado.stock_available) || 0;
-
-    if (stockInventario <= 0) {
-      alert("Este producto ya no tiene stock en inventario.");
-      return;
-    }
-
-    let totalPublicado = Number(cantidad) || 0;
-
-    if (variantType) {
-      totalPublicado = totalVariantes;
-    }
-
-    if (totalPublicado <= 0) {
-      alert("Debes publicar al menos 1 unidad.");
-      return;
-    }
-
-    if (totalPublicado > stockInventario) {
-      alert(
-        `No puedes publicar ${totalPublicado} unidades. En inventario solo hay ${stockInventario}.`
-      );
-      return;
-    }
-
-    setGuardando(true);
-
-    const existente = items.find(
-      (it) => it.product_id === productoSeleccionado.id
-    );
-
-    const datos = {
-      product_id: productoSeleccionado.id,
-      code: productoSeleccionado.code,
-      name: productoSeleccionado.name,
-      image_url: productoSeleccionado.image_url,
-      price: productoSeleccionado.price,
-      stock_available: totalPublicado,
-      active: true,
-      variant_type: variantType,
-      variant_stock: variantType ? variantStock : null,
-      display_description: descripcion.trim() || null,
-    };
-
-    let error;
-
-    if (existente) {
-      const respuesta = await supabase
-        .from("catalog_products")
-        .update(datos)
-        .eq("id", existente.id);
-
-      error = respuesta.error;
-    } else {
-      const respuesta = await supabase
-        .from("catalog_products")
-        .insert(datos);
-
-      error = respuesta.error;
-    }
-
-    setGuardando(false);
-
-    if (error) {
-      alert("ERROR: " + error.message);
-      return;
-    }
-
-    await cargar();
-    limpiarSeleccion();
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
-    });
-  }
-
-  async function subirImagen(
-    file: File,
-    carpeta: string
-  ): Promise<string | null> {
-    try {
-      const extension = file.name.split(".").pop() || "jpg";
-      const nombre = `${carpeta}/${crypto.randomUUID()}.${extension}`;
-
-      const { error: uploadError } = await supabase.storage
-        .from("product-images")
-        .upload(nombre, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (uploadError) {
-        console.error(uploadError);
-        return null;
-      }
-
-      const { data } = supabase.storage
-        .from("product-images")
-        .getPublicUrl(nombre);
-
-      return data.publicUrl;
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
-  }
-
-  async function subirImagenCatalogo(id: string, file: File) {
-    setSubiendoId(id);
-
-    const itemCatalogo = items.find((it) => it.id === id);
-
-    if (!itemCatalogo) {
-      setSubiendoId(null);
-      alert("No se encontró el producto correspondiente.");
-      return;
-    }
-
-    const url = await subirImagen(file, "catalogo");
-
-    if (!url) {
-      setSubiendoId(null);
+    if (!nuevaImagen) {
       alert("No se pudo cargar la imagen.");
       return;
     }
 
-    // IMPORTANTE:
-    // esta imagen se cambia SOLO en el catálogo.
-    // NO cambia la imagen original de Productos/Inventario.
-    const { error } = await supabase
-      .from("catalog_products")
-      .update({
-        image_url: url,
-      })
-      .eq("id", id);
+    imagenFinal = nuevaImagen;
 
-    setSubiendoId(null);
-
-    if (error) {
-      alert("ERROR catálogo: " + error.message);
-      return;
-    }
-
-    setItems((prev) =>
-      prev.map((it) =>
-        it.id === id
-          ? {
-              ...it,
-              image_url: url,
-            }
-          : it
-      )
-    );
-
-    alert("Imagen del catálogo actualizada correctamente.");
+    await supabase
+      .from("products")
+      .update({ image_url: nuevaImagen })
+      .eq("id", producto.id);
   }
+
+  const stockCatalogo = tipo ? totalVariantes : cantidadPendiente;
+
+  const { error } = await supabase.from("catalog_products").insert({
+    product_id: producto.id,
+    code: producto.code,
+    name: producto.name,
+    price: producto.price,
+    image_url: imagenFinal,
+    stock_available: stockCatalogo,
+    variant_type: tipo,
+    variant_stock: tipo ? variantesPendientes : {},
+    display_description: descripcionPendiente.trim() || null,
+  });
+
+  if (error) {
+    alert(`No se pudo guardar en catálogo: ${error.message}`);
+    return;
+  }
+
+  setPendiente("");
+  setBusquedaProducto("");
+  setVariantesPendientes({});
+  setDescripcionPendiente("");
+  setImagenPendiente(null);
+  setCantidadPendiente(1);
+
+  await cargar();
+}
+
+  function actualizarCantidadLocal(id: string, cantidad: number, maximo: number) {
+    const limitada = Math.min(Math.max(0, cantidad), maximo);
+    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, stock_available: limitada } : it)));
+  }
+
+  async function guardarCantidad(id: string, cantidad: number, maximo: number) {
+    const limitada = Math.min(Math.max(0, cantidad), maximo);
+    await supabase.from("catalog_products").update({ stock_available: limitada }).eq("id", id);
+    cargar();
+  }
+async function guardarDescripcion(id: string, descripcion: string) {
+  const { error } = await supabase
+    .from("catalog_products")
+    .update({ display_description: descripcion.trim() || null })
+    .eq("id", id);
+
+ if (error) {
+  console.error("Error guardando descripción:", error);
+  alert("ERROR: " + error.message);
+  return;
+}
+
+alert("Descripción guardada correctamente");
+await cargar();
+}
+
+  function actualizarVarianteLocal(id: string, clave: string, cantidad: number, maximo: number) {
+    setItems((prev) => prev.map((it) => {
+      if (it.id !== id) return it;
+      const nuevo = { ...(it.variant_stock ?? {}), [clave]: Math.max(0, Number(cantidad) || 0) };
+      const suma = sumaVariantes(nuevo);
+      if (suma > maximo) return it;
+      return { ...it, variant_stock: nuevo, stock_available: suma };
+    }));
+  }
+
+  async function guardarVariantes(item: CatalogProduct, maximo: number) {
+    const limpio = Object.fromEntries(Object.entries(item.variant_stock ?? {}).filter(([,n]) => Number(n) > 0).map(([k,n]) => [k, Number(n)]));
+    const total = sumaVariantes(limpio);
+    if (total > maximo) { alert(`La suma de variantes no puede superar ${maximo}.`); await cargar(); return; }
+    const { error } = await supabase.from("catalog_products").update({ variant_stock: limpio, stock_available: total }).eq("id", item.id);
+    if (error) alert(`No se pudieron guardar las variantes: ${error.message}`);
+    await cargar();
+  }
+
+ async function subirImagenCatalogo(id: string, file: File) {
+   setSubiendoId(id);
+
+   const url = await subirImagen(file, "catalogo");
+
+   if (!url) {
+     setSubiendoId(null);
+     alert("No se pudo cargar la imagen.");
+     return;
+   }
+
+   // La imagen del catálogo es independiente de la imagen del inventario.
+   const { error } = await supabase
+     .from("catalog_products")
+     .update({ image_url: url })
+     .eq("id", id);
+
+   setSubiendoId(null);
+
+   if (error) {
+     alert("ERROR catálogo: " + error.message);
+     return;
+   }
+
+   setItems((prev) =>
+     prev.map((it) => (it.id === id ? { ...it, image_url: url } : it))
+   );
+
+   alert("Imagen del catálogo actualizada correctamente.");
+ }
 
   async function eliminar(id: string) {
-    const confirmar = window.confirm(
-      "¿Quieres retirar este producto del catálogo?"
-    );
-
-    if (!confirmar) return;
-
-    const { error } = await supabase
-      .from("catalog_products")
-      .update({
-        active: false,
-        stock_available: 0,
-      })
-      .eq("id", id);
-
-    if (error) {
-      alert("ERROR: " + error.message);
-      return;
-    }
-
     setItems((prev) => prev.filter((it) => it.id !== id));
+    // No borramos físicamente: pedidos históricos pueden referenciar este registro.
+    // Lo retiramos del catálogo visible sin romper esas referencias.
+    await supabase.from("catalog_products").update({ active: false, stock_available: 0 }).eq("id", id);
   }
 
-  function abrirEdicion(item: CatalogProduct) {
-    const producto = productos.find((p) => p.id === item.product_id);
+  // Usar el dominio público de producción, no la URL temporal del deployment de Vercel.
+  // Puede personalizarse con VITE_PUBLIC_APP_URL sin tocar el código.
+  const basePublica = (import.meta.env.VITE_PUBLIC_APP_URL || "https://loves-stories.vercel.app").replace(/\/$/, "");
+  const linkCatalogo = `${basePublica}/catalogo-publico`;
 
-    if (!producto) {
-      alert("El producto ya no existe en inventario.");
-      return;
-    }
-
-    setProductoSeleccionado(producto);
-    setBusqueda(producto.code);
-    setCantidad(Number(item.stock_available) || 0);
-    setDescripcion(item.display_description || "");
-    setVariantType(item.variant_type);
-    setVariantStock(item.variant_stock || {});
-
-    window.scrollTo({
-      top: 0,
-      behavior: "smooth",
+  function copiarEnlace() {
+    navigator.clipboard.writeText(linkCatalogo).then(() => {
+      setCopiado(true);
+      setTimeout(() => setCopiado(false), 2000);
     });
   }
 
+  const coincidenciasCliente = useMemo(() => {
+    const q = busquedaCliente.trim().toLowerCase();
+    if (!q) return [];
+    return clientes.filter((c) => c.name.toLowerCase().includes(q) || c.phone.includes(q)).slice(0, 8);
+  }, [busquedaCliente, clientes]);
+
+  function linkWhatsappCatalogo(telefono: string, nombre: string) {
+    const limpio = telefono.replace(/\D/g, "");
+    const mensaje = `Hola ${nombre}, te comparto nuestro catálogo — puedes ver los productos disponibles y seleccionar lo que te interese: ${linkCatalogo}`;
+    return `https://wa.me/${limpio}?text=${encodeURIComponent(mensaje)}`;
+  }
+const itemsCatalogoFiltrados = items.filter((p) => {
+  const q = busquedaCatalogo.trim().toLowerCase();
+  if (!q) return true;
+
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      <h1
-        className="text-2xl md:text-3xl font-semibold mb-5"
-        style={{ color: "#7A0019" }}
-      >
-        Catálogo
-      </h1>
+    p.code.toLowerCase().includes(q) ||
+    p.name.toLowerCase().includes(q)
+  );
+});
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-3">
+        <p className="font-serif text-lg">Catálogo</p>
+        <div className="flex gap-2">
+          <button onClick={copiarEnlace} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+            {copiado ? <Check size={13} /> : <Copy size={13} />} {copiado ? "Copiado" : "Copiar enlace"}
+          </button>
+          <a href={linkCatalogo} target="_blank" rel="noreferrer" className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+            Ver link público
+          </a>
+        </div>
+      </div>
+      <p className="text-xs mb-3 font-mono" style={{ color: "#5B4E5E" }}>{linkCatalogo}</p>
 
-      <div
-        className="rounded-xl p-4 mb-6"
-        style={{
-          background: "#FAF7F2",
-          border: "1px solid #E4D8C8",
-        }}
-      >
+      <div className="p-4 mb-3 relative" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        <p className="text-xs mb-2 flex items-center gap-1.5" style={{ color: "#5B4E5E" }}><MessageCircle size={13} /> Enviar catálogo por WhatsApp</p>
         <div className="relative">
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <Search
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2"
-                style={{ color: "#9C7A3C" }}
-              />
-
-              <input
-                value={busqueda}
-                onChange={(e) => {
-                  setBusqueda(e.target.value);
-
-                  if (
-                    productoSeleccionado &&
-                    e.target.value !== productoSeleccionado.code
-                  ) {
-                    setProductoSeleccionado(null);
-                  }
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && resultados.length > 0) {
-                    e.preventDefault();
-                    seleccionarProducto(resultados[0]);
-                  }
-                }}
-                placeholder="Buscar producto por código o nombre..."
-                className="w-full pl-10 pr-4 py-3 rounded-lg outline-none"
-                style={{
-                  border: "1px solid #D8C9B5",
-                  background: "white",
-                  color: "#6D0017",
-                }}
-              />
-            </div>
-
-            {productoSeleccionado && (
-              <button
-                type="button"
-                onClick={limpiarSeleccion}
-                className="px-3 rounded-lg"
-                style={{
-                  border: "1px solid #D8C9B5",
-                  color: "#7A0019",
-                }}
-              >
-                <X size={20} />
-              </button>
-            )}
+          <div className="flex items-center gap-2 px-3 py-2 rounded" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+            <Search size={14} style={{ color: "#5B4E5E" }} />
+            <input value={busquedaCliente} onChange={(e) => { setBusquedaCliente(e.target.value); setMostrarListaCliente(true); }} onFocus={() => setMostrarListaCliente(true)}
+              placeholder="Buscar cliente por nombre o teléfono…" className="flex-1 text-sm outline-none bg-transparent" />
           </div>
+          {mostrarListaCliente && coincidenciasCliente.length > 0 && (
+            <div className="absolute left-0 right-0 mt-1 rounded-md z-10 shadow-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+              {coincidenciasCliente.map((c) => (
+                <a key={c.id} href={linkWhatsappCatalogo(c.phone, c.name)} target="_blank" rel="noreferrer"
+                  onClick={() => setMostrarListaCliente(false)}
+                  className="block px-3 py-2 text-sm hover:bg-black/5" style={{ borderBottom: "1px solid #D9D0C2" }}>
+                  {c.name} <span style={{ color: "#5B4E5E" }}>({c.phone})</span>
+                </a>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
-          {!productoSeleccionado &&
-            busqueda.trim() &&
-            resultados.length > 0 && (
-              <div
-                className="absolute left-0 right-0 top-full mt-1 z-30 rounded-lg overflow-hidden shadow-lg"
-                style={{
-                  background: "white",
-                  border: "1px solid #D8C9B5",
-                }}
-              >
-                {resultados.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    onClick={() => seleccionarProducto(p)}
-                    className="w-full flex items-center gap-3 p-3 text-left hover:bg-stone-50"
-                  >
-                    {p.image_url ? (
-                      <img
-                        src={p.image_url}
-                        alt={p.name}
-                        className="w-12 h-12 rounded-md object-cover"
-                      />
-                    ) : (
-                      <div
-                        className="w-12 h-12 rounded-md flex items-center justify-center text-xs"
-                        style={{ background: "#EFE8DE" }}
-                      >
-                        Sin foto
-                      </div>
-                    )}
+            <div
+        className="p-4 mb-3 relative"
+        style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+      >
+        <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>
+          Buscar producto del inventario
+        </p>
 
-                    <div className="min-w-0">
-                      <div
-                        className="font-semibold"
-                        style={{ color: "#7A0019" }}
-                      >
-                        {p.code}
-                      </div>
+        <div className="flex items-center gap-2 px-3 py-2 rounded"
+          style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
+        >
+          <Search size={14} style={{ color: "#5B4E5E" }} />
 
-                      <div className="text-sm truncate">{p.name}</div>
+          <input
+            value={busquedaProducto}
+            onChange={(e) => {
+              setBusquedaProducto(e.target.value);
+              setMostrarListaProducto(true);
+              setPendiente("");
+              setVariantesPendientes({});
+              setDescripcionPendiente("");
+              setImagenPendiente(null);
+              setCantidadPendiente(1);
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
 
-                      <div className="text-xs text-gray-500">
-                        Stock inventario: {p.stock_available}
-                      </div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
+                if (!pendiente && coincidenciasProducto.length > 0) {
+                  elegirProducto(coincidenciasProducto[0]);
+                }
+              }
+            }}
+            onFocus={() => setMostrarListaProducto(true)}
+            placeholder="Código o descripción..."
+            className="flex-1 text-sm outline-none bg-transparent"
+          />
         </div>
 
-        {productoSeleccionado && (
-          <div className="mt-5">
-            <div className="flex gap-4 items-start">
-              {productoSeleccionado.image_url ? (
-                <img
-                  src={productoSeleccionado.image_url}
-                  alt={productoSeleccionado.name}
-                  className="w-20 h-20 object-cover rounded-lg"
-                />
-              ) : (
-                <div
-                  className="w-20 h-20 rounded-lg flex items-center justify-center text-xs"
-                  style={{ background: "#EFE8DE" }}
-                >
-                  Sin foto
-                </div>
-              )}
-
-              <div>
-                <div
-                  className="font-semibold text-lg"
-                  style={{ color: "#7A0019" }}
-                >
-                  {productoSeleccionado.name}
-                </div>
-
-                <div className="text-sm">
-                  Código: {productoSeleccionado.code}
-                </div>
-
-                <div
-                  className="font-semibold mt-1"
-                  style={{ color: "#8A682C" }}
-                >
-                  Bs {productoSeleccionado.price}
-                </div>
-
-                <div className="text-sm mt-1">
-                  Stock inventario: {productoSeleccionado.stock_available}
-                </div>
-              </div>
-            </div>
-
-            <div className="mt-5">
-              <label
-                className="block text-sm font-medium mb-2"
-                style={{ color: "#7A0019" }}
+        {mostrarListaProducto && coincidenciasProducto.length > 0 && (
+          <div
+            className="absolute left-4 right-4 mt-1 rounded-md z-20 shadow-md"
+            style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+          >
+            {coincidenciasProducto.map((p) => (
+              <button
+                key={p.id}
+                type="button"
+                onClick={() => elegirProducto(p)}
+                className="w-full text-left px-3 py-2 text-sm hover:bg-black/5"
+                style={{ borderBottom: "1px solid #D9D0C2" }}
               >
-                Tipo de publicación
-              </label>
+                {p.code} · {p.name}
+                <span style={{ color: "#5B4E5E" }}>
+                  {" "}({p.stock_available} disp.)
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVariantType(null);
-                    setVariantStock({});
-                  }}
-                  className="px-3 py-2 rounded-lg text-sm"
-                  style={{
-                    background:
-                      variantType === null ? "#7A0019" : "#EFE8DE",
-                    color: variantType === null ? "white" : "#7A0019",
-                  }}
-                >
-                  Cantidad normal
-                </button>
+        {pendiente && (() => {
+          const prod = productos.find((p) => p.id === pendiente);
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVariantType("ring_size");
+          if (!prod) return null;
 
-                    const inicial: Record<string, number> = {};
+          const tipo = tipoVariante(prod.name);
+          const opciones = opcionesVariante(tipo);
+          const total = sumaVariantes(variantesPendientes);
 
-                    for (let talla = 5; talla <= 13; talla++) {
-                      inicial[String(talla)] =
-                        variantStock[String(talla)] || 0;
-                    }
+          return (
+            <div
+              className="mt-3 p-3 rounded-md"
+              style={{ background: "#FFF", border: "1px solid #D9D0C2" }}
+            >
+              <div className="flex items-start gap-3">
 
-                    setVariantStock(inicial);
-                  }}
-                  className="px-3 py-2 rounded-lg text-sm"
-                  style={{
-                    background:
-                      variantType === "ring_size"
-                        ? "#7A0019"
-                        : "#EFE8DE",
-                    color:
-                      variantType === "ring_size" ? "white" : "#7A0019",
-                  }}
-                >
-                  Tallas de anillo
-                </button>
+                {/* IMAGEN */}
+                <div className="shrink-0">
+                  {imagenPendiente ? (
+                    <img
+                      src={URL.createObjectURL(imagenPendiente)}
+                      alt={prod.name}
+                      className="w-24 h-24 rounded-md object-cover"
+                      style={{ border: "1px solid #D9D0C2" }}
+                    />
+                  ) : prod.image_url ? (
+                    <img
+                      src={prod.image_url}
+                      alt={prod.name}
+                      className="w-24 h-24 rounded-md object-cover"
+                      style={{ border: "1px solid #D9D0C2" }}
+                    />
+                  ) : (
+                    <div
+                      className="w-24 h-24 rounded-md flex items-center justify-center"
+                      style={{
+                        background: "#EDE7DE",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    >
+                      <ImageIcon size={24} style={{ color: "#5B4E5E" }} />
+                    </div>
+                  )}
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    setVariantType("length_cm");
-                    setVariantStock({});
-                  }}
-                  className="px-3 py-2 rounded-lg text-sm"
-                  style={{
-                    background:
-                      variantType === "length_cm"
-                        ? "#7A0019"
-                        : "#EFE8DE",
-                    color:
-                      variantType === "length_cm" ? "white" : "#7A0019",
-                  }}
-                >
-                  Largo
-                </button>
-              </div>
-            </div>
-
-            {variantType === null && (
-              <div className="mt-4">
-                <label className="block text-sm mb-1">
-                  Cantidad disponible en catálogo
-                </label>
-
-                <input
-                  type="number"
-                  min={0}
-                  max={productoSeleccionado.stock_available}
-                  value={cantidad}
-                  onChange={(e) => setCantidad(Number(e.target.value))}
-                  className="w-40 px-3 py-2 rounded-lg"
-                  style={{ border: "1px solid #D8C9B5" }}
-                />
-              </div>
-            )}
-
-            {variantType === "ring_size" && (
-              <div className="mt-5">
-                <div className="flex justify-between mb-2">
-                  <span
-                    className="text-sm font-medium"
-                    style={{ color: "#7A0019" }}
+                  <label
+                    className="block mt-2 text-center text-xs px-2 py-1.5 rounded-md cursor-pointer"
+                    style={{
+                      background: "#EDE7DE",
+                      border: "1px dashed #9C7A3C",
+                      color: "#7A5F2D",
+                    }}
                   >
-                    Cantidad por talla
-                  </span>
+                    {prod.image_url || imagenPendiente
+                      ? "Cambiar imagen"
+                      : "Cargar imagen"}
 
-                  <span className="text-sm">
-                    Total: <b>{totalVariantes}</b>
-                  </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const archivo = e.target.files?.[0];
+                        if (archivo) setImagenPendiente(archivo);
+                      }}
+                    />
+                  </label>
                 </div>
 
-                <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-9 gap-2">
-                  {Array.from({ length: 9 }, (_, i) => i + 5).map(
-                    (talla) => (
-                      <div
-                        key={talla}
-                        className="p-2 rounded-lg text-center"
-                        style={{
-                          background: "#EFE8DE",
-                          border: "1px solid #D8C9B5",
-                        }}
-                      >
-                        <div className="text-xs mb-1">
-                          Talla {talla}
-                        </div>
+                {/* DATOS */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">{prod.name}</p>
 
-                        <input
-                          type="number"
-                          min={0}
-                          value={variantStock[String(talla)] || 0}
-                          onChange={(e) =>
-                            cambiarCantidadVariante(
-                              String(talla),
-                              Number(e.target.value)
-                            )
-                          }
-                          className="w-full text-center rounded-md py-1"
+                  <p className="text-xs mt-1" style={{ color: "#5B4E5E" }}>
+                    Código: {prod.code}
+                  </p>
+
+                  <p
+                    className="text-sm font-medium mt-1"
+                    style={{ color: "#7A5F2D" }}
+                  >
+                    Bs {prod.price}
+                  </p>
+
+                  <p className="text-xs mt-1" style={{ color: "#5B4E5E" }}>
+                    Stock inventario: {prod.stock_available}
+                  </p>
+                </div>
+              </div>
+
+              {/* CANTIDAD / TALLAS / LARGOS */}
+              <div className="mt-3">
+                {tipo ? (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        {tipo === "ring_size"
+                          ? "Cantidad por talla"
+                          : "Cantidad por largo"}
+                      </p>
+
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#7A5F2D" }}
+                      >
+                        Total: {total}/{prod.stock_available}
+                      </p>
+                    </div>
+
+                    <div
+                      className="grid gap-2"
+                      style={{
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(82px, 1fr))",
+                      }}
+                    >
+                      {opciones.map((op) => (
+                        <label
+                          key={op}
+                          className="flex flex-col items-center justify-center px-2 py-1.5 rounded"
                           style={{
-                            border: "1px solid #D8C9B5",
+                            background: "#EDE7DE",
+                            border: "1px solid #D9D0C2",
                           }}
-                        />
-                      </div>
-                    )
+                        >
+                          <span
+                            className="text-xs mb-1 whitespace-nowrap"
+                            style={{ color: "#5B4E5E" }}
+                          >
+                            {etiquetaVariante(tipo, op)}
+                          </span>
+
+                          <input
+                            type="number"
+                            min={0}
+                            value={variantesPendientes[op] ?? 0}
+                            onChange={(e) => {
+                              const n = Math.max(
+                                0,
+                                Number(e.target.value) || 0
+                              );
+
+                              const nuevo = {
+                                ...variantesPendientes,
+                                [op]: n,
+                              };
+
+                              if (
+                                sumaVariantes(nuevo) <= prod.stock_available
+                              ) {
+                                setVariantesPendientes(nuevo);
+                              }
+                            }}
+                            className="w-full px-1 py-1.5 rounded text-center text-sm outline-none"
+                            style={{
+                              background: "#F7F3EC",
+                              border: "1px solid #D9D0C2",
+                            }}
+                          />
+                        </label>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    className="flex items-center justify-between gap-3 p-2 rounded"
+                    style={{
+                      background: "#EDE7DE",
+                      border: "1px solid #D9D0C2",
+                    }}
+                  >
+                    <div>
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Cantidad a publicar
+                      </p>
+
+                      <p
+                        className="text-xs mt-0.5"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Máximo: {prod.stock_available}
+                      </p>
+                    </div>
+
+                   <input
+  type="text"
+  inputMode="numeric"
+  value={cantidadPendiente === 0 ? "" : cantidadPendiente}
+  onFocus={(e) => e.currentTarget.select()}
+  onChange={(e) => {
+    const valor = e.target.value.replace(/\D/g, "");
+
+    if (valor === "") {
+      setCantidadPendiente(0);
+      return;
+    }
+
+    const numero = Number(valor);
+
+    setCantidadPendiente(
+      Math.min(numero, prod.stock_available)
+    );
+  }}
+  className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
+  style={{
+    background: "#F7F3EC",
+    border: "1px solid #D9D0C2",
+  }}
+/>
+                  </div>
+                )}
+              </div>
+
+              {/* DESCRIPCIÓN */}
+              <input
+                type="text"
+                value={descripcionPendiente}
+                onChange={(e) =>
+                  setDescripcionPendiente(e.target.value)
+                }
+                placeholder="Descripción opcional: color, tamaño, detalle..."
+                className="w-full mt-3 px-3 py-2 rounded text-xs outline-none"
+                style={{
+                  background: "#F7F3EC",
+                  border: "1px solid #D9D0C2",
+                  color: "#5B4E5E",
+                }}
+              />
+
+              {/* GUARDAR */}
+              <button
+                type="button"
+                onClick={publicar}
+                className="w-full mt-3 px-4 py-2.5 rounded-md text-sm font-medium flex items-center justify-center gap-2"
+                style={{
+                  background: "#9C7A3C",
+                  color: "#F7F3EC",
+                }}
+              >
+                <Upload size={15} />
+                Guardar en catálogo
+              </button>
+            </div>
+          );
+        })()}
+      </div>
+      <div
+  className="p-4 mb-3"
+  style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+>
+  <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>
+    Buscar producto publicado
+  </p>
+
+  <div
+    className="flex items-center gap-2 px-3 py-2 rounded"
+    style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
+  >
+    <input
+      value={busquedaCatalogo}
+      onChange={(e) => setBusquedaCatalogo(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") e.preventDefault();
+      }}
+      placeholder="Escribe el código..."
+      className="flex-1 text-sm outline-none bg-transparent"
+    />
+
+    <Search size={17} style={{ color: "#5B4E5E" }} />
+  </div>
+</div>
+            <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+{itemsCatalogoFiltrados.map((p, i) => {
+  const maximo =
+            productos.find((pr) => pr.id === p.product_id)?.stock_available ??
+            p.stock_available;
+
+          return (
+            <div
+              key={p.id}
+              className="p-3"
+              style={{
+                borderBottom:
+                  i < items.length - 1 ? "1px solid #D9D0C2" : "none",
+              }}
+            >
+              {/* IMAGEN Y DATOS PRINCIPALES */}
+              <div className="flex items-start gap-3">
+                <div className="shrink-0">
+                  {p.image_url ? (
+                    <img
+  src={p.image_url}
+  alt={p.name}
+  onClick={() => setImagenAmpliada(p.image_url)}
+  className="w-20 h-20 sm:w-16 sm:h-16 rounded-md object-cover cursor-zoom-in"
+  style={{ border: "1px solid #D9D0C2" }}
+/>                  ) : (
+                    <div
+                      className="w-20 h-20 sm:w-16 sm:h-16 rounded-md flex items-center justify-center"
+                      style={{
+                        background: "#EDE7DE",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    >
+                      <ImageIcon size={22} style={{ color: "#5B4E5E" }} />
+                    </div>
                   )}
                 </div>
 
-                <div
-                  className="mt-3 flex justify-between p-3 rounded-lg"
-                  style={{ background: "#EFE8DE" }}
-                >
-                  <span>Total publicado</span>
-                  <b>{totalVariantes} unidades</b>
-                </div>
-              </div>
-            )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium leading-tight">
+                    {p.name}
+                  </p>
 
-            {variantType === "length_cm" && (
-              <div className="mt-5">
-                <div className="flex justify-between mb-2">
-                  <span
-                    className="text-sm font-medium"
-                    style={{ color: "#7A0019" }}
+                  <p
+                    className="text-xs mt-1"
+                    style={{ color: "#5B4E5E" }}
                   >
-                    Cantidad por largo
-                  </span>
+                    Código: {p.code}
+                  </p>
 
-                  <span className="text-sm">
-                    Total: <b>{totalVariantes}</b>
-                  </span>
-                </div>
+                  <p
+                    className="text-sm font-medium mt-1"
+                    style={{ color: "#7A5F2D" }}
+                  >
+                    Bs {p.price}
+                  </p>
 
-                <div className="flex flex-wrap gap-2">
-                  {[40, 45, 50, 55, 60, 65, 70].map((largo) => (
-                    <div
-                      key={largo}
-                      className="w-28 p-2 rounded-lg text-center"
+                  <p
+                    className="text-xs mt-1"
+                    style={{ color: "#5B4E5E" }}
+                  >
+                    Stock inventario: {maximo}
+                  </p>
+
+                  {(
+                    <label
+                      className="inline-block mt-2 text-xs px-2.5 py-1.5 rounded-md cursor-pointer"
                       style={{
-                        background: "#EFE8DE",
-                        border: "1px solid #D8C9B5",
+                        background: "#EDE7DE",
+                        border: "1px dashed #9C7A3C",
+                        color: "#7A5F2D",
                       }}
                     >
-                      <div className="text-xs mb-1">{largo} cm</div>
+                      {subiendoId === p.id ? "Subiendo…" : "Cargar imagen"}
 
                       <input
-                        type="number"
-                        min={0}
-                        value={variantStock[String(largo)] || 0}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
                         onChange={(e) =>
-                          cambiarCantidadVariante(
-                            String(largo),
-                            Number(e.target.value)
-                          )
+                          e.target.files?.[0] &&
+                          subirImagenCatalogo(p.id, e.target.files[0])
                         }
-                        className="w-full text-center rounded-md py-1"
-                        style={{
-                          border: "1px solid #D8C9B5",
-                        }}
                       />
-                    </div>
-                  ))}
+                    </label>
+                  )}
                 </div>
 
-                <div
-                  className="mt-3 flex justify-between p-3 rounded-lg"
-                  style={{ background: "#EFE8DE" }}
-                >
-                  <span>Total publicado</span>
-                  <b>{totalVariantes} unidades</b>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-4 flex gap-2">
-              <input
-                value={descripcion}
-                onChange={(e) => setDescripcion(e.target.value)}
-                placeholder="Descripción opcional: color, tamaño, detalle..."
-                className="flex-1 px-3 py-2 rounded-lg"
-                style={{ border: "1px solid #D8C9B5" }}
-              />
-
-              <button
-                type="button"
-                disabled={guardando}
-                onClick={guardarCatalogo}
-                className="px-4 py-2 rounded-lg flex items-center gap-2"
-                style={{
-                  background: "#A77D32",
-                  color: "white",
-                }}
-              >
-                <Save size={17} />
-                {guardando ? "Guardando..." : "Guardar"}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-            <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2
-            className="text-xl font-semibold"
-            style={{ color: "#7A0019" }}
-          >
-            Productos publicados
-          </h2>
-
-          <span className="text-sm text-gray-500">
-            {items.length} productos
-          </span>
-        </div>
-
-        {items.length === 0 ? (
-          <div
-            className="rounded-xl p-8 text-center"
-            style={{
-              background: "#FAF7F2",
-              border: "1px solid #E4D8C8",
-            }}
-          >
-            No hay productos publicados en el catálogo.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-4">
-            {items.map((p) => {
-              const productoInventario = productos.find(
-                (producto) => producto.id === p.product_id
-              );
-
-              const stockInventario =
-                Number(productoInventario?.stock_available) || 0;
-
-              const totalPublicado =
-                p.variant_type && p.variant_stock
-                  ? Object.values(p.variant_stock).reduce(
-                      (total, valor) => total + (Number(valor) || 0),
-                      0
-                    )
-                  : Number(p.stock_available) || 0;
-
-              return (
-                <div
-                  key={p.id}
-                  className="rounded-xl p-4"
+                <button
+                  onClick={() => eliminar(p.id)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center shrink-0"
                   style={{
-                    background: "#FAF7F2",
-                    border: "1px solid #E4D8C8",
+                    background: "#F4E3E6",
+                    color: "#7A2540",
                   }}
                 >
-                  <div className="flex flex-col sm:flex-row gap-4">
-                    <div className="shrink-0">
-                      {p.image_url ? (
-                        <img
-                          src={p.image_url}
-                          alt={p.name}
-                          className="w-24 h-24 object-cover rounded-lg"
-                        />
-                      ) : (
-                        <div
-                          className="w-24 h-24 rounded-lg flex items-center justify-center text-xs text-center"
-                          style={{
-                            background: "#EFE8DE",
-                            color: "#7A0019",
-                          }}
-                        >
-                          Sin imagen
-                        </div>
-                      )}
+                  <X size={14} />
+                </button>
+              </div>
 
-                      {/* AHORA PERMITE CAMBIAR LA FOTO AUNQUE YA EXISTA */}
-                      <label
-                        className="inline-flex items-center gap-1 mt-2 text-xs px-2.5 py-1.5 rounded-md cursor-pointer"
-                        style={{
-                          background: "#EDE7DE",
-                          border: "1px dashed #9C7A3C",
-                          color: "#7A5F2D",
-                        }}
+              {/* TALLAS / LARGOS / CANTIDAD */}
+              <div className="mt-3">
+                {p.variant_type ? (
+                  <>
+                    <div className="flex items-center justify-between mb-2">
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#5B4E5E" }}
                       >
-                        <Upload size={13} />
+                        {p.variant_type === "ring_size"
+                          ? "Cantidad por talla"
+                          : "Cantidad por largo"}
+                      </p>
 
-                        {subiendoId === p.id
-                          ? "Subiendo…"
-                          : p.image_url
-                          ? "Cambiar imagen"
-                          : "Cargar imagen"}
-
-                        <input
-                          type="file"
-                          accept="image/*"
-                          className="hidden"
-                          disabled={subiendoId === p.id}
-                          onChange={(e) => {
-                            const archivo = e.target.files?.[0];
-
-                            if (archivo) {
-                              subirImagenCatalogo(p.id, archivo);
-                            }
-
-                            e.currentTarget.value = "";
-                          }}
-                        />
-                      </label>
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#7A5F2D" }}
+                      >
+                        Total: {sumaVariantes(p.variant_stock)}
+                      </p>
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <div className="flex justify-between gap-3">
-                        <div>
-                          <div
-                            className="font-semibold text-lg"
-                            style={{ color: "#7A0019" }}
-                          >
-                            {p.name}
-                          </div>
-
-                          <div className="text-sm">
-                            Código: {p.code}
-                          </div>
-
-                          <div
-                            className="font-semibold mt-1"
-                            style={{ color: "#8A682C" }}
-                          >
-                            Bs {p.price}
-                          </div>
-
-                          <div className="text-sm mt-1">
-                            Stock inventario: {stockInventario}
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => eliminar(p.id)}
-                          className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                    <div
+                      className="grid gap-2"
+                      style={{
+                        gridTemplateColumns:
+                          "repeat(auto-fit, minmax(82px, 1fr))",
+                      }}
+                    >
+                      {opcionesVariante(p.variant_type).map((op) => (
+                        <label
+                          key={op}
+                          className="flex flex-col items-center justify-center px-2 py-1.5 rounded"
                           style={{
-                            background: "#FBE7EA",
-                            color: "#8A001C",
-                          }}
-                          title="Retirar del catálogo"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-
-                      {p.display_description && (
-                        <div
-                          className="mt-3 text-sm p-2 rounded-lg"
-                          style={{
-                            background: "#F5EFE7",
-                            color: "#6D0017",
+                            background: "#EDE7DE",
+                            border: "1px solid #D9D0C2",
                           }}
                         >
-                          {p.display_description}
-                        </div>
-                      )}
-
-                      {p.variant_type === "ring_size" &&
-                        p.variant_stock && (
-                          <div className="mt-4">
-                            <div
-                              className="text-sm font-medium mb-2"
-                              style={{ color: "#7A0019" }}
-                            >
-                              Cantidad por talla
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              {Object.entries(p.variant_stock)
-                                .sort(
-                                  ([a], [b]) =>
-                                    Number(a) - Number(b)
-                                )
-                                .map(([talla, unidades]) => (
-                                  <div
-                                    key={talla}
-                                    className="px-3 py-2 rounded-lg text-sm"
-                                    style={{
-                                      background: "#EFE8DE",
-                                      border:
-                                        "1px solid #D8C9B5",
-                                    }}
-                                  >
-                                    <div className="text-xs">
-                                      Talla {talla}
-                                    </div>
-
-                                    <div
-                                      className="font-semibold text-center"
-                                      style={{
-                                        color: "#7A0019",
-                                      }}
-                                    >
-                                      {unidades}
-                                    </div>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-                        )}
-
-                      {p.variant_type === "length_cm" &&
-                        p.variant_stock && (
-                          <div className="mt-4">
-                            <div
-                              className="text-sm font-medium mb-2"
-                              style={{ color: "#7A0019" }}
-                            >
-                              Cantidad por largo
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              {Object.entries(p.variant_stock)
-                                .sort(
-                                  ([a], [b]) =>
-                                    Number(a) - Number(b)
-                                )
-                                .map(([largo, unidades]) => (
-                                  <div
-                                    key={largo}
-                                    className="px-3 py-2 rounded-lg text-sm"
-                                    style={{
-                                      background: "#EFE8DE",
-                                      border:
-                                        "1px solid #D8C9B5",
-                                    }}
-                                  >
-                                    <div className="text-xs">
-                                      {largo} cm
-                                    </div>
-
-                                    <div
-                                      className="font-semibold text-center"
-                                      style={{
-                                        color: "#7A0019",
-                                      }}
-                                    >
-                                      {unidades}
-                                    </div>
-                                  </div>
-                                ))}
-                            </div>
-                          </div>
-                        )}
-
-                      <div
-                        className="mt-4 flex flex-wrap items-center justify-between gap-3 p-3 rounded-lg"
-                        style={{
-                          background: "#EFE8DE",
-                        }}
-                      >
-                        <div>
-                          <span className="text-sm">
-                            Total publicado:{" "}
+                          <span
+                            className="text-xs mb-1 whitespace-nowrap"
+                            style={{ color: "#5B4E5E" }}
+                          >
+                            {etiquetaVariante(p.variant_type, op)}
                           </span>
 
-                          <strong style={{ color: "#7A0019" }}>
-                            {totalPublicado} unidades
-                          </strong>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => abrirEdicion(p)}
-                          className="px-4 py-2 rounded-lg text-sm font-medium"
-                          style={{
-                            background: "#A77D32",
-                            color: "white",
-                          }}
-                        >
-                          Editar publicación
-                        </button>
-                      </div>
+                          <input
+                            type="number"
+                            min={0}
+                            value={p.variant_stock?.[op] ?? 0}
+                            onChange={(e) =>
+                              actualizarVarianteLocal(
+                                p.id,
+                                op,
+                                Number(e.target.value),
+                                maximo
+                              )
+                            }
+                            onBlur={() => guardarVariantes(p, maximo)}
+                            className="w-full px-1 py-1.5 rounded text-center text-sm outline-none"
+                            style={{
+                              background: "#F7F3EC",
+                              border: "1px solid #D9D0C2",
+                            }}
+                          />
+                        </label>
+                      ))}
                     </div>
+
+                    <div
+                      className="mt-2 px-3 py-2 rounded flex justify-between items-center"
+                      style={{
+                        background: "#EDE7DE",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    >
+                      <span
+                        className="text-xs"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Total publicado
+                      </span>
+
+                      <span className="text-sm font-medium">
+                        {sumaVariantes(p.variant_stock)} unidades
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div
+                    className="flex items-center justify-between gap-3 p-2 rounded"
+                    style={{
+                      background: "#EDE7DE",
+                      border: "1px solid #D9D0C2",
+                    }}
+                  >
+                    <div>
+                      <p
+                        className="text-xs font-medium"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Cantidad publicada
+                      </p>
+
+                      <p
+                        className="text-xs mt-0.5"
+                        style={{ color: "#5B4E5E" }}
+                      >
+                        Máximo: {maximo}
+                      </p>
+                    </div>
+
+                    <input
+                      type="number"
+                      min={0}
+                      max={maximo}
+                      value={p.stock_available}
+                      onChange={(e) =>
+                        actualizarCantidadLocal(
+                          p.id,
+                          Number(e.target.value),
+                          maximo
+                        )
+                      }
+                      onBlur={(e) =>
+                        guardarCantidad(
+                          p.id,
+                          Number(e.target.value),
+                          maximo
+                        )
+                      }
+                      className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
+                      style={{
+                        background: "#F7F3EC",
+                        border: "1px solid #D9D0C2",
+                      }}
+                    />
                   </div>
-                </div>
-              );
-            })}
-          </div>
+                )}
+              </div>
+
+              {/* DESCRIPCIÓN */}
+              <div className="mt-3 flex gap-2">
+                <input
+                  type="text"
+                  defaultValue={p.display_description ?? ""}
+                  placeholder="Descripción opcional: color, tamaño, detalle..."
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      guardarDescripcion(p.id, e.currentTarget.value);
+                      e.currentTarget.blur();
+                    }
+                  }}
+                  className="flex-1 min-w-0 px-3 py-2 rounded text-xs outline-none"
+                  style={{
+                    background: "#FFF",
+                    border: "1px solid #D9D0C2",
+                    color: "#5B4E5E",
+                  }}
+                />
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    const input =
+                      e.currentTarget
+                        .previousElementSibling as HTMLInputElement;
+
+                    guardarDescripcion(p.id, input.value);
+                  }}
+                  className="px-3 py-2 rounded text-xs shrink-0"
+                  style={{
+                    background: "#9C7A3C",
+                    color: "white",
+                  }}
+                >
+                  Guardar
+                </button>
+              </div>
+            </div>
+          );
+        })}
+
+        {items.length === 0 && (
+          <p
+            className="text-sm p-4"
+            style={{ color: "#5B4E5E" }}
+          >
+            No hay productos publicados.
+          </p>
         )}
       </div>
+      {imagenAmpliada && (
+  <div
+    className="fixed inset-0 z-50 flex items-center justify-center p-4"
+    style={{ background: "rgba(0,0,0,0.85)" }}
+    onClick={() => setImagenAmpliada(null)}
+  >
+    <button
+      type="button"
+      onClick={() => setImagenAmpliada(null)}
+      className="absolute top-4 right-4 w-10 h-10 rounded-full text-2xl flex items-center justify-center"
+      style={{ background: "#F7F3EC", color: "#5B4E5E" }}
+    >
+      ×
+    </button>
+
+    <img
+      src={imagenAmpliada}
+      alt="Imagen ampliada"
+      className="max-w-full max-h-[90vh] object-contain rounded-lg"
+      onClick={(e) => e.stopPropagation()}
+    />
+  </div>
+)}
     </div>
   );
 }
