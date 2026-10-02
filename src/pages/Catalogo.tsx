@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Upload, Image as ImageIcon, Search, MessageCircle, Copy, Check } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { subirImagen } from "../lib/imagenes";
@@ -30,6 +30,8 @@ export default function Catalogo() {
   const [busquedaProducto, setBusquedaProducto] = useState("");
   const [mostrarListaProducto, setMostrarListaProducto] = useState(false);
   const [indiceProducto, setIndiceProducto] = useState(-1);
+  const buscadorProductoRef = useRef<HTMLInputElement | null>(null);
+  const filasProductoRef = useRef<Array<HTMLButtonElement | null>>([]);
   const [pendiente, setPendiente] = useState("");
   const [subiendoId, setSubiendoId] = useState<string | null>(null);
   const [busquedaCliente, setBusquedaCliente] = useState("");
@@ -133,6 +135,13 @@ const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
     return disponiblesParaPublicar.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)).slice(0, 8);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [busquedaProducto, disponiblesParaPublicar.length]);
+
+  useEffect(() => {
+    if (indiceProducto < 0) return;
+    filasProductoRef.current[indiceProducto]?.scrollIntoView({
+      block: "nearest",
+    });
+  }, [indiceProducto]);
 
   function elegirProducto(p: Product) {
   setPendiente(p.id);
@@ -385,6 +394,7 @@ const itemsCatalogoFiltrados = items.filter((p) => {
           <Search size={14} style={{ color: "#5B4E5E" }} />
 
           <input
+            ref={buscadorProductoRef}
             value={busquedaProducto}
             onChange={(e) => {
               setBusquedaProducto(e.target.value);
@@ -399,10 +409,14 @@ const itemsCatalogoFiltrados = items.filter((p) => {
             onKeyDown={(e) => {
               if (e.key === "ArrowDown") {
                 e.preventDefault();
+                e.stopPropagation();
+
                 if (coincidenciasProducto.length > 0) {
                   setMostrarListaProducto(true);
-                  setIndiceProducto((i) =>
-                    i < 0 ? 0 : Math.min(i + 1, coincidenciasProducto.length - 1)
+                  setIndiceProducto((actual) =>
+                    actual < 0
+                      ? 0
+                      : (actual + 1) % coincidenciasProducto.length
                   );
                 }
                 return;
@@ -410,23 +424,28 @@ const itemsCatalogoFiltrados = items.filter((p) => {
 
               if (e.key === "ArrowUp") {
                 e.preventDefault();
+                e.stopPropagation();
+
                 if (coincidenciasProducto.length > 0) {
                   setMostrarListaProducto(true);
-                  setIndiceProducto((i) => Math.max(i - 1, 0));
+                  setIndiceProducto((actual) =>
+                    actual < 0
+                      ? coincidenciasProducto.length - 1
+                      : (actual - 1 + coincidenciasProducto.length) %
+                        coincidenciasProducto.length
+                  );
                 }
                 return;
               }
 
               if (e.key === "Enter") {
                 e.preventDefault();
+                e.stopPropagation();
 
                 if (coincidenciasProducto.length > 0) {
                   const indice =
-                    indiceProducto < 0
-                      ? 0
-                      : Math.min(indiceProducto, coincidenciasProducto.length - 1);
-                  const elegido = coincidenciasProducto[indice];
-                  elegirProducto(elegido);
+                    indiceProducto >= 0 ? indiceProducto : 0;
+                  elegirProducto(coincidenciasProducto[indice]);
                 }
               }
             }}
@@ -443,16 +462,24 @@ const itemsCatalogoFiltrados = items.filter((p) => {
           >
             {coincidenciasProducto.map((p, index) => (
               <button
+                ref={(el) => {
+                  filasProductoRef.current[index] = el;
+                }}
                 key={p.id}
                 type="button"
+                tabIndex={-1}
+                aria-selected={index === indiceProducto}
+                onMouseDown={(e) => e.preventDefault()}
                 onMouseEnter={() => setIndiceProducto(index)}
                 onClick={() => elegirProducto(p)}
                 className="w-full text-left px-3 py-2 text-sm"
                 style={{
                   borderBottom: "1px solid #D9D0C2",
                   background: index === indiceProducto ? "#E8DED0" : "transparent",
+                  fontWeight: index === indiceProducto ? 700 : 400,
                 }}
               >
+                {index === indiceProducto ? "▶ " : ""}
                 {p.code} · {p.name}
                 <span style={{ color: "#5B4E5E" }}>
                   {" "}({p.stock_available} disp.)
