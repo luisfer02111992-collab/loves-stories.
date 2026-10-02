@@ -622,10 +622,16 @@ window.open(
     setMostrarRecordatorio(true);
   }
 
-  function linkWhatsapp(telefono: string, mensaje: string) {
-    const limpio = telefono.replace(/\D/g, "");
-    return `https://wa.me/${limpio}?text=${encodeURIComponent(mensaje)}`;
+ function linkWhatsapp(telefono: string, mensaje: string) {
+  let limpio = telefono.replace(/\D/g, "").replace(/^0+/, "");
+
+  // Números bolivianos guardados con 8 dígitos
+  if (limpio.length === 8) {
+    limpio = `591${limpio}`;
   }
+
+  return `https://wa.me/${limpio}?text=${encodeURIComponent(mensaje)}`;
+}
 
   async function crearCliente(e: React.FormEvent) {
     e.preventDefault();
