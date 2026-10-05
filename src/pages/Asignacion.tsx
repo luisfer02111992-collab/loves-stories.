@@ -17,8 +17,6 @@ export default function Asignacion() {
   const [buscando, setBuscando] = useState(false);
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [cantidad, setCantidad] = useState(1);
-  const [tallasDisponibles, setTallasDisponibles] = useState<Record<string, number>>({});
-  const [tallaSeleccionada, setTallaSeleccionada] = useState("");
   const [buscarFoto, setBuscarFoto] = useState(false);
   const [items, setItems] = useState<LineaPedido[]>([]);
   const [reglas, setReglas] = useState<PricingRule[]>([]);
@@ -74,8 +72,6 @@ categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base
 
   setBuscando(true);
   setNoEncontrado(false);
-  setTallasDisponibles({});
-  setTallaSeleccionada("");
 
   const { data: producto } = await supabase
     .from("products")
@@ -91,14 +87,6 @@ categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base
     return;
   }
 
-  const tallasFisicas = ((producto as any).size_stock ?? {}) as Record<string, number>;
-
-  const disponibles = Object.fromEntries(
-    Object.entries(tallasFisicas).filter(([, stock]) => Number(stock) > 0)
-  );
-
-  setTallasDisponibles(disponibles);
-
   setProductoEncontrado(producto as Product);
   setCantidad(1);
   setBuscando(false);
@@ -109,21 +97,6 @@ categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base
 async function confirmarAsignacion(e?: React.FormEvent) {
   if (e) e.preventDefault();
   if (!productoEncontrado || !clienteId || enviando) return;
-
-  const tieneTallas = Object.keys(tallasDisponibles).length > 0;
-
-  if (tieneTallas && !tallaSeleccionada) {
-    alert("Selecciona una talla antes de asignar.");
-    return;
-  }
-
-  if (
-    tieneTallas &&
-    cantidad > Number(tallasDisponibles[tallaSeleccionada] ?? 0)
-  ) {
-    alert("No hay suficientes unidades disponibles de esa talla.");
-    return;
-  }
 
   setEnviando(true);
 
@@ -136,7 +109,7 @@ async function confirmarAsignacion(e?: React.FormEvent) {
     p_origin: "manual",
     p_seller_id: vendedorActivoId,
     p_session_id: sesionActivaId,
-    p_ring_size: tieneTallas ? tallaSeleccionada : null,
+    p_ring_size: null,
   });
 
   setEnviando(false);
@@ -149,8 +122,6 @@ async function confirmarAsignacion(e?: React.FormEvent) {
   setCodigo("");
   setProductoEncontrado(null);
   setCantidad(1);
-  setTallasDisponibles({});
-  setTallaSeleccionada("");
   setNoEncontrado(false);
   setBuscarFoto(false);
   inputRef.current?.focus();
@@ -192,24 +163,6 @@ async function aumentarUnidad(grupoProductId: string) {
 
   if (!producto) {
     alert("No se encontró el producto.");
-    return;
-  }
-
-  const tallasFisicas = ((producto as any).size_stock ?? {}) as Record<string, number>;
-  const disponibles = Object.fromEntries(
-    Object.entries(tallasFisicas).filter(([, stock]) => Number(stock) > 0)
-  );
-
-  if (Object.keys(tallasFisicas).length > 0) {
-    if (Object.keys(disponibles).length === 0) {
-      alert("Este anillo ya no tiene tallas físicas disponibles.");
-      return;
-    }
-
-    setTallasDisponibles(disponibles);
-    setTallaSeleccionada("");
-    setCantidad(1);
-    setProductoEncontrado(producto as Product);
     return;
   }
 
@@ -418,49 +371,15 @@ async function aumentarUnidad(grupoProductId: string) {
           <form onSubmit={confirmarAsignacion} className="p-4 rounded-md mb-3" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
             <p className="text-xs mb-1" style={{ color: "#7A5F2D" }}>Producto encontrado — confirma para asignar (no se ha descontado nada todavía)</p>
             <p className="text-sm font-medium mb-2">{productoEncontrado.code} · {productoEncontrado.name} — Bs {productoEncontrado.price} <span className="text-xs" style={{ color: "#5B4E5E" }}>({productoEncontrado.stock_available} disponibles)</span></p>
-            {Object.keys(tallasDisponibles).length > 0 && (
-  <div className="mb-3">
-    <p className="text-xs mb-1" style={{ color: "#7A5F2D" }}>
-      Selecciona la talla
-    </p>
-
-    <select
-      value={tallaSeleccionada}
-      onChange={(e) => {
-        setTallaSeleccionada(e.target.value);
-        setCantidad(1);
-      }}
-      className="w-full px-3 py-3 rounded text-sm outline-none"
-      style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
-    >
-      <option value="">Seleccionar talla...</option>
-
-      {Object.entries(tallasDisponibles)
-        .sort(([a], [b]) => Number(a) - Number(b))
-        .map(([talla, stock]) => (
-          <option key={talla} value={talla}>
-            Talla {talla} — {stock} {stock === 1 ? "disponible" : "disponibles"}
-          </option>
-        ))}
-    </select>
-  </div>
-)}
               <div className="flex gap-2">
 <input
   type="number"
   min={1}
-  max={
-    tallaSeleccionada
-      ? Number(tallasDisponibles[tallaSeleccionada] ?? 0)
-      : productoEncontrado.stock_available
-  }
-  autoFocus={Object.keys(tallasDisponibles).length === 0}
+  max={productoEncontrado.stock_available}
+  autoFocus
   value={cantidad}
   onChange={(e) => {
-    const maximo = tallaSeleccionada
-      ? Number(tallasDisponibles[tallaSeleccionada] ?? 0)
-      : productoEncontrado.stock_available;
-
+    const maximo = productoEncontrado.stock_available;
     setCantidad(
       Math.max(1, Math.min(maximo, Number(e.target.value) || 1))
     );
