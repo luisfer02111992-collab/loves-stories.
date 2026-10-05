@@ -32,7 +32,6 @@ export default function InicioVentas() {
   const carritoRef = useRef<LineaCarrito[]>([]);
   const hidratadoRef = useRef(false);
   const productosCacheRef = useRef<Map<string, Product>>(new Map());
-  const catalogoAnillosCacheRef = useRef<Map<string, any>>(new Map());
   const [mostrarAsignar, setMostrarAsignar] = useState(false);
   const [modo, setModo] = useState<"cliente" | "nuevo" | "directa">("cliente");
   const [clientes, setClientes] = useState<Customer[]>([]);
@@ -109,48 +108,24 @@ useEffect(() => {
 
       if (errorProductos) throw new Error(errorProductos.message);
 
-      const { data: catalogoAnillos, error: errorCatalogo } = await supabase
-        .from("catalog_products")
-        .select("product_id, variant_type, variant_stock")
-        .in("product_id", ids)
-        .eq("active", true)
-        .eq("variant_type", "ring_size");
-
-      if (errorCatalogo) throw new Error(errorCatalogo.message);
-
       const productosPorId = new Map(
         ((productosActuales as Product[]) ?? []).map((p) => [p.id, p])
       );
-      const anillosPorProducto = new Map(
-        (catalogoAnillos ?? []).map((c: any) => [c.product_id, c])
-      );
 
+      // InicioVentas es un flujo MANUAL. No usa ni reserva tallas del catálogo.
+      // Si quedó un carrito antiguo guardado con ringSize, se normaliza aquí.
       const actualizado = carritoGuardado.flatMap((linea) => {
         const productoActual = productosPorId.get(linea.product.id);
-        if (!productoActual) return [];
+        if (!productoActual || productoActual.stock_available <= 0) return [];
 
         productosCacheRef.current.set(productoActual.code, productoActual);
-
-        let stockTalla = linea.stockTalla ?? null;
-        if (linea.ringSize) {
-          const catalogo = anillosPorProducto.get(productoActual.id) as any;
-          stockTalla = Number(catalogo?.variant_stock?.[linea.ringSize] ?? 0);
-          catalogoAnillosCacheRef.current.set(productoActual.id, catalogo ?? null);
-        } else {
-          catalogoAnillosCacheRef.current.delete(productoActual.id);
-        }
-
-        const limite = linea.ringSize
-          ? Math.min(productoActual.stock_available, stockTalla ?? 0)
-          : productoActual.stock_available;
-
-        if (limite <= 0) return [];
 
         return [{
           ...linea,
           product: productoActual,
-          stockTalla,
-          cantidad: Math.min(linea.cantidad, limite),
+          ringSize: null,
+          stockTalla: null,
+          cantidad: Math.min(linea.cantidad, productoActual.stock_available),
         }];
       });
 
@@ -204,8 +179,7 @@ useEffect(() => {
 
       // Si el producto normal ya fue leído una vez, las siguientes lecturas
       // suman inmediatamente sin esperar otra consulta a Supabase.
-      if (p && catalogoAnillosCacheRef.current.has(p.id) &&
-          catalogoAnillosCacheRef.current.get(p.id) === null) {
+      if (p) {
         const actual = carritoRef.current;
         const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
         if (existente) {
@@ -247,50 +221,10 @@ useEffect(() => {
         return;
       }
 
-      let productoCatalogo: any;
-      if (catalogoAnillosCacheRef.current.has(p.id)) {
-        productoCatalogo = catalogoAnillosCacheRef.current.get(p.id);
-      } else {
-        const { data, error } = await supabase
-          .from("catalog_products")
-          .select("variant_type, variant_stock")
-          .eq("product_id", p.id)
-          .eq("active", true)
-          .eq("variant_type", "ring_size")
-          .maybeSingle();
+      // Asignación manual: se usa únicamente el stock disponible general.
+      // Las tallas publicadas pertenecen exclusivamente al catálogo.
 
-        if (error) throw new Error(`No se pudo revisar las tallas: ${error.message}`);
-        productoCatalogo = data ?? null;
-        catalogoAnillosCacheRef.current.set(p.id, productoCatalogo);
-      }
-
-      if (productoCatalogo?.variant_type === "ring_size") {
-        const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
-        const disponibles = Object.entries(tallas)
-          .filter(([, stock]) => Number(stock) > 0)
-          .sort(([a], [b]) => Number(a) - Number(b));
-
-        if (disponibles.length === 0) {
-          alert("Este anillo no tiene tallas disponibles.");
-          return;
-        }
-
-        const opciones = disponibles
-          .map(([talla, stock]) => `Talla ${talla} — ${stock} disponibles`)
-          .join("\n");
-        const talla = window.prompt(
-          `Selecciona la talla disponible:\n\n${opciones}\n\nEscribe solo el número de talla:`
-        );
-        if (talla === null) return;
-
-        const tallaLimpia = talla.trim();
-        const stockTalla = Number(tallas[tallaLimpia] ?? 0);
-        if (stockTalla <= 0) {
-          alert("La talla seleccionada no está disponible.");
-          return;
-        }
-
-        const actual = carritoRef.current;
+      const actual = carritoRef.current;
         const existente = actual.find(
           (l) => l.product.id === p!.id && l.ringSize === tallaLimpia
         );
@@ -582,7 +516,7 @@ if (linea) {
             p_seller_id: vendedorActivoId,
 p_session_id: sesionActivaId,
 p_unit_price: precioPreview(l),
-            p_ring_size: l.ringSize ?? null,
+            p_ring_size: null,
           });
           if (errAsig) throw new Error(errAsig.message);
         }
@@ -602,7 +536,7 @@ p_unit_price: precioPreview(l),
             p_seller_id: vendedorActivoId,
 p_session_id: sesionActivaId,
 p_unit_price: precioPreview(l),
-            p_ring_size: l.ringSize ?? null,
+            p_ring_size: null,
           });
           if (errAsig) throw new Error(errAsig.message);
         }
@@ -615,7 +549,6 @@ p_unit_price: precioPreview(l),
       setCarrito([]);
       sessionStorage.removeItem("inicioVentasPendiente");
       productosCacheRef.current.clear();
-      catalogoAnillosCacheRef.current.clear();
       setFilaSeleccionada(null);
       setCodigo("");
       setProductoSinStock(null);
