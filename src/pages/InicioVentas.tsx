@@ -225,24 +225,6 @@ useEffect(() => {
       // Las tallas publicadas pertenecen exclusivamente al catálogo.
 
       const actual = carritoRef.current;
-        const existente = actual.find(
-          (l) => l.product.id === p!.id && l.ringSize === tallaLimpia
-        );
-        const siguiente = existente
-          ? (existente.cantidad >= stockTalla ? actual : actual.map((l) =>
-              l.product.id === p!.id && l.ringSize === tallaLimpia
-                ? { ...l, cantidad: l.cantidad + 1 } : l))
-          : [...actual, { product: p, cantidad: 1, ringSize: tallaLimpia, stockTalla }];
-
-        carritoRef.current = siguiente;
-        setCarrito(siguiente);
-        const clave = `${p.id}-${tallaLimpia}`;
-        setFilaSeleccionada(null);
-        requestAnimationFrame(() => setFilaSeleccionada(clave));
-        return;
-      }
-
-      const actual = carritoRef.current;
       const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
       const siguiente = existente
         ? (existente.cantidad >= p.stock_available ? actual : actual.map((l) =>
