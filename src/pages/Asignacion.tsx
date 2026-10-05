@@ -91,23 +91,13 @@ categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base
     return;
   }
 
-  const { data: productoCatalogo } = await supabase
-    .from("catalog_products")
-    .select("variant_type, variant_stock")
-    .eq("product_id", producto.id)
-    .eq("active", true)
-    .eq("variant_type", "ring_size")
-    .maybeSingle();
+  const tallasFisicas = ((producto as any).size_stock ?? {}) as Record<string, number>;
 
-  if (productoCatalogo?.variant_type === "ring_size") {
-    const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
+  const disponibles = Object.fromEntries(
+    Object.entries(tallasFisicas).filter(([, stock]) => Number(stock) > 0)
+  );
 
-    const disponibles = Object.fromEntries(
-      Object.entries(tallas).filter(([, stock]) => Number(stock) > 0)
-    );
-
-    setTallasDisponibles(disponibles);
-  }
+  setTallasDisponibles(disponibles);
 
   setProductoEncontrado(producto as Product);
   setCantidad(1);
@@ -205,23 +195,14 @@ async function aumentarUnidad(grupoProductId: string) {
     return;
   }
 
-  const { data: productoCatalogo } = await supabase
-    .from("catalog_products")
-    .select("variant_type, variant_stock")
-    .eq("product_id", grupoProductId)
-    .eq("active", true)
-    .eq("variant_type", "ring_size")
-    .maybeSingle();
+  const tallasFisicas = ((producto as any).size_stock ?? {}) as Record<string, number>;
+  const disponibles = Object.fromEntries(
+    Object.entries(tallasFisicas).filter(([, stock]) => Number(stock) > 0)
+  );
 
-  if (productoCatalogo?.variant_type === "ring_size") {
-    const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
-
-    const disponibles = Object.fromEntries(
-      Object.entries(tallas).filter(([, stock]) => Number(stock) > 0)
-    );
-
+  if (Object.keys(tallasFisicas).length > 0) {
     if (Object.keys(disponibles).length === 0) {
-      alert("Este anillo ya no tiene tallas disponibles.");
+      alert("Este anillo ya no tiene tallas físicas disponibles.");
       return;
     }
 
@@ -393,7 +374,7 @@ async function aumentarUnidad(grupoProductId: string) {
 
         {!productoEncontrado ? (
           <form onSubmit={buscarProducto} className="p-4 rounded-md mb-3 ls-code-search">
-            <p className="text-xs mb-2 flex items-center gap-1.5" className="ls-code-search-label"><ScanBarcode size={14} /> Escanear o escribir código — Enter para buscar</p>
+            <p className="text-xs mb-2 flex items-center gap-1.5 ls-code-search-label"><ScanBarcode size={14} /> Escanear o escribir código — Enter para buscar</p>
             <div className="flex gap-2">
               <input ref={inputRef} autoFocus value={codigo} onChange={(e) => { setCodigo(e.target.value); setNoEncontrado(false); }} placeholder="80-50"
                 className="flex-1 px-3 py-3 rounded text-lg outline-none" style={{ background: "#F7F3EC", color: "#2B1E2E" }} />
