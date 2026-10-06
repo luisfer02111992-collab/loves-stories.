@@ -563,8 +563,16 @@ return;
             maxHeight: zoomImagen === 1 ? "calc(100vh - 5rem)" : "none",
             objectPosition: "center",
             touchAction: "pinch-zoom",
+            cursor: "zoom-in",
           }}
-          onDoubleClick={() => cambiarZoom(zoomImagen === 1 ? 2 : 1)}
+          onClick={(e) => {
+            e.stopPropagation();
+            cambiarZoom(zoomImagen === 1 ? 2 : zoomImagen === 2 ? 3 : 1);
+          }}
+          onDoubleClick={(e) => {
+            e.stopPropagation();
+            cambiarZoom(zoomImagen === 1 ? 2 : 1);
+          }}
         />
       </div>
     </div>
