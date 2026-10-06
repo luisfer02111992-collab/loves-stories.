@@ -370,17 +370,7 @@ return;
         </p>
 
         <div className="flex flex-col gap-2">
-          <button
-            type="button"
-            onClick={() => descargarPdfCatalogo(enviado)}
-            className="w-full px-4 py-2.5 rounded-md text-sm"
-            style={{
-              background: "#9C7A3C",
-              color: "#F7F3EC",
-            }}
-          >
-            Descargar PDF nuevamente
-          </button>
+          
 
           <a
             href={linkWhatsapp(enviado)}
