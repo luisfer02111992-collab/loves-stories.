@@ -480,7 +480,7 @@ return;
           </div>
         </div>
 
-        <form onSubmit={enviarPedido} className="p-4 h-fit" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        <form id="datos-pedido" onSubmit={enviarPedido} className="p-4 h-fit" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <p className="text-xs mb-2 flex items-center gap-1.5" style={{ color: "#5B4E5E" }}><ShoppingBag size={13} /> Tu pedido</p>
           {seleccion.length === 0 && <p className="text-sm" style={{ color: "#5B4E5E" }}>Selecciona productos del catálogo.</p>}
           {seleccion.map((p) => (
@@ -505,6 +505,27 @@ return;
           </button>
         </form>
       </div>
+      {seleccion.length > 0 && (
+        <button
+          type="button"
+          onClick={() => {
+            document
+              .getElementById("datos-pedido")
+              ?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          className="fixed z-40 left-1/2 -translate-x-1/2 px-5 py-3 rounded-full text-sm font-medium shadow-lg flex items-center gap-2"
+          style={{
+            bottom: "calc(18px + env(safe-area-inset-bottom))",
+            background: "#4F6F52",
+            color: "#F7F3EC",
+            border: "1px solid rgba(255,255,255,0.35)",
+          }}
+        >
+          <ShoppingBag size={17} />
+          Confirmar pedido · {totalUnidades} {totalUnidades === 1 ? "unidad" : "unidades"}
+        </button>
+      )}
+
       {imagenAmpliada && (
   <div
     className="fixed inset-0 z-50 flex items-center justify-center p-4"
