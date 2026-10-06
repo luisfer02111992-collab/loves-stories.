@@ -3,7 +3,7 @@ import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Users, Tag, Boxes, Truck, ScanLine, Share2,
   ShoppingBag, BarChart3, Settings, LogOut, Send, Inbox, Receipt,
-  UserCog, BadgePercent, UserCheck, History, Download, Calculator,
+  UserCog, BadgePercent, UserCheck, History, Download, Calculator, Radio,
 } from "lucide-react";
 import { useAuth } from "../hooks/useAuth";
 import { useSellerSession } from "../hooks/useSellerSession";
@@ -13,6 +13,7 @@ import { saveAutomaticBackup } from "../lib/backup";
 
 const SECCIONES = [
   { permission: "asignar" as PermissionKey, to: "/", label: "Asignar / Vender", icon: ScanLine, roles: ["admin", "employee"] },
+  { permission: "asignar" as PermissionKey, to: "/live", label: "Live", icon: Radio, roles: ["admin", "employee"] },
   { permission: "resumen" as PermissionKey, to: "/resumen", label: "Resumen", icon: LayoutDashboard, roles: ["admin", "employee"] },
   { permission: "clientes" as PermissionKey, to: "/clientes", label: "Clientes", icon: Users, roles: ["admin", "employee"] },
   { permission: "reportes_dia" as PermissionKey, to: "/reportes-dia", label: "Reportes del día", icon: Send, roles: ["admin", "employee"] },
