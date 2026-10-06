@@ -13,6 +13,137 @@ function idDeSesion() {
   return id;
 }
 
+
+function VisorImagen({ src, onClose }: { src: string; onClose: () => void }) {
+  const [scale, setScale] = useState(1);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
+  const pinchStart = useRef<{ distance: number; scale: number } | null>(null);
+  const dragStart = useRef<{ x: number; y: number; ox: number; oy: number } | null>(null);
+
+  function clampScale(value: number) {
+    return Math.min(4, Math.max(1, value));
+  }
+
+  function applyScale(next: number) {
+    const s = clampScale(next);
+    setScale(s);
+    if (s === 1) setOffset({ x: 0, y: 0 });
+  }
+
+  function distance() {
+    const pts = Array.from(pointers.current.values());
+    if (pts.length < 2) return 0;
+    return Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+  }
+
+  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.current.size === 2) {
+      pinchStart.current = { distance: distance(), scale };
+      dragStart.current = null;
+    } else if (pointers.current.size === 1 && scale > 1) {
+      dragStart.current = { x: e.clientX, y: e.clientY, ox: offset.x, oy: offset.y };
+    }
+  }
+
+  function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!pointers.current.has(e.pointerId)) return;
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+
+    if (pointers.current.size >= 2 && pinchStart.current) {
+      const d = distance();
+      if (pinchStart.current.distance > 0) {
+        applyScale(pinchStart.current.scale * (d / pinchStart.current.distance));
+      }
+      return;
+    }
+
+    if (pointers.current.size === 1 && scale > 1 && dragStart.current) {
+      setOffset({
+        x: dragStart.current.ox + (e.clientX - dragStart.current.x),
+        y: dragStart.current.oy + (e.clientY - dragStart.current.y),
+      });
+    }
+  }
+
+  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    pointers.current.delete(e.pointerId);
+    if (pointers.current.size < 2) pinchStart.current = null;
+    if (pointers.current.size === 0) dragStart.current = null;
+  }
+
+  function onWheel(e: React.WheelEvent<HTMLDivElement>) {
+    e.preventDefault();
+    applyScale(scale + (e.deltaY < 0 ? 0.25 : -0.25));
+  }
+
+  function toggleZoom() {
+    applyScale(scale === 1 ? 2 : 1);
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 overflow-hidden"
+      style={{ background: "rgba(0,0,0,0.94)", touchAction: "none" }}
+    >
+      <button
+        type="button"
+        onClick={onClose}
+        className="absolute top-4 right-4 z-[70] w-11 h-11 rounded-full text-2xl flex items-center justify-center"
+        style={{ background: "#F7F3EC", color: "#5B4E5E" }}
+        aria-label="Cerrar imagen"
+      >
+        ×
+      </button>
+
+      <div
+        className="absolute top-4 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 rounded-full px-2 py-1"
+        style={{ background: "rgba(247,243,236,.96)" }}
+      >
+        <button type="button" onClick={() => applyScale(scale - 0.5)}
+          className="w-9 h-9 rounded-full text-xl" style={{ color: "#5B4E5E" }}>−</button>
+        <span className="text-xs min-w-[48px] text-center" style={{ color: "#5B4E5E" }}>
+          {Math.round(scale * 100)}%
+        </span>
+        <button type="button" onClick={() => applyScale(scale + 0.5)}
+          className="w-9 h-9 rounded-full text-xl" style={{ color: "#5B4E5E" }}>+</button>
+      </div>
+
+      <div
+        className="w-full h-full flex items-center justify-center select-none"
+        style={{ touchAction: "none", cursor: scale > 1 ? "grab" : "zoom-in" }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onWheel={onWheel}
+        onDoubleClick={toggleZoom}
+      >
+        <img
+          src={src}
+          alt="Imagen ampliada"
+          draggable={false}
+          onClick={(e) => {
+            e.stopPropagation();
+            if (e.detail === 1 && scale === 1) applyScale(2);
+          }}
+          className="max-w-[96vw] max-h-[92vh] object-contain"
+          style={{
+            transform: `translate(${offset.x}px, ${offset.y}px) scale(${scale})`,
+            transformOrigin: "center center",
+            transition: pointers.current.size ? "none" : "transform 120ms ease-out",
+            willChange: "transform",
+            touchAction: "none",
+          }}
+        />
+      </div>
+    </div>
+  );
+}
+
 export default function CatalogoPublico() {
   const [items, setItems] = useState<CatalogProduct[]>([]);
   const [cant, setCant] = useState<Record<string, number>>({});
@@ -25,11 +156,9 @@ export default function CatalogoPublico() {
   const [busqueda, setBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
-  const [zoomImagen, setZoomImagen] = useState(1);
   const [categoria, setCategoria] = useState("Todos");
   const sessionId = useMemo(() => idDeSesion(), []);
   const imagenAmpliadaRef = useRef<string | null>(null);
-  const visorImagenRef = useRef<HTMLDivElement | null>(null);
 const seleccionRef = useRef(0);
   useEffect(() => {
     supabase.rpc("catalog_release_expired").then(() => cargar());
@@ -516,43 +645,10 @@ return;
         </form>
       </div>
       {imagenAmpliada && (
-        <div
-          className="fixed inset-0 z-50"
-          style={{ background: "rgba(0,0,0,0.94)" }}
-        >
-          <button
-            type="button"
-            onClick={cerrarImagen}
-            className="fixed top-4 right-4 z-[70] w-11 h-11 rounded-full text-2xl flex items-center justify-center"
-            style={{ background: "#F7F3EC", color: "#5B4E5E" }}
-          >
-            ×
-          </button>
-
-          <div
-            className="w-screen h-screen overflow-auto flex items-center justify-center"
-            style={{
-              WebkitOverflowScrolling: "touch",
-              touchAction: "pinch-zoom",
-              overscrollBehavior: "contain",
-            }}
-          >
-            <img
-              src={imagenAmpliada}
-              alt="Imagen ampliada"
-              className="block"
-              style={{
-                width: "auto",
-                height: "auto",
-                maxWidth: "100vw",
-                maxHeight: "100vh",
-                objectFit: "contain",
-                objectPosition: "center",
-                touchAction: "pinch-zoom",
-              }}
-            />
-          </div>
-        </div>
+        <VisorImagen
+          src={imagenAmpliada}
+          onClose={cerrarImagen}
+        />
       )}
     </div>
   );
