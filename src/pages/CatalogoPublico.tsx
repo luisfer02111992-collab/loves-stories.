@@ -427,38 +427,40 @@ return;
     </button>
   ))}
 </div>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2 sm:gap-3">
+          <div className="grid grid-cols-2 gap-3">
           {itemsFiltrados.map((p) => {
             const c = cant[p.id] ?? 0;
             return (
               <div key={p.id} className="p-2 sm:p-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                <div className="relative flex items-center justify-center aspect-square rounded mb-2 overflow-hidden" style={{ background: "#EDE7DE" }}>
+                <div className="flex items-center justify-center h-32 rounded mb-2 overflow-hidden" style={{ background: "#EDE7DE" }}>
                   {p.image_url ? (
   <img
     src={p.image_url}
     alt={p.name}
-    onClick={() => abrirImagen(p.image_url)}
-    className="w-full h-full object-contain cursor-zoom-in"
-    style={{ objectPosition: "center", touchAction: "manipulation" }}
+    onClick={() => {
+  setImagenAmpliada(p.image_url);
+  imagenAmpliadaRef.current = p.image_url;
+}}
+    className="w-full h-full object-cover cursor-zoom-in"
   />
 ) : (
   <span className="text-3xl">🖼️</span>
 )}
                 </div>
-                <p className="text-xs sm:text-sm font-medium leading-tight">{p.name}</p>
-                <p className="text-[11px] sm:text-xs mb-2 leading-tight" style={{ color: "#5B4E5E" }}>{p.code} · Bs {p.price} · {p.stock_available} disp.</p>
+                <p className="text-sm">{p.name}</p>
+                <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>{p.code} · Bs {p.price} · {p.stock_available} disp.</p>
                 {p.display_description && (
-  <p className="text-[11px] sm:text-xs mb-2 leading-tight" style={{ color: "#9C7A3C" }}>
+  <p className="text-xs mb-2" style={{ color: "#9C7A3C" }}>
     {p.display_description}
   </p>
 )}
                 {p.variant_type ? (
                   <div>
                     <p className="text-xs mb-1" style={{color:"#5B4E5E"}}>{p.variant_type==="ring_size"?"Elige talla":"Elige largo"}</p>
-                    <div className="flex flex-wrap gap-1 sm:gap-2">
+                    <div className="flex flex-wrap gap-2">
                       {Object.entries(p.variant_stock??{}).filter(([,q])=>Number(q)>0).map(([k,max])=>{
                         const q=cantVariante[p.id]?.[k]??0;
-                        return <div key={k} className="rounded p-1 sm:p-1.5" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
+                        return <div key={k} className="rounded p-1.5" style={{background:"#EDE7DE",border:"1px solid #D9D0C2"}}>
                           <p className="text-xs text-center mb-1">{p.variant_type==="ring_size"?`Talla ${k}`:`${k} cm`} · {max} disp.</p>
                           <div className="flex items-center gap-1">
                             <button type="button" onClick={()=>fijarVariante(p,k,Math.max(0,q-1))} className="w-7 h-7 rounded" style={{background:"#F7F3EC"}}>−</button>
