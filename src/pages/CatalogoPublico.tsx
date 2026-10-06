@@ -516,68 +516,44 @@ return;
         </form>
       </div>
       {imagenAmpliada && (
-  <div
-    className="fixed inset-0 z-50 flex flex-col"
-    style={{ background: "rgba(0,0,0,0.92)" }}
-    onClick={cerrarImagen}
-  >
-    <div
-      className="absolute top-3 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-2 py-1.5 rounded-full"
-      style={{ background: "rgba(247,243,236,0.96)" }}
-      onClick={(e) => e.stopPropagation()}
-    >
-      <button type="button" onClick={() => cambiarZoom(zoomImagen - 0.5)} disabled={zoomImagen <= 1}
-        className="w-9 h-9 rounded-full text-xl" style={{ color: "#5B4E5E" }}>−</button>
-      <span className="text-xs min-w-[48px] text-center" style={{ color: "#5B4E5E" }}>
-        {Math.round(zoomImagen * 100)}%
-      </span>
-      <button type="button" onClick={() => cambiarZoom(zoomImagen + 0.5)} disabled={zoomImagen >= 3}
-        className="w-9 h-9 rounded-full text-xl" style={{ color: "#5B4E5E" }}>+</button>
-    </div>
+        <div
+          className="fixed inset-0 z-50"
+          style={{ background: "rgba(0,0,0,0.94)" }}
+        >
+          <button
+            type="button"
+            onClick={cerrarImagen}
+            className="fixed top-4 right-4 z-[70] w-11 h-11 rounded-full text-2xl flex items-center justify-center"
+            style={{ background: "#F7F3EC", color: "#5B4E5E" }}
+          >
+            ×
+          </button>
 
-    <button type="button" onClick={cerrarImagen}
-      className="absolute top-3 right-3 z-[60] w-10 h-10 rounded-full text-2xl flex items-center justify-center"
-      style={{ background: "#F7F3EC", color: "#5B4E5E" }}>×</button>
-
-    <div
-      ref={visorImagenRef}
-      className="w-full h-full overflow-auto"
-      onClick={(e) => e.stopPropagation()}
-      style={{ WebkitOverflowScrolling: "touch" }}
-    >
-      <div
-        className="min-w-full min-h-full flex items-center justify-center p-4 pt-16"
-        style={{
-          width: zoomImagen === 1 ? "100%" : `${zoomImagen * 100}%`,
-          height: zoomImagen === 1 ? "100%" : `${zoomImagen * 100}%`,
-        }}
-      >
-        <img
-          src={imagenAmpliada}
-          alt="Imagen ampliada"
-          className="block object-contain rounded-lg"
-          style={{
-            width: zoomImagen === 1 ? "auto" : "100%",
-            height: zoomImagen === 1 ? "auto" : "100%",
-            maxWidth: zoomImagen === 1 ? "100%" : "none",
-            maxHeight: zoomImagen === 1 ? "calc(100vh - 5rem)" : "none",
-            objectPosition: "center",
-            touchAction: "pinch-zoom",
-            cursor: "zoom-in",
-          }}
-          onClick={(e) => {
-            e.stopPropagation();
-            cambiarZoom(zoomImagen === 1 ? 2 : zoomImagen === 2 ? 3 : 1);
-          }}
-          onDoubleClick={(e) => {
-            e.stopPropagation();
-            cambiarZoom(zoomImagen === 1 ? 2 : 1);
-          }}
-        />
-      </div>
-    </div>
-  </div>
-)}
+          <div
+            className="w-screen h-screen overflow-auto flex items-center justify-center"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              touchAction: "pinch-zoom",
+              overscrollBehavior: "contain",
+            }}
+          >
+            <img
+              src={imagenAmpliada}
+              alt="Imagen ampliada"
+              className="block"
+              style={{
+                width: "auto",
+                height: "auto",
+                maxWidth: "100vw",
+                maxHeight: "100vh",
+                objectFit: "contain",
+                objectPosition: "center",
+                touchAction: "pinch-zoom",
+              }}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
