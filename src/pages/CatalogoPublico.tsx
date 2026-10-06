@@ -25,9 +25,11 @@ export default function CatalogoPublico() {
   const [busqueda, setBusqueda] = useState("");
   const [guardando, setGuardando] = useState(false);
   const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
+  const [zoomImagen, setZoomImagen] = useState(1);
   const [categoria, setCategoria] = useState("Todos");
   const sessionId = useMemo(() => idDeSesion(), []);
   const imagenAmpliadaRef = useRef<string | null>(null);
+  const visorImagenRef = useRef<HTMLDivElement | null>(null);
 const seleccionRef = useRef(0);
   useEffect(() => {
     supabase.rpc("catalog_release_expired").then(() => cargar());
@@ -437,11 +439,9 @@ return;
   <img
     src={p.image_url}
     alt={p.name}
-    onClick={() => {
-  setImagenAmpliada(p.image_url);
-  imagenAmpliadaRef.current = p.image_url;
-}}
-    className="w-full h-full object-cover cursor-zoom-in"
+    onClick={() => abrirImagen(p.image_url)}
+    className="w-full h-full object-contain cursor-zoom-in"
+    style={{ objectPosition: "center" }}
   />
 ) : (
   <span className="text-3xl">🖼️</span>
@@ -517,25 +517,56 @@ return;
       </div>
       {imagenAmpliada && (
   <div
-    className="fixed inset-0 z-50 flex items-center justify-center p-4"
-    style={{ background: "rgba(0,0,0,0.85)" }}
-    onClick={() => setImagenAmpliada(null)}
+    className="fixed inset-0 z-50 flex flex-col"
+    style={{ background: "rgba(0,0,0,0.92)" }}
+    onClick={cerrarImagen}
   >
-    <button
-      type="button"
-      onClick={() => setImagenAmpliada(null)}
-      className="absolute top-4 right-4 w-10 h-10 rounded-full text-2xl flex items-center justify-center"
-      style={{ background: "#F7F3EC", color: "#5B4E5E" }}
-    >
-      ×
-    </button>
-
-    <img
-      src={imagenAmpliada}
-      alt="Imagen ampliada"
-      className="max-w-full max-h-[90vh] object-contain rounded-lg"
+    <div
+      className="absolute top-3 left-1/2 -translate-x-1/2 z-[60] flex items-center gap-2 px-2 py-1.5 rounded-full"
+      style={{ background: "rgba(247,243,236,0.96)" }}
       onClick={(e) => e.stopPropagation()}
-    />
+    >
+      <button type="button" onClick={() => cambiarZoom(zoomImagen - 0.5)} disabled={zoomImagen <= 1}
+        className="w-9 h-9 rounded-full text-xl" style={{ color: "#5B4E5E" }}>−</button>
+      <span className="text-xs min-w-[48px] text-center" style={{ color: "#5B4E5E" }}>
+        {Math.round(zoomImagen * 100)}%
+      </span>
+      <button type="button" onClick={() => cambiarZoom(zoomImagen + 0.5)} disabled={zoomImagen >= 3}
+        className="w-9 h-9 rounded-full text-xl" style={{ color: "#5B4E5E" }}>+</button>
+    </div>
+
+    <button type="button" onClick={cerrarImagen}
+      className="absolute top-3 right-3 z-[60] w-10 h-10 rounded-full text-2xl flex items-center justify-center"
+      style={{ background: "#F7F3EC", color: "#5B4E5E" }}>×</button>
+
+    <div
+      ref={visorImagenRef}
+      className="w-full h-full overflow-auto"
+      onClick={(e) => e.stopPropagation()}
+      style={{ WebkitOverflowScrolling: "touch" }}
+    >
+      <div
+        className="min-w-full min-h-full flex items-center justify-center p-4 pt-16"
+        style={{
+          width: zoomImagen === 1 ? "100%" : `${zoomImagen * 100}%`,
+          height: zoomImagen === 1 ? "100%" : `${zoomImagen * 100}%`,
+        }}
+      >
+        <img
+          src={imagenAmpliada}
+          alt="Imagen ampliada"
+          className="block object-contain rounded-lg"
+          style={{
+            width: zoomImagen === 1 ? "auto" : "100%",
+            height: zoomImagen === 1 ? "auto" : "100%",
+            maxWidth: zoomImagen === 1 ? "100%" : "none",
+            maxHeight: zoomImagen === 1 ? "calc(100vh - 5rem)" : "none",
+            objectPosition: "center",
+          }}
+          onDoubleClick={() => cambiarZoom(zoomImagen === 1 ? 2 : 1)}
+        />
+      </div>
+    </div>
   </div>
 )}
     </div>
