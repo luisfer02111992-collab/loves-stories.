@@ -24,7 +24,6 @@ export default function Productos() {
     cost: 0,
     price: 0,
     stock_physical: 0,
-    size_stock: {} as Record<string, number>,
     image_url: "",
   });
   const [subiendo, setSubiendo] = useState(false);
@@ -179,7 +178,6 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
         cost: form.cost,
         price: form.price,
         stock_physical: form.stock_physical,
-        size_stock: (form as any).size_stock ?? {},
         image_url: form.image_url,
         updated_at: new Date().toISOString(),
       })
@@ -247,7 +245,6 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
         cost: nuevo.cost,
         price: nuevo.price,
         stock_physical: nuevo.stock_physical,
-        size_stock: nuevo.size_stock,
         image_url: nuevo.image_url || null,
       })
       .select()
@@ -263,7 +260,6 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
       cost: 0,
       price: 0,
       stock_physical: 0,
-      size_stock: {},
       image_url: "",
     });
     cargar();
@@ -431,37 +427,6 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
                   <input type="number" value={form.stock_physical ?? 0} onChange={(e) => setForm({ ...form, stock_physical: Number(e.target.value) })}
                     className="w-full bg-transparent outline-none" />
                 </Campo>
-                <div className="sm:col-span-2">
-                  <p className="text-xs mb-2" style={{ color: "#5B4E5E" }}>Cantidad física por talla</p>
-                  <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                    {["5", "6", "7", "8", "9", "10", "11", "12", "13"].map((talla) => (
-                      <div key={talla}>
-                        <p className="text-xs text-center mb-1" style={{ color: "#5B4E5E" }}>Talla {talla}</p>
-                        <input
-                          type="number"
-                          min={0}
-                          value={Number(((form as any).size_stock ?? {})[talla] ?? 0)}
-                          onChange={(e) => {
-                            const nuevoStock = {
-                              ...((form as any).size_stock ?? {}),
-                              [talla]: Math.max(0, Number(e.target.value) || 0),
-                            };
-                            const total = Object.values(nuevoStock).reduce(
-                              (suma: number, valor: any) => suma + Number(valor || 0),
-                              0
-                            );
-                            setForm({ ...form, size_stock: nuevoStock, stock_physical: total } as any);
-                          }}
-                          className="w-full px-2 py-2 rounded text-sm text-center outline-none"
-                          style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <p className="text-xs mt-2" style={{ color: "#4F6F52" }}>
-                    Total físico por tallas: <strong>{Object.values(((form as any).size_stock ?? {}) as Record<string, number>).reduce((total, valor) => total + Number(valor || 0), 0)} unidades</strong>
-                  </p>
-                </div>
                 <div className="sm:col-span-2">
                   <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Descripción</p>
                   <input value={form.name ?? ""} onChange={(e) => setForm({ ...form, name: e.target.value })}
