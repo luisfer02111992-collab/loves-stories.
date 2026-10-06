@@ -24,6 +24,7 @@ import ReporteVendedores from "./pages/ReporteVendedores";
 import CierreCaja from "./pages/CierreCaja";
 import HistorialClientes from "./pages/HistorialClientes";
 import Live from "./pages/Live";
+import PedidosLive from "./pages/PedidosLive";
 import { canAccess, type PermissionKey } from "./lib/permissions";
 
 function Privado({ children }: { children: React.ReactNode }) {
@@ -106,6 +107,7 @@ function AppRoutes() {
         <Route path="pedidos-catalogo" element={<ConPermiso permiso="pedidos_catalogo"><PedidosCatalogo /></ConPermiso>} />
         <Route path="ventas" element={<ConPermiso permiso="ventas"><Ventas /></ConPermiso>} />
         <Route path="live" element={<ConPermiso permiso="asignar"><Live /></ConPermiso>} />
+        <Route path="pedidos-live" element={<ConPermiso permiso="asignar"><PedidosLive /></ConPermiso>} />
         <Route path="cierre-caja" element={<ConPermiso permiso="cierre_caja"><CierreCaja /></ConPermiso>} />
         <Route path="historial-clientes" element={<ConPermiso permiso="historial_clientes"><HistorialClientes /></ConPermiso>} />
         <Route
