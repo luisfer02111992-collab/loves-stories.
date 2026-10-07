@@ -443,6 +443,26 @@ if (linea) {
     l.product.description
   );
 }
+  useEffect(() => {
+    if (!avisoBloqueante) return;
+
+    function aceptarAvisoConEnter(e: KeyboardEvent) {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      e.stopPropagation();
+      e.stopImmediatePropagation();
+
+      setAvisoBloqueante(null);
+      setNoEncontrado(false);
+      setProductoSinStock(null);
+      setCodigo("");
+      setTimeout(() => inputRef.current?.focus(), 0);
+    }
+
+    window.addEventListener("keydown", aceptarAvisoConEnter, true);
+    return () => window.removeEventListener("keydown", aceptarAvisoConEnter, true);
+  }, [avisoBloqueante]);
+
   const total = carrito.reduce((a, l) => a + precioPreview(l) * l.cantidad, 0);
   const unidades = carrito.reduce((a, l) => a + l.cantidad, 0);
 
