@@ -26,6 +26,11 @@ export default function InicioVentas() {
   const [noEncontrado, setNoEncontrado] = useState(false);
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [productoSinStock, setProductoSinStock] = useState<Product | null>(null);
+  const [avisoBloqueante, setAvisoBloqueante] = useState<
+    | { tipo: "agotado"; codigo: string; nombre?: string }
+    | { tipo: "no_encontrado"; codigo: string }
+    | null
+  >(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const listaCarritoRef = useRef<HTMLDivElement>(null);
@@ -209,7 +214,8 @@ useEffect(() => {
 
         if (error) throw new Error(error.message);
         if (!producto) {
-          setNoEncontrado(true);
+          setNoEncontrado(false);
+          setAvisoBloqueante({ tipo: "no_encontrado", codigo: codigoLeido });
           return;
         }
         p = producto as Product;
@@ -217,7 +223,8 @@ useEffect(() => {
       }
 
       if (p.stock_available < 1) {
-        setProductoSinStock(p);
+        setProductoSinStock(null);
+        setAvisoBloqueante({ tipo: "agotado", codigo: p.code, nombre: p.name });
         return;
       }
 
@@ -549,7 +556,42 @@ p_unit_price: precioPreview(l),
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <>
+      {avisoBloqueante && (
+        <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4" style={{ background: "rgba(25, 15, 25, 0.72)" }} role="dialog" aria-modal="true">
+          <div className="w-full max-w-md rounded-xl p-6 text-center shadow-2xl" style={{ background: "#FFF9F7", border: "3px solid #7A2540" }}>
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full text-4xl font-bold" style={{ background: "#F4E3E6", color: "#7A2540" }}>!</div>
+            <p className="font-serif text-2xl font-bold mb-3" style={{ color: "#7A2540" }}>
+              {avisoBloqueante.tipo === "agotado" ? "PRODUCTO AGOTADO" : "CÓDIGO NO ENCONTRADO"}
+            </p>
+            {avisoBloqueante.tipo === "agotado" ? (
+              <>
+                <p className="text-base mb-2" style={{ color: "#2B1E2E" }}>
+                  El código <strong>{avisoBloqueante.codigo}</strong>{avisoBloqueante.nombre ? <> · {avisoBloqueante.nombre}</> : null} no tiene unidades disponibles.
+                </p>
+                <p className="text-sm mb-6" style={{ color: "#5B4E5E" }}>El producto NO fue agregado a la asignación.</p>
+              </>
+            ) : (
+              <>
+                <p className="text-base mb-2" style={{ color: "#2B1E2E" }}>
+                  El código <strong>{avisoBloqueante.codigo}</strong> no existe en Productos.
+                </p>
+                <p className="text-sm mb-6" style={{ color: "#5B4E5E" }}>No se realizó ninguna asignación.</p>
+              </>
+            )}
+            <button type="button" autoFocus onClick={() => {
+              setAvisoBloqueante(null);
+              setNoEncontrado(false);
+              setProductoSinStock(null);
+              setCodigo("");
+              setTimeout(() => inputRef.current?.focus(), 0);
+            }} className="w-full py-3 rounded-md text-base font-bold" style={{ background: "#7A2540", color: "#FFFFFF" }}>
+              ACEPTAR
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-2">
         <div className="flex items-center justify-between mb-3 px-1">
           <p className="font-serif text-lg flex items-center gap-2"><ShoppingCart size={18} /> Asignación rápida / Venta directa</p>
@@ -574,39 +616,6 @@ p_unit_price: precioPreview(l),
               <Plus size={16} /> Agregar
             </button>
           </div>
-          {noEncontrado && (
-            <div className="mt-3 p-3 rounded" style={{ background: "#F4E3E6" }}>
-              <p className="text-xs" style={{ color: "#7A2540" }}>No se encontró ningún producto con ese código.</p>
-            </div>
-          )}
-          {productoSinStock && (
-  <div className="mt-3 p-3 rounded" style={{ background: "#F4E3E6" }}>
-    <p className="text-xs mb-2" style={{ color: "#7A2540" }}>
-      Este producto está agotado.
-    </p>
-
-    <button
-      type="button"
-      onClick={() => {
-        sessionStorage.setItem(
-          "inicioVentasPendiente",
-          JSON.stringify({
-            carrito,
-            codigo: productoSinStock.code,
-          })
-        );
-
-        navigate(
-          `/productos?desde=asignar&codigo=${encodeURIComponent(productoSinStock.code)}`
-        );
-      }}
-      className="px-3 py-2 rounded text-xs font-medium"
-      style={{ background: "#9C7A3C", color: "#F7F3EC" }}
-    >
-      Editar stock en Productos
-    </button>
-  </div>
-)}
         </form>
 
         <div ref={listaCarritoRef}
@@ -780,5 +789,6 @@ style={{
         )}
       </div>
     </div>
+    </>
   );
 }
