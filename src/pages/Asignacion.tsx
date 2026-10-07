@@ -22,6 +22,7 @@ export default function Asignacion() {
   const [reglas, setReglas] = useState<PricingRule[]>([]);
   const [enviando, setEnviando] = useState(false);
   const [filaSeleccionada, setFilaSeleccionada] = useState<string | null>(null);
+  const [avisoSinStock, setAvisoSinStock] = useState<{ codigo: string; nombre: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -87,6 +88,14 @@ categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base
     return;
   }
 
+  if (Number(producto.stock_available || 0) < 1) {
+    setProductoEncontrado(null);
+    setCantidad(1);
+    setBuscando(false);
+    setAvisoSinStock({ codigo: producto.code, nombre: producto.name });
+    return;
+  }
+
   setProductoEncontrado(producto as Product);
   setCantidad(1);
   setBuscando(false);
@@ -115,7 +124,15 @@ async function confirmarAsignacion(e?: React.FormEvent) {
   setEnviando(false);
 
   if (error) {
-    alert(error.message);
+    const mensaje = String(error.message || "");
+    if (/stock|disponible|inventario|insuficiente/i.test(mensaje)) {
+      setAvisoSinStock({
+        codigo: productoEncontrado.code,
+        nombre: productoEncontrado.name,
+      });
+    } else {
+      alert(mensaje);
+    }
     return;
   }
 
@@ -185,7 +202,12 @@ async function aumentarUnidad(grupoProductId: string) {
   setEnviando(false);
 
   if (error) {
-    alert(error.message);
+    const mensaje = String(error.message || "");
+    if (/stock|disponible|inventario|insuficiente/i.test(mensaje)) {
+      setAvisoSinStock({ codigo: producto.code, nombre: producto.name });
+    } else {
+      alert(mensaje);
+    }
     return;
   }
 
@@ -297,7 +319,49 @@ async function aumentarUnidad(grupoProductId: string) {
   }
 }
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <>
+      {avisoSinStock && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          style={{ background: "rgba(43, 30, 46, 0.62)" }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="w-full max-w-md rounded-lg p-6 text-center shadow-2xl"
+            style={{ background: "#F7F3EC", border: "3px solid #7A2540" }}
+          >
+            <AlertTriangleIcon />
+            <p className="font-serif text-2xl mb-2" style={{ color: "#7A2540" }}>
+              SIN STOCK DISPONIBLE
+            </p>
+            <p className="text-sm mb-1" style={{ color: "#2B1E2E" }}>
+              <strong>{avisoSinStock.codigo}</strong> · {avisoSinStock.nombre}
+            </p>
+            <p className="text-sm mb-5" style={{ color: "#5B4E5E" }}>
+              Este producto no tiene unidades disponibles y no fue asignado.
+            </p>
+            <button
+              type="button"
+              autoFocus
+              onClick={() => {
+                setAvisoSinStock(null);
+                setCodigo("");
+                setProductoEncontrado(null);
+                setCantidad(1);
+                setNoEncontrado(false);
+                setTimeout(() => inputRef.current?.focus(), 0);
+              }}
+              className="w-full py-3 rounded-md text-sm font-bold"
+              style={{ background: "#7A2540", color: "#FFFFFF" }}
+            >
+              ACEPTAR
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-2">
         <div className="flex items-center justify-between mb-3 px-1">
           <span className="text-xs" style={{ color: "#5B4E5E" }}>
@@ -455,6 +519,19 @@ async function aumentarUnidad(grupoProductId: string) {
         <div className="flex justify-between text-sm mb-1.5"><span style={{ color: "#5B4E5E" }}>Unidades</span><span>{unidades}</span></div>
         <div className="flex justify-between text-sm pt-1.5" style={{ borderTop: "1px solid #D9D0C2" }}><span style={{ color: "#5B4E5E" }}>Total (con descuento)</span><span className="font-serif">Bs {total.toFixed(2)}</span></div>
       </div>
+    </div>
+    </>
+  );
+}
+
+function AlertTriangleIcon() {
+  return (
+    <div
+      className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full text-3xl font-bold"
+      style={{ background: "#F4E3E6", color: "#7A2540" }}
+      aria-hidden="true"
+    >
+      !
     </div>
   );
 }
