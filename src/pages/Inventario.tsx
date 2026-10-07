@@ -174,11 +174,11 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
         }
       });
 
-      const existentesPorCodigo = new Map<string, Product>(productos.map((p) => [p.code, p] as [string, Product]));
+      const existentesPorCodigo = new Map<string, Product>(productos.map((p) => [p.code.trim().toLowerCase(), p] as [string, Product]));
       const dup: Duplicado[] = [];
       const nue: FilaExcel[] = [];
       parseadas.forEach((f) => {
-        const existente = existentesPorCodigo.get(f.code);
+        const existente = existentesPorCodigo.get(f.code.trim().toLowerCase());
         if (existente) {
           dup.push({
             ...f, existente,
@@ -262,29 +262,8 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
         }
       }
 
-      const revisados = (duplicados ?? []).filter((d) => d.decision === "manual");
-      for (let i = 0; i < revisados.length; i++) {
-        const d = revisados[i];
-        setProgresoCarga(`Actualizando código repetido ${i + 1} de ${revisados.length}...`);
-        const { error: updError } = await supabase.from("products").update({
-          code: d.codigoACargar || d.existente.code,
-          name: d.nombreACargar || d.existente.name,
-          stock_physical: d.existente.stock_physical + d.cantidadACargar,
-          price: d.precioACargar,
-          cost: d.cost,
-          image_url: d.image_url || d.existente.image_url || null,
-          batch_id: lote.id,
-          active: true,
-          deleted_at: null,
-          updated_at: new Date().toISOString(),
-        }).eq("id", d.existente.id).select("id").single();
-        if (updError) erroresGuardado.push({ ...d, error: `Fila ${d.fila}: no se actualizó (${updError.message})` });
-        else {
-          await supabase.from("inventory_movements").insert({ product_id: d.existente.id, type: "entrada", quantity_delta: d.cantidadACargar, reason: "Carga de lote Excel" });
-          stockAgregado += d.cantidadACargar;
-          importados++;
-        }
-      }
+      // Los repetidos quedan fuera de la carga automática.
+      // Se muestran para revisión y se agregan manualmente después si corresponde.
 
       await supabase.from("purchase_batches").update({ total_ok: importados, total_errors: erroresGuardado.length }).eq("id", lote.id);
 
@@ -295,7 +274,6 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
 
       setResumenCarga({ importados, conError: erroresGuardado.length, stockAgregado });
       setConError(erroresGuardado);
-      setDuplicados(null);
       setNuevos([]);
       if (fileRef.current) fileRef.current.value = "";
       await cargar();
@@ -622,90 +600,32 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
           <div className="flex items-start gap-2 mb-3">
             <AlertTriangle size={18} style={{ color: "#7A5F2D" }} className="mt-0.5" />
             <div>
-              <p className="font-serif text-base">Aviso: se encontraron códigos ya existentes</p>
+              <p className="font-serif text-base">Productos repetidos — NO se cargarán automáticamente</p>
               <p className="text-xs" style={{ color: "#5B4E5E" }}>
-                {nuevos.length} son nuevos (se cargarán directo) · {duplicados.length} ya existen. Ninguno de estos se modifica solo — revisa cada uno.
+                <strong>{nuevos.length}</strong> nuevo(s) se cargarán normalmente · <strong>{duplicados.length}</strong> repetido(s) quedarán fuera para revisión manual.
               </p>
             </div>
           </div>
-          <div className="flex flex-col gap-2">
-            {duplicados.map((d, idx) => (
-              <div key={d.code} className="p-3 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-sm">{d.code} · {d.name}</p>
-                  <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: "#F6EAD2", color: "#7A5F2D" }}>Código repetido</span>
+          {duplicados.length > 0 && (
+            <div className="overflow-x-auto mb-3">
+              <div className="min-w-[720px]">
+                <div className="grid grid-cols-6 gap-2 px-3 py-2 text-xs font-semibold" style={{ background: "#EDE7DE", color: "#5B4E5E" }}>
+                  <span>Código</span><span>Descripción</span><span>Stock actual</span><span>Viene en Excel</span><span>Costo Excel</span><span>Precio Excel</span>
                 </div>
-                <div className="grid grid-cols-2 gap-3 text-xs mb-2">
-                  <div className="p-2 rounded" style={{ background: "#F7F3EC" }}>
-                    <p style={{ color: "#5B4E5E" }}>Ya existe</p>
-                    <p>Cantidad: {d.existente.stock_physical}</p>
-                    <p>Precio: Bs {d.existente.price}</p>
-                    <p>Costo: Bs {d.existente.cost}</p>
+                {duplicados.map((d, idx) => (
+                  <div key={`${d.code}-${idx}`} className="grid grid-cols-6 gap-2 px-3 py-2 text-xs items-center" style={{ borderBottom: "1px solid #D9D0C2" }}>
+                    <strong>{d.code}</strong><span>{d.name}</span><span>{d.existente.stock_physical}</span><span>{d.quantity}</span><span>Bs {d.cost}</span><span>Bs {d.price}</span>
                   </div>
-                  <div className="p-2 rounded" style={{ background: "#E4EBE1" }}>
-                    <p style={{ color: "#4F6F52" }}>Viene en el Excel</p>
-                    <p>Cantidad: {d.quantity}</p>
-                    <p>Precio: Bs {d.price}</p>
-                    <p>Costo: Bs {d.cost}</p>
-                  </div>
-                </div>
-                <div className="grid sm:grid-cols-2 gap-2 mb-2">
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Código a guardar</p>
-                    <input value={d.codigoACargar} onChange={(e) => {
-                      const v = e.target.value;
-                      setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, codigoACargar: v } : x)));
-                    }} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                  </div>
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Descripción a guardar</p>
-                    <input value={d.nombreACargar} onChange={(e) => {
-                      const v = e.target.value;
-                      setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, nombreACargar: v } : x)));
-                    }} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                  </div>
-                </div>
-                <div className="flex items-end gap-2 mb-2">
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Cantidad a sumar al stock</p>
-                    <input type="number" value={d.cantidadACargar} onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, cantidadACargar: v } : x)));
-                    }} className="w-24 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                  </div>
-                  <div>
-                    <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Precio a guardar</p>
-                    <input type="number" value={d.precioACargar} onChange={(e) => {
-                      const v = Number(e.target.value);
-                      setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, precioACargar: v } : x)));
-                    }} className="w-24 px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                  </div>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <button onClick={() => setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, decision: "manual" } : x)))}
-                    className="text-xs px-3 py-1.5 rounded-md" style={{ background: d.decision === "manual" ? "#9C7A3C" : "#F7F3EC", color: d.decision === "manual" ? "#F7F3EC" : "#2B1E2E", border: "1px solid #D9D0C2" }}>
-                    Actualizar el producto existente con estos datos
-                  </button>
-                  <button onClick={() => setDuplicados((prev) => prev!.map((x, i) => (i === idx ? { ...x, decision: "omitir" } : x)))}
-                    className="text-xs px-3 py-1.5 rounded-md" style={{ background: d.decision === "omitir" ? "#F4E3E6" : "#F7F3EC", color: d.decision === "omitir" ? "#7A2540" : "#2B1E2E", border: "1px solid #D9D0C2" }}>
-                    Omitir este código
-                  </button>
-                  <button onClick={() => eliminarProductoExistente(d.existente.id)}
-                    className="text-xs px-3 py-1.5 rounded-md" style={{ background: "#F4E3E6", color: "#7A2540", border: "1px solid #D9D0C2" }}>
-                    Eliminar el producto existente (papelera)
-                  </button>
-                </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div className="flex gap-2 mt-3">
-            <button disabled={cargandoLote} onClick={confirmarCarga} className="text-xs px-4 py-2 rounded-md disabled:opacity-60" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
-              {cargandoLote ? "Procesando..." : `Confirmar carga (${nuevos.length} nuevos + revisados)`}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2 items-center">
+            <button disabled={cargandoLote || nuevos.length === 0} onClick={confirmarCarga} className="text-xs px-4 py-2 rounded-md disabled:opacity-60" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+              {cargandoLote ? "Procesando..." : `Cargar solamente ${nuevos.length} producto(s) nuevo(s)`}
             </button>
-            {progresoCarga && <span className="text-xs self-center" style={{ color: progresoCarga.startsWith("ERROR") ? "#7A2540" : "#4F6F52" }}>{progresoCarga}</span>}
-            <button onClick={() => { setDuplicados(null); setNuevos([]); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-              Cancelar
-            </button>
+            {progresoCarga && <span className="text-xs" style={{ color: progresoCarga.startsWith("ERROR") ? "#7A2540" : "#4F6F52" }}>{progresoCarga}</span>}
+            <button onClick={() => { setDuplicados(null); setNuevos([]); setConError([]); if (fileRef.current) fileRef.current.value = ""; }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
           </div>
         </div>
       )}
