@@ -59,6 +59,8 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
   const [resumenCarga, setResumenCarga] = useState<{ importados: number; conError: number; stockAgregado: number } | null>(null);
   const [cargandoLote, setCargandoLote] = useState(false);
   const [progresoCarga, setProgresoCarga] = useState("");
+  const [observaciones, setObservaciones] = useState<any[]>([]);
+  const [cerrandoObservaciones, setCerrandoObservaciones] = useState(false);
   const [pestanaStock, setPestanaStock] = useState<"disponibles" | "agotados">("disponibles");
   const [mostrarMerma, setMostrarMerma] = useState(false);
   const [mermaCodigo, setMermaCodigo] = useState("");
@@ -107,6 +109,15 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
   }
 
   console.log("TOTAL PRODUCTOS CARGADOS:", todas.length);
+
+  const { data: obs, error: obsError } = await supabase
+    .from("inventory_import_observations")
+    .select("*")
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (obsError) console.error("Error cargando observaciones:", obsError);
+  setObservaciones(obs ?? []);
 }
   async function exportarInventario() {
     const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet("Inventario");
@@ -179,7 +190,7 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
       const nue: FilaExcel[] = [];
       parseadas.forEach((f) => {
         const existente = existentesPorCodigo.get(f.code.trim().toLowerCase());
-        if (existente) {
+        if (existente && Number(existente.stock_available || 0) > 0) {
           dup.push({
             ...f, existente,
             cantidadACargar: f.quantity ?? 0,
@@ -189,6 +200,8 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
             decision: "revisar",
           });
         } else {
+          // Un código inexistente o agotado se procesa automáticamente.
+          // Si estaba agotado, el UPSERT reemplaza todos sus datos con los del nuevo lote.
           nue.push(f);
         }
       });
@@ -225,6 +238,33 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
       let stockAgregado = 0;
       let importados = 0;
       const erroresGuardado: FilaExcel[] = [...conError];
+
+      // Guardar los repetidos como observaciones persistentes antes de cargar los nuevos.
+      if ((duplicados?.length ?? 0) > 0) {
+        const observacionesPayload = (duplicados ?? []).map((d) => ({
+          batch_id: lote.id,
+          product_id: d.existente.id,
+          code: d.code,
+          name: d.name,
+          excel_quantity: d.quantity,
+          excel_cost: d.cost,
+          excel_price: d.price,
+          excel_image_url: d.image_url || null,
+          excel_category: d.category || null,
+          stock_physical_at_import: Number(d.existente.stock_physical || 0),
+          stock_reserved_at_import: Number(d.existente.stock_reserved || 0),
+          stock_available_at_import: Number(d.existente.stock_available || 0),
+          status: "pending",
+        }));
+
+        const { error: obsInsertError } = await supabase
+          .from("inventory_import_observations")
+          .insert(observacionesPayload);
+
+        if (obsInsertError) {
+          throw new Error(`No se pudieron guardar los productos observados: ${obsInsertError.message}`);
+        }
+      }
       const categoriaPorNombre = new Map(categorias.map((c) => [c.name.toLowerCase(), c.id]));
 
       // Los códigos clasificados como nuevos pueden corresponder a productos eliminados.
@@ -292,6 +332,31 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
     await supabase.from("products").update({ deleted_at: new Date().toISOString() }).eq("id", id);
     setDuplicados((prev) => prev?.filter((d) => d.existente.id !== id) ?? null);
     cargar();
+  }
+
+  async function aceptarYCerrarObservaciones() {
+    if (observaciones.length === 0 || cerrandoObservaciones) return;
+    if (!confirm("¿Aceptar y cerrar TODAS las observaciones pendientes? La lista desaparecerá de Inventario.")) return;
+
+    setCerrandoObservaciones(true);
+    try {
+      const { data: sesion } = await supabase.auth.getUser();
+      const { error } = await supabase
+        .from("inventory_import_observations")
+        .update({
+          status: "closed",
+          closed_at: new Date().toISOString(),
+          closed_by: sesion.user?.id ?? null,
+        })
+        .eq("status", "pending");
+
+      if (error) throw error;
+      setObservaciones([]);
+    } catch (e: any) {
+      alert(`No se pudieron cerrar las observaciones: ${e?.message || "error desconocido"}`);
+    } finally {
+      setCerrandoObservaciones(false);
+    }
   }
 
   async function registrarMerma() {
@@ -600,9 +665,9 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
           <div className="flex items-start gap-2 mb-3">
             <AlertTriangle size={18} style={{ color: "#7A5F2D" }} className="mt-0.5" />
             <div>
-              <p className="font-serif text-base">Productos repetidos — NO se cargarán automáticamente</p>
+              <p className="font-serif text-base">Productos repetidos detectados — quedarán en Observados</p>
               <p className="text-xs" style={{ color: "#5B4E5E" }}>
-                <strong>{nuevos.length}</strong> nuevo(s) se cargarán normalmente · <strong>{duplicados.length}</strong> repetido(s) quedarán fuera para revisión manual.
+                <strong>{nuevos.length}</strong> nuevo(s) se cargarán normalmente · <strong>{duplicados.length}</strong> repetido(s) no se cargarán y quedarán guardados en Observados.
               </p>
             </div>
           </div>
@@ -626,6 +691,48 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
             </button>
             {progresoCarga && <span className="text-xs" style={{ color: progresoCarga.startsWith("ERROR") ? "#7A2540" : "#4F6F52" }}>{progresoCarga}</span>}
             <button onClick={() => { setDuplicados(null); setNuevos([]); setConError([]); if (fileRef.current) fileRef.current.value = ""; }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {observaciones.length > 0 && (
+        <div className="rounded-md p-4 mb-3" style={{ background: "#FFF8E8", border: "2px solid #B7791F" }}>
+          <div className="flex items-start justify-between gap-3 mb-3">
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={18} style={{ color: "#7A5F2D" }} className="mt-0.5" />
+              <div>
+                <p className="font-serif text-base">Productos observados pendientes</p>
+                <p className="text-xs" style={{ color: "#5B4E5E" }}>
+                  Esta lista permanece guardada aunque salgas de Inventario. Carga manualmente lo que corresponda y ciérrala cuando termines.
+                </p>
+              </div>
+            </div>
+            <button
+              disabled={cerrandoObservaciones}
+              onClick={aceptarYCerrarObservaciones}
+              className="text-xs px-4 py-2 rounded-md disabled:opacity-60 shrink-0"
+              style={{ background: "#4F6F52", color: "#F7F3EC" }}
+            >
+              {cerrandoObservaciones ? "Cerrando..." : "Aceptar y cerrar observaciones"}
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <div className="min-w-[850px]">
+              <div className="grid grid-cols-7 gap-2 px-3 py-2 text-xs font-semibold" style={{ background: "#EDE7DE", color: "#5B4E5E" }}>
+                <span>Código</span><span>Descripción</span><span>Stock al detectar</span><span>Viene en Excel</span><span>Costo Excel</span><span>Precio Excel</span><span>Fecha</span>
+              </div>
+              {observaciones.map((o: any) => (
+                <div key={o.id} className="grid grid-cols-7 gap-2 px-3 py-2 text-xs items-center" style={{ borderBottom: "1px solid #D9D0C2" }}>
+                  <strong>{o.code}</strong>
+                  <span>{o.name}</span>
+                  <span>{o.stock_available_at_import}</span>
+                  <span>{o.excel_quantity}</span>
+                  <span>Bs {o.excel_cost}</span>
+                  <span>Bs {o.excel_price}</span>
+                  <span>{new Date(o.created_at).toLocaleString("es-BO")}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
