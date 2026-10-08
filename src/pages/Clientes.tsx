@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, Wallet, Printer, Bell, Search } from "lucide-react";
+import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, RotateCcw, Wallet, Printer, Bell, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
 import { useAuth } from "../hooks/useAuth";
@@ -40,6 +40,9 @@ export default function Clientes() {
   const [nuevoNombre, setNuevoNombre] = useState("");
   const [nuevoTelefono, setNuevoTelefono] = useState("");
   const [mostrarNuevo, setMostrarNuevo] = useState(false);
+  const [papeleraAbierta, setPapeleraAbierta] = useState(false);
+  const [clientesEliminados, setClientesEliminados] = useState<{id: string; name: string; phone: string; deleted_at: string}[]>([]);
+  const [procesandoPapelera, setProcesandoPapelera] = useState(false);
   const [inactivos, setInactivos] = useState<{ name: string; phone: string; ultima: string | null }[]>([]);
   const [editando, setEditando] = useState(false);
   const [edicion, setEdicion] = useState({ name: "", phone: "", notes: "" });
@@ -650,24 +653,50 @@ function linkWhatsapp(telefono: string, mensaje: string) {
     await cargarClientes();
   }
 
+  async function cargarPapelera() {
+    const { data, error } = await supabase.rpc("list_deleted_customers");
+    if (error) { alert(`No se pudo cargar la papelera: ${error.message}`); return; }
+    setClientesEliminados((data ?? []) as {id: string; name: string; phone: string; deleted_at: string}[]);
+  }
+
   async function eliminarCliente() {
-    if (!seleccionado) return;
+    if (!seleccionado || procesandoPapelera) return;
     const nombre = seleccionado.name;
-    if (!confirm(`¿ELIMINAR POR COMPLETO a "${nombre}"?\n\nEsta acción es permanente y eliminará también sus pedidos, pagos, depósitos y movimientos asociados. Los productos de pedidos que todavía estén abiertos volverán al inventario.\n\nNo se podrá restaurar.`)) return;
-
-    const { error } = await supabase.rpc("delete_customer_completely", { p_customer_id: seleccionado.id });
-    if (error) {
-      alert(`No se pudo eliminar el cliente: ${error.message}`);
-      return;
+    if (!confirm(`¿Enviar a "${nombre}" a la papelera?\n\nSus pedidos, asignaciones y depósitos se conservarán. Podrás restaurarlo desde Papelera.`)) return;
+    setProcesandoPapelera(true);
+    try {
+      const { error } = await supabase.rpc("trash_customer", { p_customer_id: seleccionado.id });
+      if (error) throw error;
+      setSeleccionado(null);
+      setOrdenId(null);
+      setItems([]);
+      setDepositos([]);
+      await cargarClientes();
+      await cargarInactivos();
+      if (papeleraAbierta) await cargarPapelera();
+      alert(`Cliente "${nombre}" enviado a la papelera. Sus asignaciones se conservaron.`);
+    } catch (err: any) {
+      alert(`No se pudo enviar a la papelera: ${err.message}`);
+    } finally {
+      setProcesandoPapelera(false);
     }
+  }
 
-    setSeleccionado(null);
-    setOrdenId(null);
-    setItems([]);
-    setDepositos([]);
-    await cargarClientes();
-    await cargarInactivos();
-    alert(`Cliente "${nombre}" eliminado por completo.`);
+  async function restaurarCliente(id: string, nombre: string) {
+    if (procesandoPapelera || !confirm(`¿Restaurar a "${nombre}" con sus pedidos y depósitos?`)) return;
+    setProcesandoPapelera(true);
+    try {
+      const { error } = await supabase.rpc("restore_trashed_customer", { p_customer_id: id });
+      if (error) throw error;
+      await cargarPapelera();
+      await cargarClientes();
+      await cargarInactivos();
+      alert(`Cliente "${nombre}" restaurado con sus registros existentes.`);
+    } catch (err: any) {
+      alert(`No se pudo restaurar: ${err.message}`);
+    } finally {
+      setProcesandoPapelera(false);
+    }
   }
 
   async function registrarDeposito() {
@@ -693,6 +722,22 @@ function linkWhatsapp(telefono: string, mensaje: string) {
             <Plus size={13} /> Nuevo
           </button>
         </div>
+
+        <button type="button" onClick={() => { if (!papeleraAbierta) void cargarPapelera(); setPapeleraAbierta(v => !v); }} className="text-xs px-3 py-2 rounded-md mb-3 flex items-center gap-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2", color: "#5B4E5E" }}>
+          <RotateCcw size={14} /> {papeleraAbierta ? "Cerrar papelera" : "Papelera de clientes"}
+        </button>
+        {papeleraAbierta && (
+          <div className="p-3 mb-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+            <p className="text-sm font-medium mb-2">Clientes eliminados</p>
+            {clientesEliminados.length === 0 && <p className="text-xs">La papelera está vacía.</p>}
+            {clientesEliminados.map(c => (
+              <div key={c.id} className="flex items-center justify-between gap-2 py-2" style={{ borderTop: "1px solid #D9D0C2" }}>
+                <div className="min-w-0"><p className="text-xs font-medium">{c.name}</p><p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p></div>
+                <button type="button" disabled={procesandoPapelera} onClick={() => restaurarCliente(c.id, c.name)} className="px-2 py-1.5 rounded text-xs shrink-0" style={{ background: "#4F6F52", color: "white" }}>Restaurar</button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {mostrarNuevo && (
           <form onSubmit={crearCliente} className="p-3 mb-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
