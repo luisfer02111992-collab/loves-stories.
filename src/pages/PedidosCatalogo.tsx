@@ -506,156 +506,53 @@ export default function PedidosCatalogo() {
                   </p>
 
                   <div className="flex flex-col gap-2">
-                    {p.items.map((it) => (
-                      <div
-                        key={it.id}
-                        className="p-2 rounded-md"
-                        style={{
-                          background: "#EDE7DE",
-                          border: "1px solid #D9D0C2",
-                        }}
-                      >
-                        <div className="flex gap-3">
-                          {/* FOTO */}
-                          <div className="shrink-0">
-                            {it.image_url ? (
-                              <img
-                                src={it.image_url}
-                                alt={it.name}
-                                onClick={() => {
-                                  setImagenAmpliada(
-                                    it.image_url
-                                  );
-
-                                  imagenAmpliadaRef.current =
-                                    it.image_url;
-
-                                  window.history.pushState(
-                                    {
-                                      fotoPedido: true,
-                                    },
-                                    ""
-                                  );
-                                }}
-                                className="w-20 h-20 rounded-md object-cover cursor-zoom-in"
-                                style={{
-                                  border:
-                                    "1px solid #D9D0C2",
-                                }}
-                              />
-                            ) : (
-                              <div
-                                className="w-20 h-20 rounded-md flex items-center justify-center text-xs"
-                                style={{
-                                  background: "#F7F3EC",
-                                  border:
-                                    "1px solid #D9D0C2",
-                                  color: "#5B4E5E",
-                                }}
-                              >
-                                Sin foto
+                    {Array.from(new Map(p.items.map((it) => [it.catalog_product_id || it.code, it])).values()).map((producto) => {
+                      const variantes = p.items.filter((it) =>
+                        (it.catalog_product_id || it.code) === (producto.catalog_product_id || producto.code)
+                      );
+                      return (
+                        <div key={producto.catalog_product_id || producto.code} className="p-2 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+                          <div className="flex gap-3">
+                            <div className="shrink-0">
+                              {producto.image_url ? (
+                                <img src={producto.image_url} alt={producto.name}
+                                  onClick={() => {
+                                    setImagenAmpliada(producto.image_url);
+                                    imagenAmpliadaRef.current = producto.image_url;
+                                    window.history.pushState({ fotoPedido: true }, "");
+                                  }}
+                                  className="w-20 h-20 rounded-md object-cover cursor-zoom-in"
+                                  style={{ border: "1px solid #D9D0C2" }} />
+                              ) : (
+                                <div className="w-20 h-20 rounded-md flex items-center justify-center text-xs" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2", color: "#5B4E5E" }}>Sin foto</div>
+                              )}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium">{producto.code}</p>
+                              <p className="text-xs mt-1">{producto.name}</p>
+                              <p className="text-xs mt-1" style={{ color: "#5B4E5E" }}>Precio: Bs {producto.price}</p>
+                              <p className="text-xs mt-1 font-medium">Subtotal: Bs {variantes.reduce((t, it) => t + it.price * it.cantidadAAsignar, 0)}</p>
+                            </div>
+                          </div>
+                          <div className="mt-2 pt-2 space-y-1" style={{ borderTop: "1px solid #D9D0C2" }}>
+                            {variantes.map((it) => (
+                              <div key={it.id} className="flex items-center justify-between gap-2 text-xs" style={{ color: "#5B4E5E" }}>
+                                <span>{it.variant_key ? (it.variant_type === "ring_size" ? `Talla ${it.variant_key}` : `${it.variant_key} cm`) : "Cantidad"}: {it.cantidadOriginal} {it.cantidadOriginal === 1 ? "unidad" : "unidades"}</span>
+                                <div className="flex items-center gap-2">
+                                  <span>Asignar</span>
+                                  <input type="number" min={0} max={it.cantidadOriginal}
+                                    value={it.cantidadAAsignar}
+                                    onChange={(e) => cambiarCantidad(p.id, it.id, Number(e.target.value))}
+                                    className="w-16 px-2 py-1.5 rounded text-xs text-center outline-none"
+                                    style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
+                                  <span>/ {it.cantidadOriginal}</span>
+                                </div>
                               </div>
-                            )}
-                          </div>
-
-                          {/* DATOS */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium">
-                              {it.code}
-                            </p>
-
-                            <p className="text-xs mt-1">
-                              {it.name}
-                            </p>
-
-                            {it.variant_key && (
-                              <p
-                                className="text-xs mt-1"
-                                style={{
-                                  color: "#7A5F2D",
-                                }}
-                              >
-                                {it.variant_type ===
-                                "ring_size"
-                                  ? `Talla ${it.variant_key}`
-                                  : `${it.variant_key} cm`}
-                              </p>
-                            )}
-
-                            <p
-                              className="text-xs mt-1"
-                              style={{
-                                color: "#5B4E5E",
-                              }}
-                            >
-                              Precio: Bs {it.price}
-                            </p>
-
-                            <p className="text-xs mt-1 font-medium">
-                              Subtotal: Bs{" "}
-                              {it.price *
-                                it.cantidadAAsignar}
-                            </p>
+                            ))}
                           </div>
                         </div>
-
-                        {/* CANTIDAD */}
-                        <div
-                          className="flex items-center justify-between mt-2 pt-2"
-                          style={{
-                            borderTop:
-                              "1px solid #D9D0C2",
-                          }}
-                        >
-                          <span
-                            className="text-xs"
-                            style={{
-                              color: "#5B4E5E",
-                            }}
-                          >
-                            Cantidad a asignar
-                          </span>
-
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min={0}
-                              max={
-                                it.cantidadOriginal
-                              }
-                              value={
-                                it.cantidadAAsignar
-                              }
-                              onChange={(e) =>
-                                cambiarCantidad(
-                                  p.id,
-                                  it.id,
-                                  Number(
-                                    e.target.value
-                                  )
-                                )
-                              }
-                              className="w-16 px-2 py-1.5 rounded text-sm text-center outline-none"
-                              style={{
-                                background:
-                                  "#F7F3EC",
-                                border:
-                                  "1px solid #D9D0C2",
-                              }}
-                            />
-
-                            <span
-                              className="text-xs"
-                              style={{
-                                color: "#5B4E5E",
-                              }}
-                            >
-                              / {it.cantidadOriginal}
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
 
                   {/* TOTAL */}
