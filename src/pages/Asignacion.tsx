@@ -183,7 +183,14 @@ async function aumentarUnidad(grupoProductId: string) {
     return;
   }
 
-  if (!clienteId) return;
+  if (!clienteId || enviando) return;
+
+  // Mostrar la misma alerta de agotado antes de intentar sumar otra unidad.
+  // La RPC sigue validando el stock real al guardar para evitar sobreasignaciones.
+  if (Number(producto.stock_available ?? 0) < 1) {
+    setAvisoSinStock({ codigo: producto.code, nombre: producto.name });
+    return;
+  }
 
   setEnviando(true);
 
