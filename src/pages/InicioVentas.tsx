@@ -188,9 +188,11 @@ useEffect(() => {
         const actual = carritoRef.current;
         const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
         if (existente) {
-          const siguiente = existente.cantidad >= p.stock_available
-            ? actual
-            : actual.map((l) =>
+          if (existente.cantidad >= p.stock_available) {
+            setAvisoBloqueante({ tipo: "agotado", codigo: p.code, nombre: p.name });
+            return;
+          }
+          const siguiente = actual.map((l) =>
                 l.product.id === p!.id && !l.ringSize
                   ? { ...l, cantidad: l.cantidad + 1 }
                   : l
@@ -233,10 +235,14 @@ useEffect(() => {
 
       const actual = carritoRef.current;
       const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
+      if (existente && existente.cantidad >= p.stock_available) {
+        setAvisoBloqueante({ tipo: "agotado", codigo: p.code, nombre: p.name });
+        return;
+      }
       const siguiente = existente
-        ? (existente.cantidad >= p.stock_available ? actual : actual.map((l) =>
+        ? actual.map((l) =>
             l.product.id === p!.id && !l.ringSize
-              ? { ...l, cantidad: l.cantidad + 1 } : l))
+              ? { ...l, cantidad: l.cantidad + 1 } : l)
         : [...actual, { product: p, cantidad: 1 }];
 
       carritoRef.current = siguiente;
@@ -719,14 +725,15 @@ style={{
 <button
   onClick={(e) => {
     e.stopPropagation();
+    const limite = l.ringSize && l.stockTalla != null
+      ? Math.min(l.product.stock_available, l.stockTalla)
+      : l.product.stock_available;
+    if (l.cantidad >= limite) {
+      setAvisoBloqueante({ tipo: "agotado", codigo: l.product.code, nombre: l.product.name });
+      return;
+    }
     cambiarCantidad(l.product.id, 1, l.ringSize);
   }}
-  disabled={
-    l.cantidad >=
-    (l.ringSize && l.stockTalla != null
-      ? Math.min(l.product.stock_available, l.stockTalla)
-      : l.product.stock_available)
-  }
   className="w-7 h-7 rounded-full flex items-center justify-center"
   style={{ background: "#9C7A3C", color: "#F7F3EC" }}
 >
