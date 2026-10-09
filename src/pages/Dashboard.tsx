@@ -19,7 +19,7 @@ function inicioDeHoy() {
 function badgeDias(dias: number) {
   if (dias >= 5) return { label: `Día ${dias} · alerta`, bg: "#F4E3E6", fg: "#7A2540" };
   if (dias === 4) return { label: `Día ${dias} · atención`, bg: "#F6EAD2", fg: "#7A5F2D" };
-  return { label: `Día ${dias} · vigente`, bg: "#E4EBE1", fg: "#4F6F52" };
+  return { label: `Día ${dias}`, bg: "#E4EBE1", fg: "#4F6F52" };
 }
 
 export default function Dashboard() {
