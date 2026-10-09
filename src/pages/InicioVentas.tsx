@@ -46,6 +46,7 @@ export default function InicioVentas() {
   const [nuevoTelefono, setNuevoTelefono] = useState("");
   const [metodoPago, setMetodoPago] = useState("efectivo");
   const [procesando, setProcesando] = useState(false);
+  const procesandoRef = useRef(false);
   const [ultimoResultado, setUltimoResultado] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Category[]>([]);
 
@@ -490,11 +491,12 @@ if (linea) {
   // contra doble ejecución vía "procesando").
   async function confirmarAsignacion(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    if (procesando || carrito.length === 0) return;
+    if (procesandoRef.current || procesando || carrito.length === 0) return;
 
     if (modo === "cliente" && !clienteElegido) { alert("Elige un cliente de la lista."); return; }
     if (modo === "nuevo" && (!nuevoNombre.trim() || !nuevoTelefono.trim())) { alert("Completa nombre y teléfono del cliente nuevo."); return; }
 
+    procesandoRef.current = true;
     setProcesando(true);
     try {
       // Validar stock de TODAS las líneas antes de escribir nada, para no
@@ -525,16 +527,17 @@ if (linea) {
       if (modo === "directa") {
         const { data: orden, error } = await supabase.from("orders").insert({ customer_id: null, direct_sale: true }).select().single();
         if (error || !orden) throw new Error(error?.message ?? "No se pudo iniciar la venta directa");
-        for (const l of carrito) {
-          const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
-            p_order_id: orden.id, p_product_id: l.product.id, p_quantity: l.cantidad, p_origin: "manual",
-            p_seller_id: vendedorActivoId,
-p_session_id: sesionActivaId,
-p_unit_price: precioPreview(l),
-            p_ring_size: null,
-          });
-          if (errAsig) throw new Error(errAsig.message);
-        }
+        const { error: errAsig } = await supabase.rpc("assign_products_to_order_batch", {
+          p_order_id: orden.id,
+          p_items: carrito.map((l) => ({
+            product_id: l.product.id,
+            quantity: l.cantidad,
+            unit_price: precioPreview(l),
+          })),
+          p_seller_id: vendedorActivoId,
+          p_session_id: sesionActivaId,
+        });
+        if (errAsig) throw new Error(errAsig.message);
         const { data: totalReal, error: errCalc } = await supabase.rpc("calcular_total_pedido", { p_order_id: orden.id });
         if (errCalc) throw new Error(errCalc.message);
         if ((totalReal ?? 0) > 0) {
@@ -545,16 +548,17 @@ p_unit_price: precioPreview(l),
         setUltimoResultado(`Venta directa finalizada — Total Bs ${(totalReal ?? 0).toFixed(2)}`);
       } else if (customerId) {
         const orderId = await obtenerOrdenAbierta(customerId);
-        for (const l of carrito) {
-          const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
-            p_order_id: orderId, p_product_id: l.product.id, p_quantity: l.cantidad, p_origin: "manual",
-            p_seller_id: vendedorActivoId,
-p_session_id: sesionActivaId,
-p_unit_price: precioPreview(l),
-            p_ring_size: null,
-          });
-          if (errAsig) throw new Error(errAsig.message);
-        }
+        const { error: errAsig } = await supabase.rpc("assign_products_to_order_batch", {
+          p_order_id: orderId,
+          p_items: carrito.map((l) => ({
+            product_id: l.product.id,
+            quantity: l.cantidad,
+            unit_price: precioPreview(l),
+          })),
+          p_seller_id: vendedorActivoId,
+          p_session_id: sesionActivaId,
+        });
+        if (errAsig) throw new Error(errAsig.message);
         setUltimoResultado(`Asignado a ${nombreDestino}: ${unidades} unidad(es) — Bs ${total.toFixed(2)}. El pedido sigue abierto hasta que se cierre desde Clientes.`);
       }
 
@@ -577,6 +581,7 @@ p_unit_price: precioPreview(l),
     } catch (err: any) {
       alert(err.message);
     } finally {
+      procesandoRef.current = false;
       setProcesando(false);
     }
   }
