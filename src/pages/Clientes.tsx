@@ -45,6 +45,7 @@ export default function Clientes() {
   const [procesandoPapelera, setProcesandoPapelera] = useState(false);
   const [inactivos, setInactivos] = useState<{ name: string; phone: string; ultima: string | null }[]>([]);
   const [editando, setEditando] = useState(false);
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
   const [edicion, setEdicion] = useState({ name: "", phone: "", notes: "" });
   const [mostrarDeposito, setMostrarDeposito] = useState(false);
   const [montoDeposito, setMontoDeposito] = useState(0);
@@ -647,10 +648,19 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   async function guardarEdicion() {
-    if (!seleccionado) return;
-    await supabase.from("customers").update({ name: edicion.name, phone: edicion.phone, notes: edicion.notes || null }).eq("id", seleccionado.id);
-    setEditando(false);
-    await cargarClientes();
+    if (!seleccionado || guardandoEdicion) return;
+    setGuardandoEdicion(true);
+    try {
+      const { error } = await supabase.from("customers").update({ name: edicion.name, phone: edicion.phone, notes: edicion.notes || null }).eq("id", seleccionado.id);
+      if (error) { alert(`No se pudo guardar el cliente: ${error.message}`); return; }
+      setSeleccionado({ ...seleccionado, name: edicion.name, phone: edicion.phone, notes: edicion.notes || null });
+      setEditando(false);
+      await cargarClientes();
+    } catch (err: any) {
+      alert(`No se pudo guardar el cliente: ${err?.message ?? "Error desconocido"}`);
+    } finally {
+      setGuardandoEdicion(false);
+    }
   }
 
   async function cargarPapelera() {
@@ -796,7 +806,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
           <>
             <div className="p-4 mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
               {editando ? (
-                <div>
+                <form onSubmit={(e) => { e.preventDefault(); void guardarEdicion(); }}>
                   <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Nombre</p>
                   <input value={edicion.name} onChange={(e) => setEdicion({ ...edicion, name: e.target.value })}
                     className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
@@ -807,10 +817,10 @@ function linkWhatsapp(telefono: string, mensaje: string) {
                   <input value={edicion.notes} onChange={(e) => setEdicion({ ...edicion, notes: e.target.value })}
                     className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} />
                   <div className="flex gap-2">
-                    <button onClick={guardarEdicion} className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Guardar</button>
-                    <button onClick={() => setEditando(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
+                    <button type="submit" disabled={guardandoEdicion} className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>{guardandoEdicion ? "Guardando..." : "Guardar"}</button>
+                    <button type="button" disabled={guardandoEdicion} onClick={() => setEditando(false)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>Cancelar</button>
                   </div>
-                </div>
+                </form>
               ) : (
                 <div className="flex items-center justify-between mb-1">
                   <div>
