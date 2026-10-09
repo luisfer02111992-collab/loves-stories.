@@ -1,5 +1,21 @@
 import { jsPDF } from "jspdf";
 import type { GrupoProducto } from "./pricing";
+
+// Ordena por categoría real sin modificar los grupos ni sus cálculos.
+// Dentro de cada categoría conserva el orden original de asignación.
+function ordenarPorCategoria<T extends { categoria_id?: string | null }>(elementos: T[]): T[] {
+  return elementos
+    .map((elemento, indice) => ({ elemento, indice }))
+    .sort((a, b) => {
+      const categoriaA = a.elemento.categoria_id ?? "";
+      const categoriaB = b.elemento.categoria_id ?? "";
+      if (categoriaA === categoriaB) return a.indice - b.indice;
+      if (!categoriaA) return 1;
+      if (!categoriaB) return -1;
+      return categoriaA.localeCompare(categoriaB);
+    })
+    .map(({ elemento }) => elemento);
+}
 function textoPdf(valor: unknown): string {
   return String(valor ?? "")
     .normalize("NFC")
@@ -326,7 +342,7 @@ export async function generarPdfGrande(
   // PRODUCTOS
   // ==========================================================
 
-  for (const g of datos.grupos) {
+  for (const g of ordenarPorCategoria(datos.grupos)) {
     let imagenCargada: Awaited<
       ReturnType<typeof cargarImagenComoDataUrl>
     > = null;
@@ -694,6 +710,7 @@ y += 8;
 // ============================================================
 
 interface LineaSesionPdf {
+  categoria_id?: string | null;
   codigo: string;
   nombre: string;
   cantidad: number;
@@ -829,7 +846,7 @@ export function generarPdfSesion(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
 
-  for (const l of datos.lineas) {
+  for (const l of ordenarPorCategoria(datos.lineas)) {
     if (y > 270) {
       doc.addPage();
 
@@ -1095,7 +1112,7 @@ export function generarPdfPedido(
 
   doc.setFont("helvetica", "normal");
 
-  for (const g of datos.grupos) {
+  for (const g of ordenarPorCategoria(datos.grupos)) {
     doc.setFontSize(9);
 
     doc.text(
@@ -1327,6 +1344,7 @@ export function generarPdfPedido(
 // ============================================================
 
 export interface ItemPdfCatalogo {
+  categoria_id?: string | null;
   codigo: string;
   nombre: string;
   imagen: string | null;
@@ -1449,7 +1467,7 @@ export async function generarPdfCatalogo(
   encabezadoTabla();
 
   // PRODUCTOS
-  for (const item of datos.items) {
+  for (const item of ordenarPorCategoria(datos.items)) {
     let imagenCargada: Awaited<
       ReturnType<typeof cargarImagenComoDataUrl>
     > = null;
