@@ -28,7 +28,12 @@ export default function Productos() {
   });
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
-  const [restaurando10000, setRestaurando10000] = useState(false);
+  const [mostrarPapelera, setMostrarPapelera] = useState(false);
+  const [eliminados, setEliminados] = useState<Pick<Product, "id" | "code" | "name" | "stock_physical">[]>([]);
+  const [busquedaPapelera, setBusquedaPapelera] = useState("");
+  const [cargandoPapelera, setCargandoPapelera] = useState(false);
+  const [restaurandoCodigo, setRestaurandoCodigo] = useState<string | null>(null);
+  const [errorPapelera, setErrorPapelera] = useState("");
   const [busqueda, setBusqueda] = useState("");
   const [pestanaStock, setPestanaStock] = useState<"disponibles" | "agotados">("disponibles");
   const buscadorRef = useRef<HTMLInputElement>(null);
@@ -266,24 +271,50 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
     cargar();
   }
 
-  async function restaurarProducto10000() {
-    if (profile?.role !== "admin" || restaurando10000) return;
-    if (!window.confirm("¿Restaurar el producto 10000 (Aretes dorados)? No se cambiará su stock.")) return;
-    setRestaurando10000(true);
+  async function cargarPapelera() {
+    if (profile?.role !== "admin") return;
+    setCargandoPapelera(true);
+    setErrorPapelera("");
     try {
-      const { error } = await supabase.rpc("restaurar_producto_admin", { p_codigo: "10000" });
-      if (error) {
-        window.alert("No se pudo restaurar el producto 10000: " + error.message);
-        return;
+      const { count, error: countError } = await supabase.from("products")
+        .select("id", { count: "exact", head: true }).not("deleted_at", "is", null);
+      if (countError) throw countError;
+      const total = count ?? 0;
+      const paginas = await Promise.all(Array.from({ length: Math.ceil(total / 1000) }, (_, i) =>
+        supabase.from("products")
+          .select("id,code,name,stock_physical")
+          .not("deleted_at", "is", null)
+          .order("code")
+          .range(i * 1000, Math.min(total - 1, (i + 1) * 1000 - 1))
+      ));
+      const registros: typeof eliminados = [];
+      for (const pagina of paginas) {
+        if (pagina.error) throw pagina.error;
+        registros.push(...(pagina.data ?? []));
       }
-      window.alert("Producto 10000 restaurado correctamente.");
-      setBusqueda("10000");
-      setPestanaStock("disponibles");
-      await cargar(true);
+      setEliminados(registros);
     } catch (error) {
-      window.alert("Error al restaurar: " + (error instanceof Error ? error.message : String(error)));
+      setErrorPapelera(error instanceof Error ? error.message : String(error));
     } finally {
-      setRestaurando10000(false);
+      setCargandoPapelera(false);
+    }
+  }
+
+  async function restaurarProducto(producto: { code: string; name: string }) {
+    if (profile?.role !== "admin" || restaurandoCodigo) return;
+    if (!window.confirm(`¿Restaurar ${producto.code} - ${producto.name}? El stock no se modificará.`)) return;
+    setRestaurandoCodigo(producto.code);
+    try {
+      const { error } = await supabase.rpc("restaurar_producto_admin", { p_codigo: producto.code });
+      if (error) throw error;
+      await Promise.all([cargarPapelera(), cargar(true)]);
+      setBusqueda(producto.code);
+      setPestanaStock("disponibles");
+      window.alert(`Producto ${producto.code} restaurado correctamente.`);
+    } catch (error) {
+      window.alert("No se pudo restaurar: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setRestaurandoCodigo(null);
     }
   }
 
@@ -313,18 +344,9 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
       <div className="md:col-span-1">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Productos</p>
-          <div className="flex items-center gap-2">
-            {profile?.role === "admin" && (
-              <button type="button" onClick={restaurarProducto10000} disabled={restaurando10000}
-                className="text-xs px-3 py-1.5 rounded-md"
-                style={{ background: "#4F6F52", color: "#F7F3EC" }}>
-                {restaurando10000 ? "Restaurando..." : "Restaurar 10000"}
-              </button>
-            )}
           <button onClick={() => setMostrarNuevo((v) => !v)} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
             <Plus size={13} /> Nuevo
           </button>
-          </div>
         </div>
 
         <div className="flex items-center gap-2 px-3 py-2 rounded mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
@@ -356,6 +378,42 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
             Agotados ({agotados.length} productos)
           </button>
         </div>
+
+        {profile?.role === "admin" && (
+          <div className="mb-3">
+            <button type="button" onClick={() => {
+              if (!mostrarPapelera) void cargarPapelera();
+              setMostrarPapelera(!mostrarPapelera);
+            }} className="text-xs px-3 py-2 rounded-md flex items-center gap-2"
+              style={{ background: "#EDE7DE", color: "#7A2540", border: "1px solid #D9D0C2" }}>
+              <Trash2 size={14} /> {mostrarPapelera ? "Cerrar papelera" : "Papelera de productos"}
+            </button>
+            {mostrarPapelera && (
+              <div className="mt-2 p-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                <p className="text-sm font-medium mb-2">Productos eliminados ({eliminados.length})</p>
+                <input value={busquedaPapelera} onChange={(e) => setBusquedaPapelera(e.target.value)}
+                  placeholder="Buscar código o descripción eliminados"
+                  className="w-full px-3 py-2 mb-2 rounded text-sm outline-none"
+                  style={{ background: "#fff", border: "1px solid #D9D0C2" }} />
+                {cargandoPapelera && <p className="text-xs">Cargando papelera...</p>}
+                {errorPapelera && <p className="text-xs" style={{ color: "#B42318" }}>Error: {errorPapelera}</p>}
+                <div className="overflow-y-auto" style={{ maxHeight: "40vh" }}>
+                  {eliminados.filter((p) => `${p.code} ${p.name}`.toLowerCase().includes(busquedaPapelera.trim().toLowerCase())).map((p) => (
+                    <div key={p.id} className="flex items-center justify-between gap-2 py-2" style={{ borderBottom: "1px solid #D9D0C2" }}>
+                      <div className="text-xs min-w-0"><strong>{p.code}</strong> — {p.name}<div>Stock físico: {p.stock_physical}</div></div>
+                      <button type="button" disabled={restaurandoCodigo !== null} onClick={() => void restaurarProducto(p)}
+                        className="text-xs px-2 py-1 rounded flex-shrink-0"
+                        style={{ background: "#4F6F52", color: "white" }}>
+                        {restaurandoCodigo === p.code ? "Restaurando..." : "Restaurar"}
+                      </button>
+                    </div>
+                  ))}
+                  {!cargandoPapelera && !errorPapelera && eliminados.length === 0 && <p className="text-xs">No hay productos eliminados.</p>}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {mostrarNuevo && (
           <form onSubmit={crearProducto} className="p-3 mb-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
