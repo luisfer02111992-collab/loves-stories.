@@ -19,7 +19,7 @@ function inicioDeHoy() {
 function badgeDias(dias: number) {
   if (dias >= 5) return { label: `Día ${dias} · alerta`, bg: "#F4E3E6", fg: "#7A2540" };
   if (dias === 4) return { label: `Día ${dias} · atención`, bg: "#F6EAD2", fg: "#7A5F2D" };
-  return { label: `Día ${dias}`, bg: "#E4EBE1", fg: "#4F6F52" };
+  return { label: `Día ${dias} · vigente`, bg: "#E4EBE1", fg: "#4F6F52" };
 }
 
 export default function Dashboard() {
@@ -70,8 +70,12 @@ export default function Dashboard() {
       let subtotal = 0;
       (o.order_items ?? []).forEach((it: any) => (subtotal += it.quantity * it.unit_price));
       valorAbiertos += subtotal;
-      const dias = Math.floor((Date.now() - new Date(o.opened_at).getTime()) / 86400000) + 1;
-      if (dias >= 3) vencer.push({ id: o.id, cliente: o.customers?.name ?? "Cliente", telefono: o.customers?.phone ?? "", dias });
+      // Mismo cómputo de días que Clientes.tsx: día 0 al abrir la cuenta.
+      const dias = Math.max(0, Math.floor((Date.now() - new Date(o.opened_at).getTime()) / 86400000));
+      // Mostrar únicamente pedidos abiertos desde el día 4, sin límite de personas.
+      if (o.customer_id && o.opened_at && dias >= 4) {
+        vencer.push({ id: o.id, cliente: o.customers?.name ?? "Cliente", telefono: o.customers?.phone ?? "", dias });
+      }
     });
 
     // Depósitos de hoy
@@ -91,7 +95,8 @@ export default function Dashboard() {
     setCuentasAbiertas(new Set((abiertos ?? []).map((o:any)=>o.customer_id).filter(Boolean)).size);
     setDepositosHoy(totalDepositos);
     setStockBajo(count ?? 0);
-    setPorVencer(vencer.sort((a, b) => b.dias - a.dias).slice(0, 6));
+    // Sin límite: todos los pedidos desde el día 4, de mayor a menor antigüedad.
+    setPorVencer(vencer.sort((a, b) => b.dias - a.dias));
     setCargando(false);
   }
 
@@ -114,7 +119,7 @@ export default function Dashboard() {
           <p className="font-serif text-base">Pedidos por antigüedad</p>
         </div>
         <div>
-          {porVencer.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay pedidos por vencer.</p>}
+          {porVencer.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>No hay pedidos que hayan llegado al día 4.</p>}
           {porVencer.map((p) => {
             const b = badgeDias(p.dias);
             return (
