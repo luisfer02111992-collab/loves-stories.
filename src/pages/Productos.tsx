@@ -28,6 +28,7 @@ export default function Productos() {
   });
   const [subiendo, setSubiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  const [restaurando10000, setRestaurando10000] = useState(false);
   const [busqueda, setBusqueda] = useState("");
   const [pestanaStock, setPestanaStock] = useState<"disponibles" | "agotados">("disponibles");
   const buscadorRef = useRef<HTMLInputElement>(null);
@@ -265,6 +266,27 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
     cargar();
   }
 
+  async function restaurarProducto10000() {
+    if (profile?.role !== "admin" || restaurando10000) return;
+    if (!window.confirm("¿Restaurar el producto 10000 (Aretes dorados)? No se cambiará su stock.")) return;
+    setRestaurando10000(true);
+    try {
+      const { error } = await supabase.rpc("restaurar_producto_admin", { p_codigo: "10000" });
+      if (error) {
+        window.alert("No se pudo restaurar el producto 10000: " + error.message);
+        return;
+      }
+      window.alert("Producto 10000 restaurado correctamente.");
+      setBusqueda("10000");
+      setPestanaStock("disponibles");
+      await cargar(true);
+    } catch (error) {
+      window.alert("Error al restaurar: " + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      setRestaurando10000(false);
+    }
+  }
+
   async function eliminarProducto() {
     if (!seleccionado) return;
     if (!confirm(`¿Eliminar "${seleccionado.name}"? Podrás restaurarlo luego desde la Papelera.`)) return;
@@ -291,9 +313,18 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
       <div className="md:col-span-1">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Productos</p>
+          <div className="flex items-center gap-2">
+            {profile?.role === "admin" && (
+              <button type="button" onClick={restaurarProducto10000} disabled={restaurando10000}
+                className="text-xs px-3 py-1.5 rounded-md"
+                style={{ background: "#4F6F52", color: "#F7F3EC" }}>
+                {restaurando10000 ? "Restaurando..." : "Restaurar 10000"}
+              </button>
+            )}
           <button onClick={() => setMostrarNuevo((v) => !v)} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
             <Plus size={13} /> Nuevo
           </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 px-3 py-2 rounded mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
