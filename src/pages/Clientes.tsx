@@ -672,7 +672,21 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   async function eliminarCliente() {
     if (!seleccionado || procesandoPapelera) return;
     const nombre = seleccionado.name;
-    if (!confirm(`¿Enviar a "${nombre}" a la papelera?\n\nSus pedidos, asignaciones y depósitos se conservarán. Podrás restaurarlo desde Papelera.`)) return;
+    // Verificación visual; la protección definitiva se realiza en trash_customer.
+    const { count: itemsAsignados, error: errorConsulta } = await supabase
+      .from("order_items")
+      .select("id, orders!inner(customer_id, status)", { count: "exact", head: true })
+      .eq("orders.customer_id", seleccionado.id)
+      .in("orders.status", ["open", "reopened"]);
+    if (errorConsulta) {
+      alert(`No se pudo comprobar si el cliente tiene joyas asignadas: ${errorConsulta.message}`);
+      return;
+    }
+    if ((itemsAsignados ?? 0) > 0) {
+      alert("NO SE PUEDE ELIMINAR EL CLIENTE. Tiene joyas asignadas. Primero retira todos los productos de su pedido para devolverlos al inventario.");
+      return;
+    }
+    if (!confirm(`¿Enviar a "${nombre}" a la papelera?\n\nNo tiene joyas asignadas en pedidos abiertos. Sus registros históricos y depósitos se conservarán. Podrás restaurarlo desde Papelera.`)) return;
     setProcesandoPapelera(true);
     try {
       const { error } = await supabase.rpc("trash_customer", { p_customer_id: seleccionado.id });
