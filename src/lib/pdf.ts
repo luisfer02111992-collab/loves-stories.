@@ -1,20 +1,17 @@
 import { jsPDF } from "jspdf";
 import type { GrupoProducto } from "./pricing";
 
-// Ordena por categoría real sin modificar los grupos ni sus cálculos.
-// Dentro de cada categoría conserva el orden original de asignación.
-function ordenarPorCategoria<T extends { categoria_id?: string | null }>(elementos: T[]): T[] {
-  return elementos
-    .map((elemento, indice) => ({ elemento, indice }))
-    .sort((a, b) => {
-      const categoriaA = a.elemento.categoria_id ?? "";
-      const categoriaB = b.elemento.categoria_id ?? "";
-      if (categoriaA === categoriaB) return a.indice - b.indice;
-      if (!categoriaA) return 1;
-      if (!categoriaB) return -1;
-      return categoriaA.localeCompare(categoriaB);
-    })
-    .map(({ elemento }) => elemento);
+// Orden alfabético A-Z por nombre del producto en todos los PDF.
+// No modifica los datos originales ni los importes calculados.
+function ordenarProductosAZ<T extends { nombre: string; codigo?: string }>(elementos: T[]): T[] {
+  return [...elementos].sort((a, b) => {
+    const porNombre = (a.nombre ?? "").localeCompare(b.nombre ?? "", "es", {
+      sensitivity: "base",
+      numeric: true,
+    });
+    if (porNombre !== 0) return porNombre;
+    return (a.codigo ?? "").localeCompare(b.codigo ?? "", "es", { numeric: true });
+  });
 }
 function textoPdf(valor: unknown): string {
   return String(valor ?? "")
@@ -342,7 +339,7 @@ export async function generarPdfGrande(
   // PRODUCTOS
   // ==========================================================
 
-  for (const g of ordenarPorCategoria(datos.grupos)) {
+  for (const g of ordenarProductosAZ(datos.grupos)) {
     let imagenCargada: Awaited<
       ReturnType<typeof cargarImagenComoDataUrl>
     > = null;
@@ -846,7 +843,7 @@ export function generarPdfSesion(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(10);
 
-  for (const l of ordenarPorCategoria(datos.lineas)) {
+  for (const l of ordenarProductosAZ(datos.lineas)) {
     if (y > 270) {
       doc.addPage();
 
@@ -1112,7 +1109,7 @@ export function generarPdfPedido(
 
   doc.setFont("helvetica", "normal");
 
-  for (const g of ordenarPorCategoria(datos.grupos)) {
+  for (const g of ordenarProductosAZ(datos.grupos)) {
     doc.setFontSize(9);
 
     doc.text(
@@ -1467,7 +1464,7 @@ export async function generarPdfCatalogo(
   encabezadoTabla();
 
   // PRODUCTOS
-  for (const item of ordenarPorCategoria(datos.items)) {
+  for (const item of ordenarProductosAZ(datos.items)) {
     let imagenCargada: Awaited<
       ReturnType<typeof cargarImagenComoDataUrl>
     > = null;
