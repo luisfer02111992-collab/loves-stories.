@@ -57,6 +57,65 @@ async function cerrarSesionSeguro() {
   await signOut();
 }
 
+  // En Android el zoom del navegador puede dejar el scroll horizontal sin recorrido.
+  // Arrastre visual independiente: solo con un dedo y zoom activo.
+  useEffect(() => {
+    const shell = document.querySelector<HTMLElement>(".ls-app-shell");
+    if (!shell) return;
+    let startX = 0, startY = 0, originX = 0, shiftX = 0;
+    let active = false, dragging = false;
+    const isZoomed = () => (window.visualViewport?.scale ?? 1) > 1.05;
+    const reset = () => {
+      shiftX = 0;
+      shell.style.transform = "";
+      shell.style.willChange = "";
+    };
+    const start = (e: TouchEvent) => {
+      active = false;
+      dragging = false;
+      if (e.touches.length !== 1 || !isZoomed()) return;
+      const el = e.target as HTMLElement;
+      if (el.closest("input,textarea,select,button,a,[contenteditable]")) return;
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      originX = shiftX;
+      active = true;
+    };
+    const move = (e: TouchEvent) => {
+      if (!active || e.touches.length !== 1 || !isZoomed()) return;
+      const dx = e.touches[0].clientX - startX;
+      const dy = e.touches[0].clientY - startY;
+      if (!dragging) {
+        if (Math.abs(dy) > 9 && Math.abs(dy) > Math.abs(dx)) { active = false; return; }
+        if (Math.abs(dx) < 7 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+        dragging = true;
+      }
+      // La traslación se limita para no perder la página fuera de pantalla.
+      const viewportWidth = window.visualViewport?.width ?? window.innerWidth;
+      const pageWidth = Math.max(shell.scrollWidth, shell.getBoundingClientRect().width);
+      const maxPan = Math.max(0, pageWidth - viewportWidth);
+      shiftX = Math.min(0, Math.max(-maxPan, originX + dx));
+      shell.style.willChange = "transform";
+      shell.style.transform = `translate3d(${shiftX}px,0,0)`;
+      e.preventDefault();
+    };
+    const end = () => { active = false; dragging = false; };
+    const zoomChange = () => { if (!isZoomed()) reset(); };
+    document.addEventListener("touchstart", start, { passive: true, capture: true });
+    document.addEventListener("touchmove", move, { passive: false, capture: true });
+    document.addEventListener("touchend", end, { passive: true, capture: true });
+    document.addEventListener("touchcancel", end, { passive: true, capture: true });
+    window.visualViewport?.addEventListener("resize", zoomChange);
+    return () => {
+      document.removeEventListener("touchstart", start, true);
+      document.removeEventListener("touchmove", move, true);
+      document.removeEventListener("touchend", end, true);
+      document.removeEventListener("touchcancel", end, true);
+      window.visualViewport?.removeEventListener("resize", zoomChange);
+      reset();
+    };
+  }, []);
+
   useEffect(() => {
     cargarTema();
     const refrescarTema = () => cargarTema();
