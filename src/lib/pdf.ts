@@ -475,7 +475,7 @@ export async function generarPdfGrande(
     // ========================================================
 
     doc.text(
-      `Bs ${g.precioUnitarioFinal.toFixed(2)}`,
+      `Bs ${(g.cantidadTotal > 0 ? g.subtotalSinDescuento / g.cantidadTotal : 0).toFixed(2)}`,
       xPrecio,
       yInicio + 4.8
     );
@@ -1140,9 +1140,9 @@ export function generarPdfPedido(
       .join("   ");
 
     doc.text(
-      `Cant. total: ${g.cantidadTotal} × Bs ${g.precioUnitarioFinal.toFixed(
+      `Cant. total: ${g.cantidadTotal} × Bs ${(g.cantidadTotal > 0 ? g.subtotalSinDescuento / g.cantidadTotal : 0).toFixed(
         2
-      )}  (${detalle})`,
+      )}  - Desc. Bs ${g.descuento.toFixed(2)}  (${detalle})`,
       x1,
       y,
       {
