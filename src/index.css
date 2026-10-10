@@ -260,3 +260,70 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-clientes-workspace > .ls-clientes-list-panel::-webkit-scrollbar-track,
   .ls-clientes-workspace > .ls-clientes-order-panel::-webkit-scrollbar-track { background: #f1e9e3; }
 }
+
+/* Escritorio: menú lateral fijo y desplazable en TODAS las funciones.
+   Cada página tiene su propia barra; Clientes conserva sus tres columnas. */
+@media (min-width: 768px) {
+  html, body, #root {
+    height: 100%;
+  }
+  .ls-app-shell {
+    height: 100dvh !important;
+    min-height: 0 !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+  .ls-app-shell > .ls-workspace {
+    flex: 1 1 0% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-workspace > .ls-sidebar {
+    display: flex !important;
+    flex-direction: column !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-sidebar > .ls-sidebar-brand {
+    flex: 0 0 auto;
+  }
+  .ls-sidebar > .ls-sidebar-nav {
+    flex: 1 1 0% !important;
+    min-height: 0 !important;
+    overflow-y: scroll !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+    scrollbar-width: auto !important;
+    scrollbar-color: #c49b82 #713047;
+  }
+  .ls-workspace > .ls-main-content {
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: scroll !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+    scrollbar-width: auto !important;
+    scrollbar-color: #a78a64 #f1e9e3;
+  }
+  /* Clientes ya dispone de scroll separado para lista y asignaciones. */
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    overflow: hidden !important;
+  }
+  .ls-sidebar-nav::-webkit-scrollbar,
+  .ls-main-content::-webkit-scrollbar { width: 11px; }
+  .ls-sidebar-nav::-webkit-scrollbar-thumb {
+    background: #c49b82;
+    border: 2px solid #713047;
+    border-radius: 8px;
+  }
+  .ls-main-content::-webkit-scrollbar-thumb {
+    background: #a78a64;
+    border: 2px solid #f1e9e3;
+    border-radius: 8px;
+  }
+  .ls-sidebar-nav::-webkit-scrollbar-track { background: #713047; }
+  .ls-main-content::-webkit-scrollbar-track { background: #f1e9e3; }
+}
