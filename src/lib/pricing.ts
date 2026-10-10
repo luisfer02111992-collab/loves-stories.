@@ -29,6 +29,8 @@ export interface LineaPedido {
   categoria_id: string | null;
   cantidad: number;
   precio_base: number;
+  precio_catalogo?: number | null;
+  precio_manual?: boolean;
   fecha: string;
     ring_size?: string | null;
   vendedorNombre?: string | null;
@@ -59,7 +61,11 @@ export interface GrupoProducto {
 // calcula el descuento sobre esa cantidad acumulada — no por cada asignación suelta.
 export function agruparPorProducto(reglas: PricingRule[], lineas: LineaPedido[]): GrupoProducto[] {
   const grupos = new Map<string, GrupoProducto>();
+  const preciosOriginales = new Map<string, number>();
+  const manuales = new Set<string>();
   for (const l of lineas) {
+    if (l.precio_catalogo != null) preciosOriginales.set(l.product_id, l.precio_catalogo);
+    if (l.precio_manual) manuales.add(l.product_id);
     let g = grupos.get(l.product_id);
     if (!g) {
       g = {
@@ -88,9 +94,20 @@ g.detalle.push({
   vendedorNombre: l.vendedorNombre,
 });  }
   for (const g of grupos.values()) {
-    const base = g.subtotalSinDescuento / g.cantidadTotal;
-    const porNombre = precioNegocioPorCantidad(null, g.nombre, g.cantidadTotal, base);
-    g.precioUnitarioFinal = porNombre < base ? porNombre : precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
+    // La tarifa de catálogo no contiene descuentos por cantidad anteriores.
+    const base = preciosOriginales.get(g.product_id) ?? g.subtotalSinDescuento / g.cantidadTotal;
+    g.subtotalSinDescuento = base * g.cantidadTotal;
+    if (manuales.has(g.product_id)) {
+      g.precioUnitarioFinal = base;
+      g.subtotalConDescuento = base * g.cantidadTotal;
+      g.descuento = 0;
+      continue;
+    }
+    const descuento = descuentoNegocioPorCantidad(null, g.nombre, g.cantidadTotal);
+    const categoriaConRegla = /(aret|dije|pulser|\bset\b|collar|anill|caden)/.test(g.nombre.toLowerCase());
+    g.precioUnitarioFinal = categoriaConRegla
+      ? Math.max(0, base - descuento)
+      : precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
     g.subtotalConDescuento = g.precioUnitarioFinal * g.cantidadTotal;
     g.descuento = g.subtotalSinDescuento - g.subtotalConDescuento;
     // Se conservan las líneas reales y sus IDs. La UI puede resumir fechas,

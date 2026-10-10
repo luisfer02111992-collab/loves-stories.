@@ -118,9 +118,16 @@ export default function Clientes() {
       setFechaApertura(orden.opened_at);
       const { data: filas } = await supabase
         .from("order_items")
-        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id, image_url)")
+        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, price, category_id, image_url)")
         .eq("order_id", orden.id)
         .order("assigned_at", { ascending: true });
+      const { data: auditoria, error: errorAuditoria } = await supabase.from("audit_log").select("created_at, details").eq("action", "precio_item_pedido_editado").contains("details", { order_id: orden.id }).order("created_at", { ascending: false });
+      if (errorAuditoria) { alert("No se pudieron comprobar los precios manuales del pedido. No se mostrarán importes incompletos."); setItems([]); return; }
+      const manuales = new Map<string, number>();
+      for (const registro of auditoria ?? []) {
+        const d = registro.details as { order_id?: string; product_id?: string; precio_nuevo?: number };
+        if (d?.order_id === orden.id && d.product_id && !manuales.has(d.product_id)) manuales.set(d.product_id, Number(d.precio_nuevo));
+      }
       const detalle: LineaPedido[] = (filas ?? []).map((f: any) => ({
         id: f.id,
         product_id: f.product_id,
@@ -129,7 +136,9 @@ export default function Clientes() {
         categoria_id: f.products?.category_id ?? null,
         imagen: f.products?.image_url ?? null,
         cantidad: f.quantity,
-        precio_base: f.unit_price,
+        precio_base: Number(f.unit_price),
+        precio_catalogo: manuales.get(f.product_id) ?? (f.products?.price == null ? null : Number(f.products.price)),
+        precio_manual: manuales.has(f.product_id),
         fecha: new Date(f.assigned_at).toLocaleDateString("es-BO"),
       }));
       setItems(detalle);
@@ -327,7 +336,16 @@ export default function Clientes() {
   async function generarPdfPorFecha(fechaElegida: string) {
     if (!seleccionado) return;
     const itemsDeEseDia = items.filter((it) => it.fecha === fechaElegida);
-    const gruposDia = agruparPorProducto(reglas, itemsDeEseDia);
+    const gruposDia = agruparPorProducto(reglas, itemsDeEseDia).map((grupo) => {
+      const acumulado = grupos.find((g) => g.product_id === grupo.product_id);
+      if (!acumulado) return grupo;
+      const base = acumulado.subtotalSinDescuento / acumulado.cantidadTotal;
+      const precio = acumulado.precioUnitarioFinal;
+      return { ...grupo, precioUnitarioFinal: precio,
+        subtotalSinDescuento: base * grupo.cantidadTotal,
+        subtotalConDescuento: precio * grupo.cantidadTotal,
+        descuento: (base - precio) * grupo.cantidadTotal };
+    });
     const subDia = gruposDia.reduce((a, g) => a + g.subtotalSinDescuento, 0);
     const totalDia = gruposDia.reduce((a, g) => a + g.subtotalConDescuento, 0);
     setGenerandoPdf(true);
