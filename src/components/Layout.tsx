@@ -57,6 +57,54 @@ async function cerrarSesionSeguro() {
   await signOut();
 }
 
+  // Permite arrastrar horizontalmente con un dedo después de hacer zoom.
+  // No interviene cuando la página está a escala normal ni sobre controles.
+  useEffect(() => {
+    let lastX = 0;
+    let lastY = 0;
+    let tracking = false;
+    let horizontal = false;
+    const zoomed = () => (window.visualViewport?.scale ?? 1) > 1.05;
+    const down = (event: TouchEvent) => {
+      tracking = false;
+      horizontal = false;
+      if (event.touches.length !== 1 || !zoomed()) return;
+      const target = event.target as HTMLElement | null;
+      if (target?.closest("input,textarea,select,button,a,[contenteditable=true]")) return;
+      lastX = event.touches[0].clientX;
+      lastY = event.touches[0].clientY;
+      tracking = true;
+    };
+    const move = (event: TouchEvent) => {
+      if (!tracking || event.touches.length !== 1 || !zoomed()) return;
+      const x = event.touches[0].clientX;
+      const y = event.touches[0].clientY;
+      const dx = lastX - x;
+      const dy = lastY - y;
+      if (!horizontal && Math.abs(dx) > 5 && Math.abs(dx) > Math.abs(dy) * 1.15) horizontal = true;
+      lastX = x;
+      lastY = y;
+      if (!horizontal) return; // Conservar scroll vertical original.
+      event.preventDefault();
+      window.scrollBy({ left: dx, top: 0, behavior: "instant" });
+      const main = document.querySelector<HTMLElement>(".ls-main-content");
+      if (main && document.documentElement.scrollWidth <= window.innerWidth + 1) {
+        main.scrollLeft += dx;
+      }
+    };
+    const up = () => { tracking = false; horizontal = false; };
+    document.addEventListener("touchstart", down, { passive: true, capture: true });
+    document.addEventListener("touchmove", move, { passive: false, capture: true });
+    document.addEventListener("touchend", up, { passive: true, capture: true });
+    document.addEventListener("touchcancel", up, { passive: true, capture: true });
+    return () => {
+      document.removeEventListener("touchstart", down, true);
+      document.removeEventListener("touchmove", move, true);
+      document.removeEventListener("touchend", up, true);
+      document.removeEventListener("touchcancel", up, true);
+    };
+  }, []);
+
   useEffect(() => {
     cargarTema();
     const refrescarTema = () => cargarTema();
