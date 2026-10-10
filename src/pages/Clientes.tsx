@@ -336,6 +336,8 @@ export default function Clientes() {
 
     const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: itemId, p_quantity: 1 });
     if (error) { alert(`No se pudo disminuir: ${error.message}`); return; }
+    setItems(prev => prev.flatMap(item => item.id !== itemId ? [item] :
+      Number(item.cantidad) > 1 ? [{ ...item, cantidad: Number(item.cantidad) - 1 }] : []));
 
     try {
       if (pedidoActualId && clienteActualId) await cerrarPedidoVacioSinDeposito(clienteActualId, pedidoActualId);
@@ -346,7 +348,8 @@ export default function Clientes() {
     if (clienteActualId) {
       // Ambas lecturas son independientes: ejecutarlas a la vez evita
       // esperar a que termine una para empezar la otra.
-      await Promise.all([cargarPedido(clienteActualId), cargarClientes()]);
+      void Promise.all([cargarPedido(clienteActualId), cargarClientes()]).catch(err =>
+        console.error("Error actualizando el pedido tras quitar:", err));
     }
   }
 
@@ -367,7 +370,12 @@ export default function Clientes() {
 
     for (const d of g.detalle) {
       const { error } = await supabase.rpc("remove_order_item_unit", { p_order_item_id: d.id, p_quantity: d.cantidad });
-      if (error) { alert(`No se pudo eliminar el producto: ${error.message}`); return; }
+      if (error) {
+        alert(`No se pudo eliminar el producto: ${error.message}`);
+        if (clienteActualId) void cargarPedido(clienteActualId);
+        return;
+      }
+      setItems(prev => prev.filter(item => item.id !== d.id));
     }
 
     try {
@@ -380,7 +388,8 @@ export default function Clientes() {
     if (clienteActualId) {
       // Ambas lecturas son independientes: ejecutarlas a la vez evita
       // esperar a que termine una para empezar la otra.
-      await Promise.all([cargarPedido(clienteActualId), cargarClientes()]);
+      void Promise.all([cargarPedido(clienteActualId), cargarClientes()]).catch(err =>
+        console.error("Error actualizando el pedido tras quitar:", err));
     }
   }
 
