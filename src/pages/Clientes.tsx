@@ -67,7 +67,6 @@ export default function Clientes() {
   const clienteRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const productoRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const pedidoSolicitud = useRef(0);
-  const pedidoCache = useRef(new Map<string, { orden: any; filas: any[]; auditoria: any[]; pagos: any[]; saved: number }>());
 
   const clientesVisibles = useMemo(() => {
     const q = busquedaCliente.trim().toLowerCase();
@@ -202,7 +201,6 @@ export default function Clientes() {
     setItems([]);
     setOrdenId(null);
     setFechaApertura(null);
-    const cache = pedidoCache.current.get(customerId);
     const { data: orden } = await supabase
       .from("orders")
       .select("id, opened_at")
@@ -845,7 +843,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
         </div>
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           {clientesVisibles.map((c, i, arr) => (
-            <div key={c.id} ref={el => { clienteRefs.current[c.id] = el; }} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id || (busquedaCliente && i===indiceBusqueda) ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+            <div key={c.id} tabIndex={0} ref={el => { clienteRefs.current[c.id] = el; }} onClick={() => { setSeleccionado(c); clienteRefs.current[c.id]?.focus({ preventScroll: true }); }} onKeyDown={e => { if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return; e.preventDefault(); const j = Math.max(0, Math.min(clientesVisibles.length - 1, i + (e.key === "ArrowDown" ? 1 : -1))); setSeleccionado(clientesVisibles[j]); clienteRefs.current[clientesVisibles[j].id]?.focus({ preventScroll: true }); }} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id || (busquedaCliente && i===indiceBusqueda) ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <button onClick={() => setSeleccionado(c)} className="flex-1 text-left">
                 <p className="text-sm">{c.name}</p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
@@ -1002,7 +1000,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
             ) : (
               <div className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
                 {grupos.map((g, i) => (
-                  <div key={g.product_id} ref={el => { productoRefs.current[g.product_id] = el; }} onClick={() => setProductoSeleccionado(g.product_id)}
+                  <div key={g.product_id} tabIndex={0} ref={el => { productoRefs.current[g.product_id] = el; }} onKeyDown={e => { if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return; if ((e.target as HTMLElement).closest("input,textarea,select")) return; e.preventDefault(); const j = Math.max(0, Math.min(grupos.length - 1, i + (e.key === "ArrowDown" ? 1 : -1))); setProductoSeleccionado(grupos[j].product_id); productoRefs.current[grupos[j].product_id]?.focus({ preventScroll: true }); }} onClick={() => { setProductoSeleccionado(g.product_id); productoRefs.current[g.product_id]?.focus({ preventScroll: true }); }}
                     className="px-3.5 py-2.5 cursor-pointer" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none", background: productoSeleccionado === g.product_id ? "#EDE7DE" : "transparent" }}>
                     <div className="flex items-center justify-between">
                       <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
