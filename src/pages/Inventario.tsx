@@ -75,49 +75,27 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
 
  async function cargar() {
   const TAMANO_PAGINA = 1000;
-  const todas: Product[] = [];
-  let desde = 0;
-
-  while (true) {
-    const { data, error } = await supabase
-      .from("products")
-      .select("*, purchase_batches(label)")
-      .is("deleted_at", null)
-      .order("id", { ascending: true })
-      .range(desde, desde + TAMANO_PAGINA - 1);
-
-    if (error) {
-      console.error("Error cargando inventario:", error);
-      break;
-    }
-
-    const pagina = (data as Product[]) ?? [];
-
-    todas.push(...pagina);
-
-    if (pagina.length < TAMANO_PAGINA) {
-      break;
-    }
-
-    desde += TAMANO_PAGINA;
-  }
-
+  const { count, error: countError } = await supabase.from("products")
+    .select("id", { count: "exact", head: true }).is("deleted_at", null);
+  if (countError) { console.error("Error contando inventario:", countError); return; }
+  const total = count ?? 0;
+  const consultas = Array.from({ length: Math.ceil(total / TAMANO_PAGINA) }, (_, i) =>
+    supabase.from("products").select("*, purchase_batches(label)")
+      .is("deleted_at", null).order("id", { ascending: true })
+      .range(i * TAMANO_PAGINA, Math.min(total - 1, (i + 1) * TAMANO_PAGINA - 1))
+  );
+  const [paginas, observaciones] = await Promise.all([
+    Promise.all(consultas),
+    supabase.from("inventory_import_observations")
+      .select("*").eq("status", "pending").order("created_at", { ascending: false })
+  ]);
+  const errorPagina = paginas.find(p => p.error)?.error;
+  if (errorPagina) { console.error("Error cargando inventario:", errorPagina); return; }
+  const todas: Product[] = paginas.flatMap(p => (p.data as Product[]) ?? []);
   setProductos(todas);
-
-  if (todas.length > 0) {
-    setMermaCodigo(todas[0].code);
-  }
-
-  console.log("TOTAL PRODUCTOS CARGADOS:", todas.length);
-
-  const { data: obs, error: obsError } = await supabase
-    .from("inventory_import_observations")
-    .select("*")
-    .eq("status", "pending")
-    .order("created_at", { ascending: false });
-
-  if (obsError) console.error("Error cargando observaciones:", obsError);
-  setObservaciones(obs ?? []);
+  if (todas.length > 0) setMermaCodigo(todas[0].code);
+  if (observaciones.error) console.error("Error cargando observaciones:", observaciones.error);
+  else setObservaciones(observaciones.data ?? []);
 }
   async function exportarInventario() {
     const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet("Inventario");
