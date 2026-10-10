@@ -165,6 +165,20 @@ export default function Clientes() {
     setDisponible(disponibles.reduce((a, p) => a + p.amount, 0));
   }
 
+  // Refrescar importes al regresar a Clientes para evitar datos obsoletos.
+  useEffect(() => {
+    if (!seleccionado) return;
+    const refrescar = () => {
+      if (document.visibilityState === "visible") void cargarPedido(seleccionado.id);
+    };
+    window.addEventListener("focus", refrescar);
+    document.addEventListener("visibilitychange", refrescar);
+    return () => {
+      window.removeEventListener("focus", refrescar);
+      document.removeEventListener("visibilitychange", refrescar);
+    };
+  }, [seleccionado?.id]);
+
   const grupos: GrupoProducto[] = useMemo(() => agruparPorProducto(reglas, items), [items, reglas]);
 
   function resumenFechas(g: GrupoProducto) {
