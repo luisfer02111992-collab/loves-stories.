@@ -129,12 +129,12 @@ async function cerrarSesionSeguro() {
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 flex-col md:flex-row">
+      <div className="flex flex-1 min-h-0 flex-col md:flex-row ls-workspace">
         <div className="md:w-56 shrink-0 px-3 pt-3 pb-3 ls-sidebar" style={{ background: fondoBarra }}>
           <div className="ls-sidebar-brand hidden md:block mb-3">
             <img src="/loves-stories-sidebar-brand.png" alt="LOVE'S STORIES Jewelry" />
           </div>
-          <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible ls-sidebar-nav">
+          <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-y-auto ls-sidebar-nav">
             {secciones.map((s) => {
               const Icon = s.icon;
               return (
