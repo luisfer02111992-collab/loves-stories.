@@ -380,6 +380,20 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
   const unidadesDisponibles = disponibles.reduce((total, p) => total + Number(p.stock_available || 0), 0);
   const unidadesAgotadas = agotados.reduce((total, p) => total + Number(p.stock_available || 0), 0);
 
+  const filasInventarioRef = useRef<Record<string, HTMLDivElement | null>>({});
+  const [filaInventarioSeleccionada, setFilaInventarioSeleccionada] = useState<string | null>(null);
+  function navegarInventario(e: React.KeyboardEvent<HTMLDivElement>, i: number) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    if ((e.target as HTMLElement).closest("input,textarea,select,button")) return;
+    e.preventDefault();
+    const siguiente = Math.max(0, Math.min(lista.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
+    const id = lista[siguiente]?.id;
+    if (!id) return;
+    setFilaInventarioSeleccionada(id);
+    filasInventarioRef.current[id]?.focus({ preventScroll: true });
+    filasInventarioRef.current[id]?.scrollIntoView({ block: "nearest" });
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
@@ -768,8 +782,13 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
 {lista.map((p, i) => (
   <div
     key={p.id}
-    className="grid grid-cols-5 px-3.5 py-2.5 text-sm items-center"
-    style={{ borderBottom: i < lista.length - 1 ? "1px solid #D9D0C2" : "none" }}
+    ref={el => { filasInventarioRef.current[p.id] = el; }}
+    tabIndex={0}
+    onFocus={() => setFilaInventarioSeleccionada(p.id)}
+    onClick={() => { setFilaInventarioSeleccionada(p.id); filasInventarioRef.current[p.id]?.focus({ preventScroll: true }); }}
+    onKeyDown={e => navegarInventario(e, i)}
+    className="grid grid-cols-5 px-3.5 py-2.5 text-sm items-center cursor-pointer"
+    style={{ borderBottom: i < lista.length - 1 ? "1px solid #D9D0C2" : "none", background: filaInventarioSeleccionada === p.id ? "#EDE7DE" : "transparent" }}
   >
     <span>
       {p.image_url ? (
