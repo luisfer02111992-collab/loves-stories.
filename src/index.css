@@ -382,3 +382,25 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow: visible !important;
   }
 }
+
+/* Android Chrome desktop-site mode: pin navigation on both axes.
+   Content remains part of the native document for reliable pinch-pan. */
+@media (min-width: 768px) and (pointer: coarse) {
+  .ls-workspace > .ls-sidebar {
+    position: sticky !important;
+    top: 0 !important;
+    left: 0 !important;
+    z-index: 40 !important;
+    align-self: flex-start !important;
+    flex-shrink: 0 !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+    isolation: isolate !important;
+  }
+  .ls-workspace > .ls-sidebar > .ls-sidebar-nav {
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior-y: contain !important;
+  }
+}
