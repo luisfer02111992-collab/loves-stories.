@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, RotateCcw, Wallet, Printer, Bell, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
@@ -64,6 +64,9 @@ export default function Clientes() {
   const [guardandoPrecio, setGuardandoPrecio] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [indiceBusqueda, setIndiceBusqueda] = useState(0);
+  const clienteRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const productoRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const pedidoSolicitud = useRef(0);
 
   const clientesVisibles = useMemo(() => {
     const q = busquedaCliente.trim().toLowerCase();
@@ -74,12 +77,41 @@ export default function Clientes() {
 
   function tecladoBusquedaCliente(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!clientesVisibles.length) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); setIndiceBusqueda(i => Math.min(i + 1, clientesVisibles.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setIndiceBusqueda(i => Math.max(i - 1, 0)); }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const actual = clientesVisibles.findIndex(c => c.id === seleccionado?.id);
+      const siguiente = Math.max(0, Math.min(clientesVisibles.length - 1, (actual >= 0 ? actual : indiceBusqueda) + (e.key === "ArrowDown" ? 1 : -1)));
+      setIndiceBusqueda(siguiente);
+      setSeleccionado(clientesVisibles[siguiente]);
+    }
     else if (e.key === "Enter") { e.preventDefault(); setSeleccionado(clientesVisibles[Math.min(indiceBusqueda, clientesVisibles.length - 1)]); }
   }
 
   useEffect(() => { setIndiceBusqueda(0); }, [busquedaCliente, pestanaClientes]);
+
+  useEffect(() => {
+    if (seleccionado?.id) clienteRefs.current[seleccionado.id]?.scrollIntoView({ block: "nearest" });
+  }, [seleccionado?.id]);
+
+  useEffect(() => {
+    if (productoSeleccionado) productoRefs.current[productoSeleccionado]?.scrollIntoView({ block: "nearest" });
+  }, [productoSeleccionado]);
+
+  useEffect(() => {
+    function navegarProductos(e: KeyboardEvent) {
+      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+      const activo = document.activeElement as HTMLElement | null;
+      if (activo?.closest("input,textarea,select,[contenteditable=true]")) return;
+      if (!productoSeleccionado || !grupos.length) return;
+      const i = grupos.findIndex(g => g.product_id === productoSeleccionado);
+      if (i < 0) return;
+      e.preventDefault();
+      const siguiente = Math.max(0, Math.min(grupos.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
+      setProductoSeleccionado(grupos[siguiente].product_id);
+    }
+    window.addEventListener("keydown", navegarProductos);
+    return () => window.removeEventListener("keydown", navegarProductos);
+  }, [productoSeleccionado, grupos]);
 
   useEffect(() => {
     cargarClientes();
@@ -164,6 +196,11 @@ export default function Clientes() {
   }
 
   async function cargarPedido(customerId: string) {
+    const solicitud = ++pedidoSolicitud.current;
+    setProductoSeleccionado(null);
+    setItems([]);
+    setOrdenId(null);
+    setFechaApertura(null);
     const { data: orden } = await supabase
       .from("orders")
       .select("id, opened_at")
@@ -173,6 +210,7 @@ export default function Clientes() {
       .limit(1)
       .maybeSingle();
 
+    if (solicitud !== pedidoSolicitud.current) return;
     if (!orden) {
       setOrdenId(null);
       setFechaApertura(null);
@@ -200,6 +238,7 @@ export default function Clientes() {
         const d = registro.details as { product_id?: string; precio_nuevo?: number };
         if (d?.product_id && d.precio_nuevo != null && !manuales.has(d.product_id)) manuales.set(d.product_id, Number(d.precio_nuevo));
       }
+      if (solicitud !== pedidoSolicitud.current) return;
       const detalle: LineaPedido[] = (filas ?? []).map((f: any) => ({
         id: f.id,
         product_id: f.product_id,
@@ -224,6 +263,7 @@ export default function Clientes() {
       .select("id, amount, applied_amount, method, paid_at")
       .eq("customer_id", customerId)
       .order("paid_at", { ascending: false });
+    if (solicitud !== pedidoSolicitud.current) return;
     const disponibles: DepositoDetalle[] = (pagos ?? [])
       .filter((p: any) => p.method !== "cierre_pedido" && p.method !== "devolucion_sobrante")
       .map((p: any) => ({
@@ -800,7 +840,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
         </div>
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           {clientesVisibles.map((c, i, arr) => (
-            <div key={c.id} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id || (busquedaCliente && i===indiceBusqueda) ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
+            <div key={c.id} ref={el => { clienteRefs.current[c.id] = el; }} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id || (busquedaCliente && i===indiceBusqueda) ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <button onClick={() => setSeleccionado(c)} className="flex-1 text-left">
                 <p className="text-sm">{c.name}</p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
@@ -957,7 +997,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
             ) : (
               <div className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
                 {grupos.map((g, i) => (
-                  <div key={g.product_id} onClick={() => setProductoSeleccionado(g.product_id)}
+                  <div key={g.product_id} ref={el => { productoRefs.current[g.product_id] = el; }} onClick={() => setProductoSeleccionado(g.product_id)}
                     className="px-3.5 py-2.5 cursor-pointer" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none", background: productoSeleccionado === g.product_id ? "#EDE7DE" : "transparent" }}>
                     <div className="flex items-center justify-between">
                       <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
