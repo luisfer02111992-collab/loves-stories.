@@ -198,8 +198,18 @@ const clientesFiltrados = useMemo(() => {
         }
       }
 
+      // La confirmación depende de las RPC completadas, no de volver a descargar
+      // todo el inventario. Actualizar el stock visible con las cantidades
+      // confirmadas y evitar una consulta masiva adicional.
+      const asignadasPorProducto = new Map(preparaciones.map(prep => [
+        prep.product.id,
+        Object.values(prep.cantidades).reduce((total, n) => total + Number(n || 0), 0),
+      ] as const));
+      setProductos(prev => prev.map(p => {
+        const asignadas = asignadasPorProducto.get(p.id) ?? 0;
+        return asignadas ? { ...p, stock_available: Math.max(0, Number(p.stock_available) - asignadas) } : p;
+      }).filter(p => Number(p.stock_available) > 0));
       setPreparaciones([]);
-      await cargarProductos();
       alert("Todas las asignaciones se confirmaron correctamente.");
     } catch (err: any) {
       alert(err.message);
