@@ -116,6 +116,12 @@ export default function Clientes() {
     } else {
       setOrdenId(orden.id);
       setFechaApertura(orden.opened_at);
+      // Sincronizar descuentos de pedidos abiertos antes de leer sus importes.
+      // Solo administradores pueden ejecutar esta función; otros roles mantienen lectura.
+      const { error: syncError } = await supabase.rpc("sync_open_order_prices", { p_order_id: orden.id });
+      if (syncError && !/Solo administrador/i.test(syncError.message)) {
+        console.warn("No se pudieron sincronizar los precios del pedido:", syncError.message);
+      }
       const { data: filas } = await supabase
         .from("order_items")
         .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, price, category_id, image_url)")
