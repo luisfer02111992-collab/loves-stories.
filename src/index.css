@@ -327,3 +327,67 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-sidebar-nav::-webkit-scrollbar-track { background: #713047; }
   .ls-main-content::-webkit-scrollbar-track { background: #f1e9e3; }
 }
+
+/* Recuperación móvil: desplazamiento nativo de toda la página.
+   No atrapar gestos dentro de contenedores de altura fija. */
+@media (max-width: 767px) {
+  html, body {
+    height: auto !important;
+    min-height: 100% !important;
+    width: auto !important;
+    overflow: auto !important;
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+  #root {
+    width: 900px !important;
+    min-width: 900px !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell {
+    width: 900px !important;
+    min-width: 900px !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell > .ls-workspace {
+    display: flex !important;
+    flex-direction: row !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+    flex: 1 0 auto !important;
+    align-items: stretch !important;
+  }
+  .ls-workspace > .ls-sidebar {
+    width: 180px !important;
+    flex: 0 0 180px !important;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    position: sticky !important;
+    top: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-sidebar > .ls-sidebar-nav {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ls-workspace > .ls-main-content,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    flex: 1 0 720px !important;
+    width: 720px !important;
+    min-width: 720px !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+}
