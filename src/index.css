@@ -331,7 +331,10 @@ html[data-ls-theme="borgona_luxury"] body {
 /* Vista móvil tipo escritorio: menú izquierdo fijo, no menú horizontal superior.
    Cada panel se desplaza verticalmente de forma independiente. */
 @media (max-width: 767px) {
-  html, body, #root { height: 100%; overflow-x: auto; overflow-y: hidden; }
+  /* El documento debe poder desplazarse horizontalmente al hacer zoom.
+     No encerrar el ancho de escritorio dentro de un root no desplazable. */
+  html, body { height: 100%; overflow-x: auto !important; overflow-y: hidden; }
+  #root { height: 100%; width: 760px; min-width: 760px; overflow: visible !important; }
   .ls-app-shell {
     width: 760px !important;
     min-width: 760px !important;
@@ -368,8 +371,9 @@ html[data-ls-theme="borgona_luxury"] body {
     height: 100% !important;
     min-height: 0 !important;
     overflow-y: auto !important;
-    overflow-x: hidden !important;
-    overscroll-behavior: contain !important;
+    overflow-x: auto !important;
+    overscroll-behavior-y: contain !important;
+    touch-action: auto;
     -webkit-overflow-scrolling: touch;
   }
 }
