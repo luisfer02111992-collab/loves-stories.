@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, RotateCcw, Wallet, Printer, Bell, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
@@ -64,6 +64,8 @@ export default function Clientes() {
   const [guardandoPrecio, setGuardandoPrecio] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [indiceBusqueda, setIndiceBusqueda] = useState(0);
+  const clientesFilaRef = useRef<Record<string, HTMLButtonElement | null>>({});
+  const productosFilaRef = useRef<Record<string, HTMLDivElement | null>>({});
 
   const clientesVisibles = useMemo(() => {
     const q = busquedaCliente.trim().toLowerCase();
@@ -74,8 +76,13 @@ export default function Clientes() {
 
   function tecladoBusquedaCliente(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!clientesVisibles.length) return;
-    if (e.key === "ArrowDown") { e.preventDefault(); setIndiceBusqueda(i => Math.min(i + 1, clientesVisibles.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setIndiceBusqueda(i => Math.max(i - 1, 0)); }
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      const next = Math.max(0, Math.min(clientesVisibles.length - 1, indiceBusqueda + (e.key === "ArrowDown" ? 1 : -1)));
+      setIndiceBusqueda(next);
+      setSeleccionado(clientesVisibles[next]);
+      clientesFilaRef.current[clientesVisibles[next].id]?.scrollIntoView({ block: "nearest" });
+    }
     else if (e.key === "Enter") { e.preventDefault(); setSeleccionado(clientesVisibles[Math.min(indiceBusqueda, clientesVisibles.length - 1)]); }
   }
 
@@ -801,7 +808,17 @@ function linkWhatsapp(telefono: string, mensaje: string) {
         <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           {clientesVisibles.map((c, i, arr) => (
             <div key={c.id} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id || (busquedaCliente && i===indiceBusqueda) ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
-              <button onClick={() => setSeleccionado(c)} className="flex-1 text-left">
+              <button ref={el => { clientesFilaRef.current[c.id] = el; }} onClick={() => setSeleccionado(c)}
+                onKeyDown={e => {
+                  if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                  e.preventDefault();
+                  const next = Math.max(0, Math.min(clientesVisibles.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
+                  const cliente = clientesVisibles[next];
+                  setSeleccionado(cliente);
+                  setIndiceBusqueda(next);
+                  clientesFilaRef.current[cliente.id]?.focus({ preventScroll: true });
+                  clientesFilaRef.current[cliente.id]?.scrollIntoView({ block: "nearest" });
+                }} className="flex-1 text-left">
                 <p className="text-sm">{c.name}</p>
                 <p className="text-xs" style={{ color: "#5B4E5E" }}>{c.phone}</p>
               </button>
@@ -957,7 +974,18 @@ function linkWhatsapp(telefono: string, mensaje: string) {
             ) : (
               <div className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
                 {grupos.map((g, i) => (
-                  <div key={g.product_id} onClick={() => setProductoSeleccionado(g.product_id)}
+                  <div key={g.product_id} tabIndex={0} ref={el => { productosFilaRef.current[g.product_id] = el; }}
+                    onClick={() => { setProductoSeleccionado(g.product_id); productosFilaRef.current[g.product_id]?.focus({ preventScroll: true }); }}
+                    onKeyDown={e => {
+                      if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                      if ((e.target as HTMLElement).closest("input,textarea,select,button")) return;
+                      e.preventDefault();
+                      const next = Math.max(0, Math.min(grupos.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)));
+                      const id = grupos[next].product_id;
+                      setProductoSeleccionado(id);
+                      productosFilaRef.current[id]?.focus({ preventScroll: true });
+                      productosFilaRef.current[id]?.scrollIntoView({ block: "nearest" });
+                    }}
                     className="px-3.5 py-2.5 cursor-pointer" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none", background: productoSeleccionado === g.product_id ? "#EDE7DE" : "transparent" }}>
                     <div className="flex items-center justify-between">
                       <p className="text-sm">{g.codigo} · {g.nombre} × {g.cantidadTotal}</p>
