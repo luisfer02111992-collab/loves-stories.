@@ -336,7 +336,16 @@ export default function Clientes() {
   async function generarPdfPorFecha(fechaElegida: string) {
     if (!seleccionado) return;
     const itemsDeEseDia = items.filter((it) => it.fecha === fechaElegida);
-    const gruposDia = agruparPorProducto(reglas, itemsDeEseDia);
+    const gruposDia = agruparPorProducto(reglas, itemsDeEseDia).map((grupo) => {
+      const acumulado = grupos.find((g) => g.product_id === grupo.product_id);
+      if (!acumulado) return grupo;
+      const base = acumulado.subtotalSinDescuento / acumulado.cantidadTotal;
+      const precio = acumulado.precioUnitarioFinal;
+      return { ...grupo, precioUnitarioFinal: precio,
+        subtotalSinDescuento: base * grupo.cantidadTotal,
+        subtotalConDescuento: precio * grupo.cantidadTotal,
+        descuento: (base - precio) * grupo.cantidadTotal };
+    });
     const subDia = gruposDia.reduce((a, g) => a + g.subtotalSinDescuento, 0);
     const totalDia = gruposDia.reduce((a, g) => a + g.subtotalConDescuento, 0);
     setGenerandoPdf(true);
