@@ -327,3 +327,58 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-sidebar-nav::-webkit-scrollbar-track { background: #713047; }
   .ls-main-content::-webkit-scrollbar-track { background: #f1e9e3; }
 }
+
+/* Chrome Android: "Sitio de computadora" reports a desktop-sized viewport.
+   Detect actual touch capability instead of assuming width < 768px.
+   Allow the browser visual viewport to pan naturally after pinch zoom. */
+@media (min-width: 768px) and (pointer: coarse) {
+  html, body, #root {
+    height: auto !important;
+    min-height: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+  .ls-app-shell,
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    position: relative !important;
+    inset: auto !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    width: 100% !important;
+    overflow: visible !important;
+    touch-action: auto !important;
+  }
+  .ls-app-shell > .ls-workspace,
+  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace {
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow: visible !important;
+    align-items: stretch !important;
+  }
+  .ls-workspace > .ls-sidebar {
+    position: sticky !important;
+    top: 0 !important;
+    align-self: flex-start !important;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+  .ls-workspace > .ls-main-content,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    height: auto !important;
+    min-height: 75dvh !important;
+    overflow: visible !important;
+  }
+}
