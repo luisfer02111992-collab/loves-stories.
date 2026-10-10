@@ -86,7 +86,7 @@ async function cerrarSesionSeguro() {
       lastY = y;
       if (!horizontal) return; // Conservar scroll vertical original.
       event.preventDefault();
-      window.scrollBy({ left: dx, top: 0, behavior: "instant" });
+      window.scrollBy({ left: dx, top: 0, behavior: "auto" });
       const main = document.querySelector<HTMLElement>(".ls-main-content");
       if (main && document.documentElement.scrollWidth <= window.innerWidth + 1) {
         main.scrollLeft += dx;
