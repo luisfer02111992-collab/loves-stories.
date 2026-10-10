@@ -103,8 +103,11 @@ g.detalle.push({
       g.descuento = 0;
       continue;
     }
-    const porNombre = precioNegocioPorCantidad(null, g.nombre, g.cantidadTotal, base);
-    g.precioUnitarioFinal = porNombre < base ? porNombre : precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
+    const descuento = descuentoNegocioPorCantidad(null, g.nombre, g.cantidadTotal);
+    const categoriaConRegla = /(aret|dije|pulser|\bset\b|collar|anill|caden)/.test(g.nombre.toLowerCase());
+    g.precioUnitarioFinal = categoriaConRegla
+      ? Math.max(0, base - descuento)
+      : precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
     g.subtotalConDescuento = g.precioUnitarioFinal * g.cantidadTotal;
     g.descuento = g.subtotalSinDescuento - g.subtotalConDescuento;
     // Se conservan las líneas reales y sus IDs. La UI puede resumir fechas,
