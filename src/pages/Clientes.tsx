@@ -343,9 +343,10 @@ export default function Clientes() {
       alert(`Se quitó la unidad, pero no se pudo actualizar el estado de la cuenta: ${err.message}`);
     }
 
-    if (seleccionado) {
-      await cargarPedido(seleccionado.id);
-      await cargarClientes();
+    if (clienteActualId) {
+      // Ambas lecturas son independientes: ejecutarlas a la vez evita
+      // esperar a que termine una para empezar la otra.
+      await Promise.all([cargarPedido(clienteActualId), cargarClientes()]);
     }
   }
 
@@ -376,9 +377,10 @@ export default function Clientes() {
     }
 
     setProductoSeleccionado(null);
-    if (seleccionado) {
-      await cargarPedido(seleccionado.id);
-      await cargarClientes();
+    if (clienteActualId) {
+      // Ambas lecturas son independientes: ejecutarlas a la vez evita
+      // esperar a que termine una para empezar la otra.
+      await Promise.all([cargarPedido(clienteActualId), cargarClientes()]);
     }
   }
 
