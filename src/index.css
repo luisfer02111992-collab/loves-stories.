@@ -373,3 +373,17 @@ html[data-ls-theme="borgona_luxury"] body {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* Permitir recorrer horizontalmente el contenido en móvil al ampliar la vista,
+   sin desplazar la barra lateral de funciones. */
+@media (max-width: 767px) {
+  .ls-workspace > .ls-main-content {
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    overscroll-behavior-x: contain !important;
+    touch-action: pan-x pan-y pinch-zoom;
+  }
+  .ls-workspace > .ls-main-content > * {
+    min-width: 600px;
+  }
+}
