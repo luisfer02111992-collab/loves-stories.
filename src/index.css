@@ -327,3 +327,48 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-sidebar-nav::-webkit-scrollbar-track { background: #713047; }
   .ls-main-content::-webkit-scrollbar-track { background: #f1e9e3; }
 }
+
+/* Móvil: mantener el menú de funciones fijo mientras se desplaza el contenido.
+   No afecta al diseño de escritorio ni al scroll interno de Clientes. */
+@media (max-width: 767px) {
+  html, body, #root { height: 100%; overflow: hidden; }
+  .ls-app-shell {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-app-shell > .ls-workspace {
+    flex: 1 1 0% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-workspace > .ls-sidebar {
+    flex: 0 0 auto !important;
+    width: 100% !important;
+    height: auto !important;
+    min-height: 0 !important;
+    padding-top: 0.25rem !important;
+    padding-bottom: 0.25rem !important;
+    overflow: hidden !important;
+  }
+  .ls-sidebar > .ls-sidebar-nav {
+    flex: 0 0 auto !important;
+    min-height: 0 !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    overscroll-behavior-x: contain !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ls-workspace > .ls-main-content {
+    flex: 1 1 0% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    overscroll-behavior-y: contain !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
