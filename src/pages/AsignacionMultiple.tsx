@@ -162,12 +162,34 @@ const clientesFiltrados = useMemo(() => {
         }
       }
 
+      // Consultar los pedidos existentes una sola vez por cliente, en vez de
+      // repetir la búsqueda para cada joya. Las asignaciones siguen siendo
+      // secuenciales para preservar la comprobación de stock de cada RPC.
+      const clientesIds = [...new Set(preparaciones.flatMap(p =>
+        Object.entries(p.cantidades).filter(([, cantidad]) => cantidad > 0).map(([id]) => id)
+      ))];
+      const { data: ordenesAbiertas, error: errOrdenes } = await supabase
+        .from("orders").select("id, customer_id, opened_at")
+        .in("customer_id", clientesIds)
+        .in("status", ["open", "reopened"])
+        .order("opened_at", { ascending: false });
+      if (errOrdenes) throw new Error(errOrdenes.message);
+      const ordenPorCliente = new Map<string, string>();
+      for (const orden of ordenesAbiertas ?? []) {
+        if (!ordenPorCliente.has(orden.customer_id)) ordenPorCliente.set(orden.customer_id, orden.id);
+      }
+
       for (const prep of preparaciones) {
         for (const [clienteId, cantidad] of Object.entries(prep.cantidades)) {
           if (cantidad <= 0) continue;
-          const { data: existente } = await supabase
-            .from("orders").select("id").eq("customer_id", clienteId).in("status", ["open", "reopened"]).maybeSingle();
-          const orderId = existente ? existente.id : (await supabase.from("orders").insert({ customer_id: clienteId }).select().single()).data!.id;
+          let orderId = ordenPorCliente.get(clienteId);
+          if (!orderId) {
+            const { data: nuevaOrden, error: errNuevaOrden } = await supabase
+              .from("orders").insert({ customer_id: clienteId }).select("id").single();
+            if (errNuevaOrden || !nuevaOrden) throw new Error(errNuevaOrden?.message || "No se pudo abrir el pedido.");
+            orderId = nuevaOrden.id;
+            ordenPorCliente.set(clienteId, orderId);
+          }
           const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
             p_order_id: orderId, p_product_id: prep.product.id, p_quantity: cantidad, p_origin: "manual",
             p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
