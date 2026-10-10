@@ -327,3 +327,13 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-sidebar-nav::-webkit-scrollbar-track { background: #713047; }
   .ls-main-content::-webkit-scrollbar-track { background: #f1e9e3; }
 }
+
+/* Vista móvil con navegación lateral: el gesto horizontal lo gestiona Layout,
+   sin anular el desplazamiento vertical de los paneles. */
+@media (max-width: 767px) {
+  .ls-app-shell { width: 900px !important; min-width: 900px !important; }
+  .ls-app-shell > .ls-workspace { flex-direction: row !important; }
+  .ls-workspace > .ls-sidebar { width: 180px !important; flex: 0 0 180px !important; }
+  .ls-sidebar > .ls-sidebar-nav { flex-direction: column !important; overflow-y: auto !important; }
+  .ls-workspace > .ls-main-content { overflow-y: auto !important; }
+}
