@@ -69,7 +69,10 @@ useEffect(() => {
     );
     const paginas = await Promise.all(consultas);
     const todos: Product[] = [];
-    for (const r of paginas) { if (r.error) { console.error("Error cargando productos:", r.error); continue; } todos.push(...(((r.data as Product[]) ?? []))); }
+    for (const r of paginas) {
+      if (r.error) { console.error("Error cargando productos:", r.error); return; }
+      todos.push(...(((r.data as Product[]) ?? [])));
+    }
     setProductos(todos);
 
 const codigoRecibido = searchParams.get("codigo")?.trim();
