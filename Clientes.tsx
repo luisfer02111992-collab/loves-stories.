@@ -121,7 +121,8 @@ export default function Clientes() {
         .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, price, category_id, image_url)")
         .eq("order_id", orden.id)
         .order("assigned_at", { ascending: true });
-      const { data: auditoria } = await supabase.from("audit_log").select("created_at, details").eq("action", "precio_item_pedido_editado").order("created_at", { ascending: false });
+      const { data: auditoria, error: errorAuditoria } = await supabase.from("audit_log").select("created_at, details").eq("action", "precio_item_pedido_editado").contains("details", { order_id: orden.id }).order("created_at", { ascending: false });
+      if (errorAuditoria) { alert("No se pudieron comprobar los precios manuales del pedido. No se mostrarán importes incompletos."); setItems([]); return; }
       const manuales = new Map<string, number>();
       for (const registro of auditoria ?? []) {
         const d = registro.details as { order_id?: string; product_id?: string; precio_nuevo?: number };
