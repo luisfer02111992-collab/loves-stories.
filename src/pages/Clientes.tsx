@@ -67,6 +67,7 @@ export default function Clientes() {
   const clienteRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const productoRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const pedidoSolicitud = useRef(0);
+  const pedidoCache = useRef(new Map<string, { orden: any; filas: any[]; auditoria: any[]; pagos: any[]; saved: number }>());
 
   const clientesVisibles = useMemo(() => {
     const q = busquedaCliente.trim().toLowerCase();
@@ -201,6 +202,7 @@ export default function Clientes() {
     setItems([]);
     setOrdenId(null);
     setFechaApertura(null);
+    const cache = pedidoCache.current.get(customerId);
     const { data: orden } = await supabase
       .from("orders")
       .select("id, opened_at")
@@ -220,18 +222,21 @@ export default function Clientes() {
       setFechaApertura(orden.opened_at);
       // Sincroniza precios almacenados solo para administradores y pedidos abiertos.
       // El cálculo visible siempre parte del catálogo, aunque la sincronización falle.
+      // La sincronización se ejecuta sin bloquear la visualización del pedido.
       if (profile?.role === "admin" || profile?.role === "administrador") {
-        const { error: syncError } = await supabase.rpc("sync_open_order_prices", { p_order_id: orden.id });
-        if (syncError) console.warn("Sincronización de precios:", syncError.message);
+        void supabase.rpc("sync_open_order_prices", { p_order_id: orden.id }).then(({ error }) => {
+          if (error) console.warn("Sincronización de precios:", error.message);
+        });
       }
-      const { data: filas } = await supabase
-        .from("order_items")
+      const [{ data: filas }, { data: auditoria, error: auditError }] = await Promise.all([
+        supabase.from("order_items")
         .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, price, category_id, image_url)")
         .eq("order_id", orden.id)
-        .order("assigned_at", { ascending: true });
-      const { data: auditoria, error: auditError } = await supabase.from("audit_log")
+        .order("assigned_at", { ascending: true }),
+        supabase.from("audit_log")
         .select("created_at, details").eq("action", "precio_item_pedido_editado")
-        .contains("details", { order_id: orden.id }).order("created_at", { ascending: false });
+        .contains("details", { order_id: orden.id }).order("created_at", { ascending: false })
+      ]);
       if (auditError) { console.error(auditError); setItems([]); alert("No se pudo comprobar los precios manuales. Intenta abrir el cliente nuevamente."); return; }
       const manuales = new Map<string, number>();
       for (const registro of auditoria ?? []) {
