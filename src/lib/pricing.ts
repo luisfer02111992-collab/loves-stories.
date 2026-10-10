@@ -29,6 +29,7 @@ export interface LineaPedido {
   categoria_id: string | null;
   cantidad: number;
   precio_base: number;
+  precio_catalogo?: number | null;
   fecha: string;
     ring_size?: string | null;
   vendedorNombre?: string | null;
@@ -59,7 +60,9 @@ export interface GrupoProducto {
 // calcula el descuento sobre esa cantidad acumulada — no por cada asignación suelta.
 export function agruparPorProducto(reglas: PricingRule[], lineas: LineaPedido[]): GrupoProducto[] {
   const grupos = new Map<string, GrupoProducto>();
+  const preciosOriginales = new Map<string, number>();
   for (const l of lineas) {
+    if (l.precio_catalogo != null) preciosOriginales.set(l.product_id, l.precio_catalogo);
     let g = grupos.get(l.product_id);
     if (!g) {
       g = {
@@ -88,7 +91,9 @@ g.detalle.push({
   vendedorNombre: l.vendedorNombre,
 });  }
   for (const g of grupos.values()) {
-    const base = g.subtotalSinDescuento / g.cantidadTotal;
+    // La tarifa de catálogo no contiene descuentos por cantidad anteriores.
+    const base = preciosOriginales.get(g.product_id) ?? g.subtotalSinDescuento / g.cantidadTotal;
+    g.subtotalSinDescuento = base * g.cantidadTotal;
     const porNombre = precioNegocioPorCantidad(null, g.nombre, g.cantidadTotal, base);
     g.precioUnitarioFinal = porNombre < base ? porNombre : precioUnitario(reglas, g.categoria_id, g.cantidadTotal, base);
     g.subtotalConDescuento = g.precioUnitarioFinal * g.cantidadTotal;
