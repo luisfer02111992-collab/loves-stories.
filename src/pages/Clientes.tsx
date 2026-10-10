@@ -180,11 +180,26 @@ export default function Clientes() {
     } else {
       setOrdenId(orden.id);
       setFechaApertura(orden.opened_at);
+      // Sincroniza precios almacenados solo para administradores y pedidos abiertos.
+      // El cálculo visible siempre parte del catálogo, aunque la sincronización falle.
+      if (profile?.role === "admin" || profile?.role === "administrador") {
+        const { error: syncError } = await supabase.rpc("sync_open_order_prices", { p_order_id: orden.id });
+        if (syncError) console.warn("Sincronización de precios:", syncError.message);
+      }
       const { data: filas } = await supabase
         .from("order_items")
-        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id, image_url)")
+        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, price, category_id, image_url)")
         .eq("order_id", orden.id)
         .order("assigned_at", { ascending: true });
+      const { data: auditoria, error: auditError } = await supabase.from("audit_log")
+        .select("created_at, details").eq("action", "precio_item_pedido_editado")
+        .contains("details", { order_id: orden.id }).order("created_at", { ascending: false });
+      if (auditError) { console.error(auditError); setItems([]); alert("No se pudo comprobar los precios manuales. Intenta abrir el cliente nuevamente."); return; }
+      const manuales = new Map<string, number>();
+      for (const registro of auditoria ?? []) {
+        const d = registro.details as { product_id?: string; precio_nuevo?: number };
+        if (d?.product_id && d.precio_nuevo != null && !manuales.has(d.product_id)) manuales.set(d.product_id, Number(d.precio_nuevo));
+      }
       const detalle: LineaPedido[] = (filas ?? []).map((f: any) => ({
         id: f.id,
         product_id: f.product_id,
@@ -193,7 +208,9 @@ export default function Clientes() {
         categoria_id: f.products?.category_id ?? null,
         imagen: f.products?.image_url ?? null,
         cantidad: f.quantity,
-        precio_base: f.unit_price,
+        precio_base: Number(f.unit_price),
+        precio_catalogo: manuales.get(f.product_id) ?? (f.products?.price == null ? null : Number(f.products.price)),
+        precio_manual: manuales.has(f.product_id),
         fecha: new Date(f.assigned_at).toLocaleDateString("es-BO"),
       }));
       setItems(detalle);
