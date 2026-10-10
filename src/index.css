@@ -139,3 +139,55 @@ html[data-ls-theme="borgona_luxury"] body {
 :root[data-ls-theme="borgona_luxury"] .ls-code-search { background:linear-gradient(135deg,#7b1740,#a4265a)!important; border-color:#b53b6d; }
 :root[data-ls-theme="borgona_luxury"] .ls-code-search-button { background:#c33d78!important; }
 @media (max-width:700px){ .ls-global-banner{height:105px}.ls-global-banner img{object-fit:cover} }
+
+/* Clientes: tres desplazamientos independientes sin perder el menú ni la lista.
+   Solo escritorio; en pantallas pequeñas se conserva el desplazamiento normal. */
+@media (min-width: 768px) {
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    height: 100vh;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar-nav {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .ls-clientes-workspace {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .ls-clientes-list-panel,
+  .ls-clientes-order-panel {
+    min-height: 0;
+    height: 100%;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-gutter: stable;
+  }
+}
