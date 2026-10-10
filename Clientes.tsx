@@ -118,7 +118,7 @@ export default function Clientes() {
       setFechaApertura(orden.opened_at);
       const { data: filas } = await supabase
         .from("order_items")
-        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, category_id, image_url)")
+        .select("id, product_id, quantity, unit_price, assigned_at, products(code, name, price, category_id, image_url)")
         .eq("order_id", orden.id)
         .order("assigned_at", { ascending: true });
       const detalle: LineaPedido[] = (filas ?? []).map((f: any) => ({
@@ -129,7 +129,8 @@ export default function Clientes() {
         categoria_id: f.products?.category_id ?? null,
         imagen: f.products?.image_url ?? null,
         cantidad: f.quantity,
-        precio_base: f.unit_price,
+        precio_base: Number(f.unit_price),
+        precio_catalogo: f.products?.price == null ? null : Number(f.products.price),
         fecha: new Date(f.assigned_at).toLocaleDateString("es-BO"),
       }));
       setItems(detalle);
