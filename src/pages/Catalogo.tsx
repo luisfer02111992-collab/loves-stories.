@@ -102,13 +102,16 @@ const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
         )
   );
 
-  const paginas = await Promise.all(consultas);
+  const [paginas, resultadoCatalogo] = await Promise.all([
+    Promise.all(consultas),
+    supabase.from("catalog_products").select("*").order("created_at"),
+  ]);
   const inventario: Product[] = [];
 
   for (const r of paginas) {
     if (r.error) {
       console.error("Error cargando productos:", r.error);
-      continue;
+      return;
     }
     inventario.push(...((r.data as Product[]) ?? []));
   }
@@ -122,10 +125,11 @@ const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
     inventario.map((p) => [p.id, Math.max(0, Number(p.stock_available) || 0)])
   );
 
-  const { data: cat } = await supabase
-    .from("catalog_products")
-    .select("*")
-    .order("created_at");
+  if (resultadoCatalogo.error) {
+    console.error("Error cargando catálogo:", resultadoCatalogo.error);
+    return;
+  }
+  const cat = resultadoCatalogo.data;
 
   const catalogoValido = ((cat as CatalogProduct[]) ?? []).filter((it) => {
     const stockInventario = stockInventarioPorId.get(it.product_id) ?? 0;
@@ -138,13 +142,16 @@ const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
   setProductos(inventario);
 }
 
-  const disponiblesParaPublicar = productos.filter((p) => p.stock_available > 0 && !items.some((it) => it.product_id === p.id));
+  const disponiblesParaPublicar = useMemo(() => {
+    const publicados = new Set(items.map(it => it.product_id));
+    return productos.filter(p => p.stock_available > 0 && !publicados.has(p.id));
+  }, [productos, items]);
   const coincidenciasProducto = useMemo(() => {
     const q = busquedaProducto.trim().toLowerCase();
     if (!q) return [];
     return disponiblesParaPublicar.filter((p) => p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q)).slice(0, 8);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [busquedaProducto, disponiblesParaPublicar.length]);
+  }, [busquedaProducto, disponiblesParaPublicar]);
 
   useEffect(() => {
     if (indiceProducto < 0) return;
