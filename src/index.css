@@ -327,3 +327,75 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-sidebar-nav::-webkit-scrollbar-track { background: #713047; }
   .ls-main-content::-webkit-scrollbar-track { background: #f1e9e3; }
 }
+
+/*
+ * Mobile native document scrolling experiment.
+ * No JS gesture interception, no transforms, no nested horizontal scroll.
+ * The document itself owns both axes, including after pinch-to-zoom.
+ */
+@media (max-width: 767px) {
+  html, body, #root {
+    width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 100% !important;
+    max-height: none !important;
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+  .ls-app-shell {
+    display: block !important;
+    width: 920px !important;
+    min-width: 920px !important;
+    max-width: none !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow: visible !important;
+    position: static !important;
+    transform: none !important;
+    touch-action: auto !important;
+  }
+  .ls-app-shell > .ls-workspace {
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: stretch !important;
+    height: auto !important;
+    min-height: calc(100dvh - 90px) !important;
+    max-height: none !important;
+    overflow: visible !important;
+    touch-action: auto !important;
+  }
+  .ls-workspace > .ls-sidebar {
+    display: flex !important;
+    flex: 0 0 190px !important;
+    width: 190px !important;
+    height: auto !important;
+    min-height: 100% !important;
+    max-height: none !important;
+    overflow: visible !important;
+    align-self: stretch !important;
+  }
+  .ls-sidebar > .ls-sidebar-nav {
+    display: flex !important;
+    flex-direction: column !important;
+    flex: 0 0 auto !important;
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    touch-action: auto !important;
+  }
+  .ls-workspace > .ls-main-content {
+    flex: 1 0 730px !important;
+    width: 730px !important;
+    min-width: 730px !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+}
