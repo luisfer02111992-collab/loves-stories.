@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Users, Tag, Boxes, Truck, ScanLine, Share2,
@@ -92,6 +92,16 @@ async function cerrarSesionSeguro() {
       : "#2B1E2E";
   const textoBarra = visualTheme ? temaVisual.text : (estiloBarra === "claro" ? "#2B1E2E" : "#C9BFC7");
 
+  const menuRefs = useRef<Record<string, HTMLAnchorElement | null>>({});
+  function navegarMenu(e: React.KeyboardEvent<HTMLAnchorElement>, actual: number) {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const siguiente = Math.max(0, Math.min(secciones.length - 1, actual + (e.key === "ArrowDown" ? 1 : -1)));
+    const enlace = menuRefs.current[secciones[siguiente].to];
+    enlace?.focus({ preventScroll: true });
+    enlace?.scrollIntoView({ block: "nearest" });
+  }
+
   return (
     <div className="min-h-screen flex flex-col ls-app-shell" style={{ background: temaVisual.shell, height: "100dvh", maxHeight: "100dvh", minHeight: 0, overflow: "hidden" }}>
       <div className="flex items-center justify-between px-4 py-2.5 gap-3 flex-wrap" style={{ background: fondoBarra }}>
@@ -135,11 +145,13 @@ async function cerrarSesionSeguro() {
             <img src="/loves-stories-sidebar-brand.png" alt="LOVE'S STORIES Jewelry" />
           </div>
           <div className="flex md:flex-col gap-1 ls-sidebar-nav" style={{ flex: "1 1 0%", minHeight: 0, overflowY: "scroll", overflowX: "hidden", overscrollBehavior: "contain", scrollbarWidth: "auto" }}>
-            {secciones.map((s) => {
+            {secciones.map((s, i) => {
               const Icon = s.icon;
               return (
                 <NavLink
                   key={s.to}
+                  ref={el => { menuRefs.current[s.to] = el; }}
+                  onKeyDown={e => navegarMenu(e, i)}
                   to={s.to}
                   end={s.to === "/"}
                   className={({ isActive }) =>
