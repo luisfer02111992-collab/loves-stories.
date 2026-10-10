@@ -191,3 +191,72 @@ html[data-ls-theme="borgona_luxury"] body {
     scrollbar-gutter: stable;
   }
 }
+
+/* Corrección definitiva: el navegador no desplaza las tres columnas a la vez. */
+@media (min-width: 768px) {
+  html:has(.ls-clientes-workspace),
+  body:has(.ls-clientes-workspace),
+  #root:has(.ls-clientes-workspace) {
+    height: 100%;
+    overflow: hidden !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    position: fixed !important;
+    inset: 0 !important;
+    width: 100%;
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace {
+    flex: 1 1 0% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-global-banner {
+    flex: 0 0 auto !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    display: grid !important;
+    flex: 1 1 0% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+    align-items: stretch !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar-nav,
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    overflow-y: scroll !important;
+    overflow-x: hidden !important;
+    overscroll-behavior: contain !important;
+    scrollbar-width: auto !important;
+    scrollbar-color: #a78a64 #f1e9e3;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar-nav::-webkit-scrollbar,
+  .ls-clientes-workspace > .ls-clientes-list-panel::-webkit-scrollbar,
+  .ls-clientes-workspace > .ls-clientes-order-panel::-webkit-scrollbar { width: 11px; }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar-nav::-webkit-scrollbar-thumb,
+  .ls-clientes-workspace > .ls-clientes-list-panel::-webkit-scrollbar-thumb,
+  .ls-clientes-workspace > .ls-clientes-order-panel::-webkit-scrollbar-thumb {
+    background: #a78a64;
+    border-radius: 8px;
+    border: 2px solid #f1e9e3;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar-nav::-webkit-scrollbar-track,
+  .ls-clientes-workspace > .ls-clientes-list-panel::-webkit-scrollbar-track,
+  .ls-clientes-workspace > .ls-clientes-order-panel::-webkit-scrollbar-track { background: #f1e9e3; }
+}
