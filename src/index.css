@@ -377,3 +377,19 @@ html[data-ls-theme="borgona_luxury"] body {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* El panel principal necesita contenido más ancho que su área visible:
+   de otro modo overflow-x:auto no tiene nada que desplazar en el móvil. */
+@media (max-width: 767px) {
+  .ls-workspace > .ls-main-content {
+    overflow-x: scroll !important;
+    overflow-y: auto !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+    overscroll-behavior-x: auto !important;
+  }
+  .ls-workspace > .ls-main-content > * {
+    min-width: 760px !important;
+    width: max-content;
+    max-width: none !important;
+  }
+}
