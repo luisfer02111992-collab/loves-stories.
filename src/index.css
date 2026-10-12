@@ -429,3 +429,57 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow-y: visible !important;
   }
 }
+
+/* Clientes on a real touch device, including Android "Desktop site".
+   One native document scroll owner: no fixed root and no inner scroll traps.
+   Enabled by Clientes.tsx, not by unreliable desktop-mode pointer queries. */
+html.ls-clientes-touch,
+html.ls-clientes-touch body,
+html.ls-clientes-touch #root {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow: visible !important;
+  touch-action: auto !important;
+}
+html.ls-clientes-touch .ls-app-shell {
+  position: relative !important;
+  inset: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 100dvh !important;
+  overflow: visible !important;
+}
+html.ls-clientes-touch .ls-app-shell > .ls-workspace,
+html.ls-clientes-touch .ls-app-shell .ls-main-content,
+html.ls-clientes-touch .ls-clientes-workspace {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  flex: 1 1 auto !important;
+  touch-action: auto !important;
+}
+html.ls-clientes-touch .ls-clientes-workspace {
+  grid-template-rows: auto !important;
+}
+html.ls-clientes-touch .ls-clientes-workspace > .ls-clientes-list-panel,
+html.ls-clientes-touch .ls-clientes-workspace > .ls-clientes-order-panel {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+  touch-action: auto !important;
+}
+html.ls-clientes-touch .ls-clientes-workspace *,
+html.ls-clientes-touch .ls-clientes-workspace {
+  touch-action: auto !important;
+  overscroll-behavior: auto !important;
+}
+html.ls-clientes-touch .ls-app-shell .ls-sidebar,
+html.ls-clientes-touch .ls-app-shell .ls-sidebar-nav {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+}
