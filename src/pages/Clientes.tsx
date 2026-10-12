@@ -20,6 +20,15 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
+  // Chrome Android can request a desktop viewport; CSS width is not a reliable
+  // way to distinguish a phone from a desktop PC. Limit this mode to Clientes.
+  useEffect(() => {
+    const androidTouch = /Android/i.test(navigator.userAgent) && navigator.maxTouchPoints > 0;
+    if (!androidTouch) return;
+    document.documentElement.classList.add("ls-clientes-android-touch");
+    return () => document.documentElement.classList.remove("ls-clientes-android-touch");
+  }, []);
+
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
