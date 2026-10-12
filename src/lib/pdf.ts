@@ -1358,6 +1358,8 @@ export interface DatosPdfCatalogo {
   fecha: string;
   items: ItemPdfCatalogo[];
   totalUnidades: number;
+  subtotalSinDescuento: number;
+  descuentoTotal: number;
   total: number;
 }
 
@@ -1593,6 +1595,14 @@ export async function generarPdfCatalogo(
 
   y += 7;
 
+  doc.text("Subtotal sin descuento", margen, y);
+  doc.text(`Bs ${datos.subtotalSinDescuento.toFixed(2)}`, margen + anchoUtil, y, { align: "right" });
+
+  y += 7;
+  doc.text("Descuento por cantidad", margen, y);
+  doc.text(`- Bs ${datos.descuentoTotal.toFixed(2)}`, margen + anchoUtil, y, { align: "right" });
+
+  y += 9;
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
 

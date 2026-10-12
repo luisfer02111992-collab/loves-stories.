@@ -3,6 +3,7 @@ import { Check, X, Clock, Search, FileText, FolderOpen } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { CatalogSubmission, Customer } from "../lib/types";
 import { generarPdfCatalogo } from "../lib/pdf";
+import { descuentoNegocioPorCantidad } from "../lib/pricing";
 
 interface ItemPedido {
   id: string;
@@ -249,10 +250,22 @@ export default function PedidosCatalogo() {
       0
     );
 
-    const total = items.reduce(
-      (t, it) => t + it.precio * it.cantidad,
-      0
-    );
+    // Registro informativo: no modifica precios ni aplica descuentos al asignar.
+    // Agrupar por producto evita contar tallas/variantes como modelos distintos.
+    const cantidadesPorProducto = new Map<string, { nombre: string; cantidad: number; precio: number }>();
+    for (const it of pedido.items) {
+      const anterior = cantidadesPorProducto.get(it.catalog_product_id);
+      if (anterior) anterior.cantidad += it.cantidadOriginal;
+      else cantidadesPorProducto.set(it.catalog_product_id, {
+        nombre: it.name, cantidad: it.cantidadOriginal, precio: it.price,
+      });
+    }
+    const subtotalSinDescuento = items.reduce((t, it) => t + it.precio * it.cantidad, 0);
+    const descuentoTotal = Array.from(cantidadesPorProducto.values()).reduce((suma, grupo) => {
+      const descuentoUnitario = descuentoNegocioPorCantidad(null, grupo.nombre, grupo.cantidad);
+      return suma + Math.min(grupo.precio, descuentoUnitario) * grupo.cantidad;
+    }, 0);
+    const total = subtotalSinDescuento - descuentoTotal;
 
     await generarPdfCatalogo({
       negocio: "Love's Stories",
@@ -262,6 +275,8 @@ export default function PedidosCatalogo() {
       fecha: new Date(pedido.created_at).toLocaleString("es-BO"),
       items,
       totalUnidades,
+      subtotalSinDescuento,
+      descuentoTotal,
       total,
     });
   }
