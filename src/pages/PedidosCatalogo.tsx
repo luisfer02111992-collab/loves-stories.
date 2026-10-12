@@ -3,6 +3,7 @@ import { Check, X, Clock, Search, FileText, FolderOpen } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import type { CatalogSubmission, Customer } from "../lib/types";
 import { generarPdfCatalogo } from "../lib/pdf";
+import { descuentoNegocioPorCantidad } from "../lib/pricing";
 
 interface ItemPedido {
   id: string;
@@ -254,6 +255,18 @@ export default function PedidosCatalogo() {
       0
     );
 
+    // Solo para el comprobante del catálogo: mostrar el descuento estimado
+    // por código. NO guardar ni modificar precios del pedido en Supabase.
+    const cantidadesPorCodigo = new Map<string, number>();
+    for (const it of items) {
+      cantidadesPorCodigo.set(it.codigo, (cantidadesPorCodigo.get(it.codigo) ?? 0) + it.cantidad);
+    }
+    const descuentoTotal = items.reduce((acum, it) => {
+      const unidades = cantidadesPorCodigo.get(it.codigo) ?? it.cantidad;
+      const descuentoUnitario = descuentoNegocioPorCantidad(null, it.nombre, unidades);
+      return acum + Math.min(it.precio, descuentoUnitario) * it.cantidad;
+    }, 0);
+
     await generarPdfCatalogo({
       negocio: "Love's Stories",
       codigoPedido: pedido.code,
@@ -263,6 +276,7 @@ export default function PedidosCatalogo() {
       items,
       totalUnidades,
       total,
+      descuentoTotal,
     });
   }
 
