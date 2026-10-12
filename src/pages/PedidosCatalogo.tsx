@@ -257,12 +257,24 @@ export default function PedidosCatalogo() {
 
     // Solo para el comprobante del catálogo: mostrar el descuento estimado
     // por código. NO guardar ni modificar precios del pedido en Supabase.
-    const cantidadesPorCodigo = new Map<string, number>();
+    // El descuento se calcula sobre la cantidad de artículos por GRUPO,
+    // no por código individual (un cliente puede elegir muchos modelos).
+    // Es informativo: no modifica los precios ni se guarda en Supabase.
+    const grupoDe = (nombre: string) => {
+      const n = nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+      if (/(aret|dije|pulser|\\bset\\b|collar)/.test(n)) return "A";
+      if (/(anill|caden)/.test(n)) return "B";
+      return "otro";
+    };
+    const cantidadesPorGrupo = new Map<string, number>();
     for (const it of items) {
-      cantidadesPorCodigo.set(it.codigo, (cantidadesPorCodigo.get(it.codigo) ?? 0) + it.cantidad);
+      const grupo = grupoDe(it.nombre);
+      cantidadesPorGrupo.set(grupo, (cantidadesPorGrupo.get(grupo) ?? 0) + it.cantidad);
     }
     const descuentoTotal = items.reduce((acum, it) => {
-      const unidades = cantidadesPorCodigo.get(it.codigo) ?? it.cantidad;
+      const grupo = grupoDe(it.nombre);
+      if (grupo === "otro") return acum;
+      const unidades = cantidadesPorGrupo.get(grupo) ?? 0;
       const descuentoUnitario = descuentoNegocioPorCantidad(null, it.nombre, unidades);
       return acum + Math.min(it.precio, descuentoUnitario) * it.cantidad;
     }, 0);
