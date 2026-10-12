@@ -797,6 +797,19 @@ function linkWhatsapp(telefono: string, mensaje: string) {
     await cargarInactivos();
   }
 
+  // Chrome's "Desktop site" on a phone can report desktop media queries.
+  // Detect actual touch input rather than relying on viewport width or pointer CSS.
+  useEffect(() => {
+    const activate = () => document.documentElement.classList.add("ls-clientes-touch");
+    const deactivate = () => document.documentElement.classList.remove("ls-clientes-touch");
+    window.addEventListener("touchstart", activate, { passive: true, once: true });
+    if (navigator.maxTouchPoints > 0) activate();
+    return () => {
+      window.removeEventListener("touchstart", activate);
+      deactivate();
+    };
+  }, []);
+
   return (
     <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
       <div className="md:col-span-1 ls-clientes-list-panel">
