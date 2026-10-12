@@ -429,3 +429,67 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow-y: visible !important;
   }
 }
+
+
+/* Isolated Android Chrome desktop-site test: Clientes only.
+   Override the :has() desktop fixed-layout rules at equal/higher specificity.
+   Keep all non-Clientes routes and all data/business logic unchanged. */
+@media (min-width: 768px) and (any-pointer: coarse) {
+  html:has(.ls-clientes-workspace),
+  body:has(.ls-clientes-workspace),
+  #root:has(.ls-clientes-workspace) {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    touch-action: auto !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    position: relative !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace {
+    height: auto !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar-nav {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    flex: 1 1 auto !important;
+    overflow: visible !important;
+    grid-template-rows: auto !important;
+    align-items: start !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace * {
+    touch-action: auto !important;
+  }
+}
