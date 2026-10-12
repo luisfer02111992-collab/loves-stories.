@@ -571,11 +571,7 @@ if (linea) {
         if (error || !orden) throw new Error(error?.message ?? "No se pudo iniciar la venta directa");
         const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch", {
           p_order_id: orden.id,
-          p_items: carrito.map((l) => ({
-            product_id: l.product.id,
-            quantity: l.cantidad,
-            unit_price: precioPreview(l),
-          })),
+          p_items: itemsPreparados,
           p_seller_id: vendedorActivoId,
           p_session_id: sesionActivaId,
         });
@@ -592,11 +588,7 @@ if (linea) {
         const orderId = await obtenerOrdenAbierta(customerId);
         const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch", {
           p_order_id: orderId,
-          p_items: carrito.map((l) => ({
-            product_id: l.product.id,
-            quantity: l.cantidad,
-            unit_price: precioPreview(l),
-          })),
+          p_items: itemsPreparados,
           p_seller_id: vendedorActivoId,
           p_session_id: sesionActivaId,
         });
