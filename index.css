@@ -34,3 +34,13 @@ body {
     margin: 2mm;
   }
 }
+
+/* Permitir desplazamiento horizontal y vertical tras ampliar con zoom en móvil. */
+html, body, #root {
+  min-height: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+@media (max-width: 767px) {
+  body { touch-action: pan-x pan-y pinch-zoom; }
+}
