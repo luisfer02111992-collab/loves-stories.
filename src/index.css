@@ -404,3 +404,36 @@ html[data-ls-theme="borgona_luxury"] body {
     overscroll-behavior-y: contain !important;
   }
 }
+
+
+/* Zoom táctil en Chrome Android (también en "Sitio de computadora"):
+   las vistas distintas de Catálogo no deben recortar el desplazamiento.
+   Mantener el menú fijo y sus barras de desplazamiento independientes. */
+@media (pointer: coarse) {
+  html, body, #root {
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+  .ls-app-shell,
+  .ls-app-shell > .ls-workspace,
+  .ls-workspace > .ls-main-content {
+    overflow-x: visible !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+  .ls-workspace > .ls-main-content {
+    min-width: 0 !important;
+  }
+  /* Clientes usa columnas independientes: permitir desplazar horizontalmente
+     los paneles cuando se amplía la página, sin perder el scroll vertical. */
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    overflow-x: visible !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    overflow-x: auto !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+}
