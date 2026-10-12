@@ -359,3 +359,22 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow-y: auto !important;
   }
 }
+
+/* Preview-only: mobile zoom must pan the document, not nested scroll traps. */
+@media (max-width: 767px) {
+  html, body, #root { height: auto !important; max-width: none !important; overflow: visible !important; touch-action: manipulation !important; }
+  .ls-app-shell, .ls-app-shell > .ls-workspace,
+  .ls-workspace > .ls-main-content,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace,
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    touch-action: manipulation !important;
+  }
+  .ls-workspace > .ls-sidebar { height: auto !important; }
+  .ls-sidebar-nav { overflow-x: auto !important; overflow-y: hidden !important; }
+}
