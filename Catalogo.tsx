@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { X, Upload, Image as ImageIcon, Search, MessageCircle, Copy, Check } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { subirImagen } from "../lib/imagenes";
@@ -17,6 +17,7 @@ export default function Catalogo() {
   const [copiado, setCopiado] = useState(false);
   const [cantidadesEditadas, setCantidadesEditadas] = useState<Record<string, string>>({});
   const [guardandoCantidadId, setGuardandoCantidadId] = useState<string | null>(null);
+  const guardadosEnCurso = useRef<Set<string>>(new Set());
   const [errorCantidad, setErrorCantidad] = useState<string | null>(null);
 
   useEffect(() => {
@@ -70,9 +71,12 @@ export default function Catalogo() {
       setErrorCantidad(`Ingresa una cantidad entre 0 y ${maximo}.`);
       return;
     }
+    if (guardadosEnCurso.current.has(id)) return;
+    guardadosEnCurso.current.add(id);
     setGuardandoCantidadId(id);
     setErrorCantidad(null);
     const { error } = await supabase.from("catalog_products").update({ stock_available: cantidad }).eq("id", id);
+    guardadosEnCurso.current.delete(id);
     setGuardandoCantidadId(null);
     if (error) {
       setErrorCantidad("No se pudo guardar la cantidad. Inténtalo nuevamente.");
@@ -215,8 +219,9 @@ export default function Catalogo() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === "NumpadEnter") {
                     e.preventDefault();
-                    void guardarCantidad(p.id, e.currentTarget.value, productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available);
+                    const valor = e.currentTarget.value;
                     e.currentTarget.blur();
+                    void guardarCantidad(p.id, valor, productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available);
                   }
                 }}
                 onBlur={(e) => {
@@ -224,10 +229,12 @@ export default function Catalogo() {
                     void guardarCantidad(p.id, e.currentTarget.value, productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available);
                   }
                 }}
+                enterKeyHint="done"
                 disabled={guardandoCantidadId === p.id}
                 className="w-16 px-2 py-1.5 rounded text-sm text-center outline-none"
                 style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
               />
+              <button type="button" disabled={guardandoCantidadId === p.id} onClick={() => void guardarCantidad(p.id, cantidadesEditadas[p.id] ?? String(p.stock_available), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)} className="text-xs px-2 py-1.5 rounded" style={{ background: "#9C7A3C", color: "#FFF" }}>{guardandoCantidadId === p.id ? "Guardando…" : "Guardar"}</button>
               <button onClick={() => eliminar(p.id)} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }}><X size={13} /></button>
             </div>
           </div>
