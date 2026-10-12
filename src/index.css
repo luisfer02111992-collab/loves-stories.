@@ -413,15 +413,14 @@ html[data-ls-theme="borgona_luxury"] body {
   }
 }
 
-/* Android desktop-site mode: dragging over Clientes cards should pan the
-   visual viewport just like dragging over the banner. The outer document
-   is already the scroll owner; do not trap gestures inside the cards. */
-@media (min-width: 768px) and (pointer: coarse) {
+/* Clientes on Android desktop-site mode: let Chrome own the touch gesture.
+   Unlike pan-x/pan-y directives, auto preserves native visual-viewport
+   panning after the pinch ends. Scoped to Clientes content only. */
+@media (any-pointer: coarse) {
   .ls-clientes-workspace,
   .ls-clientes-workspace *,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-global-banner,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-global-banner * {
-    touch-action: pan-x pan-y pinch-zoom !important;
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    touch-action: auto !important;
     overscroll-behavior: auto !important;
   }
   .ls-clientes-workspace > .ls-clientes-list-panel,
