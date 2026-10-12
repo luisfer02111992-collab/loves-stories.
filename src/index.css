@@ -403,3 +403,39 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow-x: auto !important;
   }
 }
+
+/* Persistent pinch zoom: allow one-finger panning AFTER fingers are released.
+   Scoped to Clientes only, and only while visualViewport.scale > 1. */
+html.ls-pinch-zoomed:has(.ls-clientes-workspace),
+html.ls-pinch-zoomed:has(.ls-clientes-workspace) body,
+html.ls-pinch-zoomed:has(.ls-clientes-workspace) #root {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow: visible !important;
+  touch-action: pan-x pan-y pinch-zoom !important;
+}
+html.ls-pinch-zoomed .ls-app-shell:has(.ls-clientes-workspace) {
+  position: relative !important;
+  inset: auto !important;
+  height: auto !important;
+  max-height: none !important;
+  min-height: 100dvh !important;
+  overflow: visible !important;
+  touch-action: pan-x pan-y pinch-zoom !important;
+}
+html.ls-pinch-zoomed .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
+html.ls-pinch-zoomed .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
+html.ls-pinch-zoomed .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace,
+html.ls-pinch-zoomed .ls-clientes-workspace > .ls-clientes-list-panel,
+html.ls-pinch-zoomed .ls-clientes-workspace > .ls-clientes-order-panel {
+  height: auto !important;
+  max-height: none !important;
+  min-height: 0 !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+  touch-action: pan-x pan-y pinch-zoom !important;
+}
+html.ls-pinch-zoomed .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
+html.ls-pinch-zoomed .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+  flex: initial !important;
+}
