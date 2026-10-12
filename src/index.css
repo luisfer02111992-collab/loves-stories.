@@ -341,3 +341,21 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-clientes-workspace > .ls-clientes-list-panel,
   .ls-clientes-workspace > .ls-clientes-order-panel { overflow-x: auto !important; touch-action: pan-x pan-y pinch-zoom !important; }
 }
+
+/* Vista previa: conservar paneles de Clientes, pero permitir desplazamiento
+   horizontal/vertical cuando el usuario amplía en el móvil. */
+@media (max-width: 767px) {
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    overflow-x: auto !important;
+    overscroll-behavior-x: auto !important;
+    touch-action: auto !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+  }
+}
