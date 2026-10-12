@@ -29,6 +29,49 @@ export default function Clientes() {
     return () => document.documentElement.classList.remove("ls-clientes-android-touch");
   }, []);
 
+  // Android Chrome desktop-site mode: allow finger dragging directly on cards.
+  // Desktop PC scrollbars and taps on controls remain unchanged.
+  useEffect(() => {
+    if (!/Android/i.test(navigator.userAgent) || navigator.maxTouchPoints < 1) return;
+    const selectors = ".ls-clientes-list-panel, .ls-clientes-order-panel, .ls-sidebar-nav";
+    let active: { panel: HTMLElement; x: number; y: number; moved: boolean } | null = null;
+    const start = (e: TouchEvent) => {
+      if (e.touches.length !== 1) { active = null; return; }
+      const target = e.target;
+      if (!(target instanceof Element)) return;
+      if (target.closest("input, textarea, select, [contenteditable='true']")) { active = null; return; }
+      const panel = target.closest(selectors);
+      if (!(panel instanceof HTMLElement)) { active = null; return; }
+      active = { panel, x: e.touches[0].clientX, y: e.touches[0].clientY, moved: false };
+    };
+    const move = (e: TouchEvent) => {
+      if (!active || e.touches.length !== 1 || !e.cancelable) return;
+      const t = e.touches[0];
+      const dx = active.x - t.clientX;
+      const dy = active.y - t.clientY;
+      if (!active.moved && Math.hypot(dx, dy) < 7) return;
+      active.moved = true;
+      const panel = active.panel;
+      if (panel.scrollHeight > panel.clientHeight + 1 || panel.scrollWidth > panel.clientWidth + 1) {
+        e.preventDefault();
+        panel.scrollBy({ top: dy, left: dx, behavior: "instant" });
+      }
+      active.x = t.clientX;
+      active.y = t.clientY;
+    };
+    const end = () => { active = null; };
+    document.addEventListener("touchstart", start, { passive: true });
+    document.addEventListener("touchmove", move, { passive: false });
+    document.addEventListener("touchend", end, { passive: true });
+    document.addEventListener("touchcancel", end, { passive: true });
+    return () => {
+      document.removeEventListener("touchstart", start);
+      document.removeEventListener("touchmove", move);
+      document.removeEventListener("touchend", end);
+      document.removeEventListener("touchcancel", end);
+    };
+  }, []);
+
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
