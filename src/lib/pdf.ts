@@ -1351,6 +1351,7 @@ export interface ItemPdfCatalogo {
 }
 
 export interface DatosPdfCatalogo {
+  descuentoTotal?: number;
   negocio: string;
   codigoPedido: string;
   cliente: string;
@@ -1596,10 +1597,27 @@ export async function generarPdfCatalogo(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
 
-  doc.text("TOTAL", margen, y);
+  // Este PDF es únicamente el registro de solicitud del catálogo.
+  // El descuento se informa aquí, pero NO se aplica a las líneas ni se
+  // guarda en el pedido: Clientes lo calcula una sola vez al asignarlo.
+  const descuentoInformativo = Math.max(0, Math.min(datos.total, datos.descuentoTotal ?? 0));
+  if (descuentoInformativo > 0) {
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(10);
+    doc.text("Subtotal sin descuento", margen, y);
+    doc.text(`Bs ${datos.total.toFixed(2)}`, margen + anchoUtil, y, { align: "right" });
+    y += 7;
+    doc.text("Descuento por cantidad (informativo)", margen, y);
+    doc.text(`- Bs ${descuentoInformativo.toFixed(2)}`, margen + anchoUtil, y, { align: "right" });
+    y += 7;
+  }
+
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(14);
+  doc.text("TOTAL ESTIMADO", margen, y);
 
   doc.text(
-    `Bs ${datos.total.toFixed(2)}`,
+    `Bs ${(datos.total - descuentoInformativo).toFixed(2)}`,
     margen + anchoUtil,
     y,
     { align: "right" }
