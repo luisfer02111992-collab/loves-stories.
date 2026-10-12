@@ -327,17 +327,3 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-sidebar-nav::-webkit-scrollbar-track { background: #713047; }
   .ls-main-content::-webkit-scrollbar-track { background: #f1e9e3; }
 }
-
-/* Corrección móvil: no bloquear el paneo al ampliar con los dedos.
-   Solo móvil; se conserva el diseño de tres paneles de escritorio. */
-@media (max-width: 767px) {
-  html, body, #root { overflow-x: auto !important; overflow-y: auto !important; touch-action: pan-x pan-y pinch-zoom !important; }
-  .ls-app-shell { height: auto !important; min-height: 100dvh !important; max-height: none !important; overflow: visible !important; touch-action: pan-x pan-y pinch-zoom !important; }
-  .ls-app-shell > .ls-workspace { height: auto !important; min-height: 0 !important; overflow: visible !important; }
-  .ls-workspace > .ls-sidebar { height: auto !important; overflow: visible !important; }
-  .ls-workspace > .ls-main-content,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content { height: auto !important; min-height: 0 !important; overflow-x: auto !important; overflow-y: auto !important; overscroll-behavior: auto !important; touch-action: pan-x pan-y pinch-zoom !important; }
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace { overflow-x: auto !important; touch-action: pan-x pan-y pinch-zoom !important; }
-  .ls-clientes-workspace > .ls-clientes-list-panel,
-  .ls-clientes-workspace > .ls-clientes-order-panel { overflow-x: auto !important; touch-action: pan-x pan-y pinch-zoom !important; }
-}
