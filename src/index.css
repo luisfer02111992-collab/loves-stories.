@@ -429,3 +429,19 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow-y: visible !important;
   }
 }
+
+/* Isolated test: scroll from inside actual Clientes cards.
+   Keep the fixed desktop shell and independent panels intact; unlike the
+   prior experiment, do not alter html/body/root heights or positions. */
+@media (min-width: 768px) {
+  @supports (-webkit-touch-callout: none) {
+    .ls-clientes-workspace > .ls-clientes-list-panel,
+    .ls-clientes-workspace > .ls-clientes-order-panel {
+      overflow-y: auto !important;
+      overflow-x: auto !important;
+      overscroll-behavior: auto !important;
+      touch-action: auto !important;
+      -webkit-overflow-scrolling: touch;
+    }
+  }
+}
