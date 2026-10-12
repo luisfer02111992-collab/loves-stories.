@@ -430,18 +430,72 @@ html[data-ls-theme="borgona_luxury"] body {
   }
 }
 
-/* Isolated test: scroll from inside actual Clientes cards.
-   Keep the fixed desktop shell and independent panels intact; unlike the
-   prior experiment, do not alter html/body/root heights or positions. */
-@media (min-width: 768px) {
-  @supports (-webkit-touch-callout: none) {
-    .ls-clientes-workspace > .ls-clientes-list-panel,
-    .ls-clientes-workspace > .ls-clientes-order-panel {
-      overflow-y: auto !important;
-      overflow-x: auto !important;
-      overscroll-behavior: auto !important;
-      touch-action: auto !important;
-      -webkit-overflow-scrolling: touch;
-    }
+
+/* Android Chrome desktop-site mode: a single document scrolling surface.
+   This branch is isolated from production. The app's desktop CSS creates
+   fixed-height overflow:hidden ancestors and nested overflow:scroll panels;
+   remove those constraints only for coarse-pointer desktop viewports.
+   Chrome can then pan the visual viewport from interactive card content. */
+@media (min-width: 768px) and (hover: none) and (pointer: coarse) {
+  html, body, #root {
+    position: static !important;
+    height: auto !important;
+    min-height: 100% !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: auto !important;
+  }
+  .ls-app-shell {
+    position: relative !important;
+    inset: auto !important;
+    display: flex !important;
+    flex-direction: column !important;
+    height: auto !important;
+    min-height: 100dvh !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell > .ls-workspace {
+    flex: 1 0 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .ls-workspace > .ls-main-content {
+    flex: 1 1 auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+  }
+  .ls-clientes-workspace {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    grid-template-rows: auto !important;
+    align-items: start !important;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+  }
+  .ls-clientes-workspace,
+  .ls-clientes-workspace * {
+    touch-action: auto !important;
+    overscroll-behavior: auto !important;
+  }
+  .ls-workspace > .ls-sidebar,
+  .ls-sidebar > .ls-sidebar-nav {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
   }
 }
