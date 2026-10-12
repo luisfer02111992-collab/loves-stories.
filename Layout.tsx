@@ -61,7 +61,7 @@ export default function Layout() {
   const textoBarra = estiloBarra === "claro" ? "#2B1E2E" : "#C9BFC7";
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: "#EDE7DE" }}>
+    <div className="min-h-screen flex flex-col w-max min-w-full" style={{ background: "#EDE7DE" }}>
       <div className="flex items-center justify-between px-4 py-2.5 gap-3 flex-wrap" style={{ background: fondoBarra }}>
         <p className="font-cursive text-2xl" style={{ color: primario }}>{nombre}</p>
 
@@ -97,7 +97,7 @@ export default function Layout() {
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 flex-col md:flex-row">
+      <div className="flex flex-1 flex-col md:flex-row">
         <div className="md:w-52 shrink-0 px-3 pt-3 pb-3" style={{ background: fondoBarra }}>
           <div className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible">
             {secciones.map((s) => {
