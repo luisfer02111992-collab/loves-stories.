@@ -429,29 +429,3 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow-y: visible !important;
   }
 }
-
-/* Clientes: restore real touch-scroll surfaces in desktop-site mode.
-   The previous "overflow: visible" rules made the panels non-scrollable,
-   so a gesture beginning on a customer card had no scroll owner. */
-@media (min-width: 768px) and (any-pointer: coarse) {
-  .ls-clientes-workspace {
-    align-items: start !important;
-    overflow: visible !important;
-  }
-  .ls-clientes-workspace > .ls-clientes-list-panel,
-  .ls-clientes-workspace > .ls-clientes-order-panel {
-    height: auto !important;
-    max-height: min(78dvh, 900px) !important;
-    min-height: 0 !important;
-    overflow-x: auto !important;
-    overflow-y: auto !important;
-    overscroll-behavior-x: auto !important;
-    overscroll-behavior-y: auto !important;
-    -webkit-overflow-scrolling: touch;
-    touch-action: pan-x pan-y pinch-zoom !important;
-  }
-  .ls-clientes-workspace > .ls-clientes-list-panel *,
-  .ls-clientes-workspace > .ls-clientes-order-panel * {
-    touch-action: pan-x pan-y pinch-zoom !important;
-  }
-}
