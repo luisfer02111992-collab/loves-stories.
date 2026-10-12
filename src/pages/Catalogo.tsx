@@ -666,7 +666,10 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                             type="number"
                             min={0}
                             onKeyDown={(e) => {
-                              if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                              if (e.key === "Enter" || e.key === "NumpadEnter") {
+                                e.preventDefault();
+                                e.currentTarget.blur(); // guarda las variantes en onBlur
+                              } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                                 e.preventDefault();
                               }
                             }}
@@ -963,6 +966,7 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                                 e.preventDefault();
                               }
                             }}
+                            enterKeyHint="done"
                             value={p.variant_stock?.[op] ?? 0}
                             onChange={(e) =>
                               actualizarVarianteLocal(
@@ -1031,10 +1035,14 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                       min={0}
                       max={maximo}
                       onKeyDown={(e) => {
-                        if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+                        if (e.key === "Enter" || e.key === "NumpadEnter") {
+                          e.preventDefault();
+                          e.currentTarget.blur(); // onBlur guarda la cantidad una sola vez
+                        } else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                           e.preventDefault();
                         }
                       }}
+                      enterKeyHint="done"
                       value={p.stock_available}
                       onChange={(e) =>
                         actualizarCantidadLocal(
