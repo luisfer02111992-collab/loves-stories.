@@ -487,6 +487,48 @@ if (linea) {
     return nueva!.id as string;
   }
 
+  // La talla solo se usa internamente cuando TODO el stock está publicado.
+  async function prepararItemsCatalogo(lineas: LineaCarrito[]) {
+    const items: {product_id: string; quantity: number; unit_price: number; ring_size?: string | null}[] = [];
+    for (const linea of lineas) {
+      const { data: publicaciones, error } = await supabase.from("catalog_products")
+        .select("stock_available, variant_type, variant_stock")
+        .eq("product_id", linea.product.id).eq("active", true);
+      if (error) throw new Error(error.message);
+      const publicado = (publicaciones ?? []).reduce((s: number, p: any) => s + Math.max(0, Number(p.stock_available) || 0), 0);
+      const { data: inventario, error: errorStock } = await supabase.from("products")
+        .select("stock_available").eq("id", linea.product.id).single();
+      if (errorStock) throw new Error(errorStock.message);
+      const completo = publicado > 0 && publicado === Number(inventario?.stock_available ?? -1);
+      const conTallas = completo && (publicaciones ?? []).some((p: any) => p.variant_type === "ring_size");
+      if (conTallas) {
+        const opciones = new Map<string, number>();
+        for (const pub of publicaciones ?? []) {
+          if (pub.variant_type !== "ring_size") continue;
+          for (const [talla, cantidad] of Object.entries(pub.variant_stock ?? {})) {
+            opciones.set(talla, (opciones.get(talla) ?? 0) + Number(cantidad || 0));
+          }
+        }
+        for (let n = 0; n < linea.cantidad; n++) {
+          const disponibles = [...opciones.entries()].filter(([, cantidad]) => cantidad > 0);
+          if (!disponibles.length) throw new Error("No quedan tallas disponibles en el catálogo.");
+          const respuesta = window.prompt(
+            `¿Qué talla deseas descontar del catálogo para ${linea.product.code}?\\n${disponibles.map(([t, q]) => `Talla ${t}: ${q} disponible(s)`).join("\\n")}\\nEscribe la talla:`,
+            disponibles[0][0]
+          );
+          if (respuesta === null) throw new Error("Asignación cancelada. No se modificó el inventario.");
+          const talla = respuesta.trim();
+          if (!opciones.has(talla) || (opciones.get(talla) ?? 0) < 1) throw new Error(`La talla ${talla} no está disponible.`);
+          opciones.set(talla, (opciones.get(talla) ?? 0) - 1);
+          items.push({ product_id: linea.product.id, quantity: 1, unit_price: precioPreview(linea), ring_size: talla });
+        }
+      } else {
+        items.push({ product_id: linea.product.id, quantity: linea.cantidad, unit_price: precioPreview(linea) });
+      }
+    }
+    return items;
+  }
+
   // Único momento en que se escribe de verdad en Supabase (con protección
   // contra doble ejecución vía "procesando").
   async function confirmarAsignacion(e?: React.FormEvent) {
@@ -527,7 +569,7 @@ if (linea) {
       if (modo === "directa") {
         const { data: orden, error } = await supabase.from("orders").insert({ customer_id: null, direct_sale: true }).select().single();
         if (error || !orden) throw new Error(error?.message ?? "No se pudo iniciar la venta directa");
-        const { error: errAsig } = await supabase.rpc("assign_products_to_order_batch", {
+        const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch", {
           p_order_id: orden.id,
           p_items: carrito.map((l) => ({
             product_id: l.product.id,
@@ -548,7 +590,7 @@ if (linea) {
         setUltimoResultado(`Venta directa finalizada — Total Bs ${(totalReal ?? 0).toFixed(2)}`);
       } else if (customerId) {
         const orderId = await obtenerOrdenAbierta(customerId);
-        const { error: errAsig } = await supabase.rpc("assign_products_to_order_batch", {
+        const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch", {
           p_order_id: orderId,
           p_items: carrito.map((l) => ({
             product_id: l.product.id,
