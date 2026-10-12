@@ -249,8 +249,12 @@ const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
       await cargar();
       return;
     }
-    const { error } = await supabase.from("catalog_products").update({ stock_available: cantidad }).eq("id", id);
-    if (error) { alert("No se pudo guardar la cantidad: " + error.message); return; }
+    const { data, error } = await supabase.from("catalog_products").update({ stock_available: cantidad }).eq("id", id).select("id, stock_available").maybeSingle();
+    if (error || !data || Number(data.stock_available) !== cantidad) {
+      alert("No se confirmó el guardado de la cantidad en Supabase. " + (error?.message ?? "Comprueba permisos y conexión."));
+      await cargar();
+      return;
+    }
     await cargar();
   }
 async function guardarDescripcion(id: string, descripcion: string) {
@@ -1057,12 +1061,6 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                         )
                       }
                       onBlur={(e) => void guardarCantidad(p.id, Number(e.currentTarget.value), maximo)}
-                      onKeyUp={(e) => {
-                        if (e.key === "Enter" || e.key === "NumpadEnter") {
-                          e.preventDefault();
-                          void guardarCantidad(p.id, Number(e.currentTarget.value), maximo);
-                        }
-                      }}
                       className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
                       style={{
                         background: "#F7F3EC",
