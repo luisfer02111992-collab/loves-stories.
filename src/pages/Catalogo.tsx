@@ -1080,8 +1080,8 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      guardarDescripcion(p.id, e.currentTarget.value);
-                      e.currentTarget.blur();
+                      const guardar = e.currentTarget.parentElement?.querySelector("button");
+                      guardar?.click();
                     }
                   }}
                   className="flex-1 min-w-0 px-3 py-2 rounded text-xs outline-none"
