@@ -495,7 +495,7 @@ if (linea) {
         .select("stock_available, variant_type, variant_stock")
         .eq("product_id", linea.product.id).eq("active", true);
       if (error) throw new Error(error.message);
-      const publicado = (publicaciones ?? []).reduce((s: number, p: any) => s + Math.max(0, Number(p.stock_available) || 0), 0);
+      const publicado = (publicaciones ?? []).reduce((s: number, p: any) => s + (p.variant_type === "ring_size" ? Object.values(p.variant_stock ?? {}).reduce((a: number, n: any) => a + Math.max(0, Number(n) || 0), 0) : Math.max(0, Number(p.stock_available) || 0)), 0);
       const { data: inventario, error: errorStock } = await supabase.from("products")
         .select("stock_available").eq("id", linea.product.id).single();
       if (errorStock) throw new Error(errorStock.message);
