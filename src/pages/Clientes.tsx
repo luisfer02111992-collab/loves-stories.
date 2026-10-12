@@ -797,8 +797,56 @@ function linkWhatsapp(telefono: string, mensaje: string) {
     await cargarInactivos();
   }
 
+  // On Android with "Desktop site", Chrome can trap a one-finger drag inside
+  // the Clientes cards after pinch zoom. Forward that drag to the document.
+  // Only runs while actually pinch-zoomed; taps, buttons and normal scrolling
+  // at scale 1 are unchanged.
+  const clientesWorkspaceRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const root = clientesWorkspaceRef.current;
+    if (!root) return;
+    let previous: { x: number; y: number } | null = null;
+    const start = (event: TouchEvent) => {
+      if (event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) <= 1.01) {
+        previous = null;
+        return;
+      }
+      const touch = event.touches[0];
+      previous = { x: touch.clientX, y: touch.clientY };
+    };
+    const move = (event: TouchEvent) => {
+      if (!previous || event.touches.length !== 1 || (window.visualViewport?.scale ?? 1) <= 1.01) {
+        previous = null;
+        return;
+      }
+      const target = event.target as Element | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) {
+        previous = null;
+        return;
+      }
+      const touch = event.touches[0];
+      const dx = previous.x - touch.clientX;
+      const dy = previous.y - touch.clientY;
+      previous = { x: touch.clientX, y: touch.clientY };
+      if (Math.abs(dx) + Math.abs(dy) < 1) return;
+      event.preventDefault();
+      window.scrollBy(dx, dy);
+    };
+    const stop = () => { previous = null; };
+    root.addEventListener("touchstart", start, { passive: true });
+    root.addEventListener("touchmove", move, { passive: false });
+    root.addEventListener("touchend", stop);
+    root.addEventListener("touchcancel", stop);
+    return () => {
+      root.removeEventListener("touchstart", start);
+      root.removeEventListener("touchmove", move);
+      root.removeEventListener("touchend", stop);
+      root.removeEventListener("touchcancel", stop);
+    };
+  }, []);
+
   return (
-    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
+    <div ref={clientesWorkspaceRef} className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
       <div className="md:col-span-1 ls-clientes-list-panel">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
