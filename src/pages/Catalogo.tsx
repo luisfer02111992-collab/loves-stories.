@@ -962,9 +962,17 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                               if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                                 e.preventDefault();
                               }
-                              if (e.key === "Enter") {
+                              if (e.key === "Enter" || e.key === "NumpadEnter") {
                                 e.preventDefault();
-                                e.currentTarget.blur();
+                                e.stopPropagation();
+                                const campo = e.currentTarget;
+                                campo.dataset.enterGuardado = "1";
+                                const valor = Math.max(0, Number(campo.value) || 0);
+                                void guardarVariantes({
+                                  ...p,
+                                  variant_stock: { ...(p.variant_stock ?? {}), [op]: valor },
+                                }, maximo);
+                                campo.blur();
                               }
                             }}
                             value={p.variant_stock?.[op] ?? 0}
@@ -976,7 +984,19 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                                 maximo
                               )
                             }
-                            onBlur={() => guardarVariantes(p, maximo)}
+                            onBlur={(e) => {
+                              if (e.currentTarget.dataset.enterGuardado === "1") {
+                                delete e.currentTarget.dataset.enterGuardado;
+                                return;
+                              }
+                              void guardarVariantes({
+                                ...p,
+                                variant_stock: {
+                                  ...(p.variant_stock ?? {}),
+                                  [op]: Math.max(0, Number(e.currentTarget.value) || 0),
+                                },
+                              }, maximo);
+                            }}
                             className="w-full px-1 py-1.5 rounded text-center text-sm outline-none"
                             style={{
                               background: "#F7F3EC",
@@ -1038,9 +1058,13 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                         if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                           e.preventDefault();
                         }
-                        if (e.key === "Enter") {
+                        if (e.key === "Enter" || e.key === "NumpadEnter") {
                           e.preventDefault();
-                          e.currentTarget.blur();
+                          e.stopPropagation();
+                          const campo = e.currentTarget;
+                          campo.dataset.enterGuardado = "1";
+                          void guardarCantidad(p.id, Number(campo.value), maximo);
+                          campo.blur();
                         }
                       }}
                       value={p.stock_available}
@@ -1051,13 +1075,13 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                           maximo
                         )
                       }
-                      onBlur={(e) =>
-                        guardarCantidad(
-                          p.id,
-                          Number(e.target.value),
-                          maximo
-                        )
-                      }
+                      onBlur={(e) => {
+                        if (e.currentTarget.dataset.enterGuardado === "1") {
+                          delete e.currentTarget.dataset.enterGuardado;
+                          return;
+                        }
+                        void guardarCantidad(p.id, Number(e.currentTarget.value), maximo);
+                      }}
                       className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
                       style={{
                         background: "#F7F3EC",
