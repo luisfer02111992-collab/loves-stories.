@@ -61,7 +61,7 @@ export default function Layout() {
   const textoBarra = estiloBarra === "claro" ? "#2B1E2E" : "#C9BFC7";
 
   return (
-    <div className="min-h-screen flex flex-col w-max min-w-full" style={{ background: "#EDE7DE" }}>
+    <div className="min-h-screen flex flex-col" style={{ background: "#EDE7DE" }}>
       <div className="flex items-center justify-between px-4 py-2.5 gap-3 flex-wrap" style={{ background: fondoBarra }}>
         <p className="font-cursive text-2xl" style={{ color: primario }}>{nombre}</p>
 
@@ -125,7 +125,7 @@ export default function Layout() {
           </div>
         </div>
 
-        <div className="p-5 flex-1 min-w-0">
+        <div className="p-5 flex-1 min-w-0 zoom-scroll-content">
           <Outlet />
         </div>
       </div>
