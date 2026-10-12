@@ -15,6 +15,9 @@ export default function Catalogo() {
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [mostrarListaCliente, setMostrarListaCliente] = useState(false);
   const [copiado, setCopiado] = useState(false);
+  const [cantidadesEditadas, setCantidadesEditadas] = useState<Record<string, string>>({});
+  const [guardandoCantidadId, setGuardandoCantidadId] = useState<string | null>(null);
+  const [errorCantidad, setErrorCantidad] = useState<string | null>(null);
 
   useEffect(() => {
     cargar();
@@ -61,15 +64,26 @@ export default function Catalogo() {
     cargar();
   }
 
-  function actualizarCantidadLocal(id: string, cantidad: number, maximo: number) {
-    const limitada = Math.min(Math.max(0, cantidad), maximo);
-    setItems((prev) => prev.map((it) => (it.id === id ? { ...it, stock_available: limitada } : it)));
-  }
-
-  async function guardarCantidad(id: string, cantidad: number, maximo: number) {
-    const limitada = Math.min(Math.max(0, cantidad), maximo);
-    await supabase.from("catalog_products").update({ stock_available: limitada }).eq("id", id);
-    cargar();
+  async function guardarCantidad(id: string, valor: string, maximo: number) {
+    const cantidad = Number(valor);
+    if (valor.trim() === "" || !Number.isInteger(cantidad) || cantidad < 0 || cantidad > maximo) {
+      setErrorCantidad(`Ingresa una cantidad entre 0 y ${maximo}.`);
+      return;
+    }
+    setGuardandoCantidadId(id);
+    setErrorCantidad(null);
+    const { error } = await supabase.from("catalog_products").update({ stock_available: cantidad }).eq("id", id);
+    setGuardandoCantidadId(null);
+    if (error) {
+      setErrorCantidad("No se pudo guardar la cantidad. Inténtalo nuevamente.");
+      return;
+    }
+    setCantidadesEditadas((prev) => {
+      const next = { ...prev };
+      delete next[id];
+      return next;
+    });
+    await cargar();
   }
 
   async function subirImagenCatalogo(id: string, file: File) {
@@ -167,6 +181,7 @@ export default function Catalogo() {
         )}
       </div>
 
+      {errorCantidad && <p role="alert" className="text-sm mb-2" style={{ color: "#7A2540" }}>{errorCantidad}</p>}
       <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
         {items.map((p, i) => (
           <div key={p.id} className="flex items-center justify-between px-3.5 py-2.5 gap-3" style={{ borderBottom: i < items.length - 1 ? "1px solid #D9D0C2" : "none" }}>
@@ -195,15 +210,21 @@ export default function Catalogo() {
                 type="number"
                 min={0}
                 max={productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available}
-                value={p.stock_available}
-                onChange={(e) => actualizarCantidadLocal(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
+                value={cantidadesEditadas[p.id] ?? String(p.stock_available)}
+                onChange={(e) => setCantidadesEditadas((prev) => ({ ...prev, [p.id]: e.target.value }))}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" || e.key === "NumpadEnter") {
                     e.preventDefault();
-                    e.currentTarget.blur(); // onBlur guarda la cantidad, también en teclado móvil
+                    void guardarCantidad(p.id, e.currentTarget.value, productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available);
+                    e.currentTarget.blur();
                   }
                 }}
-                onBlur={(e) => guardarCantidad(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
+                onBlur={(e) => {
+                  if (cantidadesEditadas[p.id] !== undefined && guardandoCantidadId !== p.id) {
+                    void guardarCantidad(p.id, e.currentTarget.value, productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available);
+                  }
+                }}
+                disabled={guardandoCantidadId === p.id}
                 className="w-16 px-2 py-1.5 rounded text-sm text-center outline-none"
                 style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
               />
