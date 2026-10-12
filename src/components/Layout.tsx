@@ -57,23 +57,6 @@ async function cerrarSesionSeguro() {
   await signOut();
 }
 
-  // Keep the page pannable after a pinch gesture has ended.
-  useEffect(() => {
-    const viewport = window.visualViewport;
-    if (!viewport) return;
-    const syncZoom = () => {
-      document.documentElement.classList.toggle("ls-pinch-zoomed", viewport.scale > 1.01);
-    };
-    syncZoom();
-    viewport.addEventListener("resize", syncZoom);
-    viewport.addEventListener("scroll", syncZoom);
-    return () => {
-      viewport.removeEventListener("resize", syncZoom);
-      viewport.removeEventListener("scroll", syncZoom);
-      document.documentElement.classList.remove("ls-pinch-zoomed");
-    };
-  }, []);
-
   useEffect(() => {
     cargarTema();
     const refrescarTema = () => cargarTema();
