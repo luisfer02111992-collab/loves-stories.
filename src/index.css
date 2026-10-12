@@ -327,3 +327,48 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-sidebar-nav::-webkit-scrollbar-track { background: #713047; }
   .ls-main-content::-webkit-scrollbar-track { background: #f1e9e3; }
 }
+
+/* Clientes only: on narrow touch screens, remove the fixed-height / hidden
+   overflow chain that traps one-finger panning after pinch zoom ends.
+   Other sections retain their existing scrolling behavior. */
+@media (max-width: 767px) {
+  html:has(.ls-clientes-workspace),
+  body:has(.ls-clientes-workspace),
+  #root:has(.ls-clientes-workspace) {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    position: relative !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    height: auto !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    overscroll-behavior: auto !important;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+}
