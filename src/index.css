@@ -412,3 +412,21 @@ html[data-ls-theme="borgona_luxury"] body {
     touch-action: pan-x pan-y pinch-zoom !important;
   }
 }
+
+/* Android desktop-site mode: dragging over Clientes cards should pan the
+   visual viewport just like dragging over the banner. The outer document
+   is already the scroll owner; do not trap gestures inside the cards. */
+@media (min-width: 768px) and (pointer: coarse) {
+  .ls-clientes-workspace,
+  .ls-clientes-workspace *,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-global-banner,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-global-banner * {
+    touch-action: pan-x pan-y pinch-zoom !important;
+    overscroll-behavior: auto !important;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    overflow-x: visible !important;
+    overflow-y: visible !important;
+  }
+}
