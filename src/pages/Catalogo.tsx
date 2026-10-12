@@ -962,6 +962,10 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                               if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                                 e.preventDefault();
                               }
+                              if (e.key === "Enter") {
+                                e.preventDefault();
+                                e.currentTarget.blur();
+                              }
                             }}
                             value={p.variant_stock?.[op] ?? 0}
                             onChange={(e) =>
@@ -1033,6 +1037,10 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                       onKeyDown={(e) => {
                         if (e.key === "ArrowUp" || e.key === "ArrowDown") {
                           e.preventDefault();
+                        }
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          e.currentTarget.blur();
                         }
                       }}
                       value={p.stock_available}
