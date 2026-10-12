@@ -797,41 +797,8 @@ function linkWhatsapp(telefono: string, mensaje: string) {
     await cargarInactivos();
   }
 
-  // Preview-only touch diagnostics. No preventDefault or scroll interception.
-  const [touchDebug, setTouchDebug] = useState("Toca y arrastra una tarjeta");
-  useEffect(() => {
-    let startX = 0, startY = 0;
-    const report = (event: TouchEvent, phase: string) => {
-      const target = event.target as HTMLElement | null;
-      if (!target || !target.closest(".ls-clientes-workspace")) return;
-      const touch = event.touches[0] ?? event.changedTouches[0];
-      if (!touch) return;
-      if (phase === "inicio") { startX = touch.clientX; startY = touch.clientY; }
-      const panel = target.closest(".ls-clientes-list-panel, .ls-clientes-order-panel") as HTMLElement | null;
-      const panelStyle = panel ? getComputedStyle(panel) : null;
-      const root = document.scrollingElement;
-      const vv = window.visualViewport;
-      setTouchDebug(
-        phase + " | " + (panel?.classList.contains("ls-clientes-list-panel") ? "LISTA" : "PEDIDO") +
-        " | gesto " + Math.round(touch.clientX - startX) + "," + Math.round(touch.clientY - startY) +
-        " | panel " + (panelStyle?.overflowX ?? "?") + "/" + (panelStyle?.overflowY ?? "?") +
-        " | scroll " + (panel?.scrollTop ?? 0) + "/" + (root?.scrollTop ?? 0) +
-        " | zoom " + (vv?.scale?.toFixed(2) ?? "?") +
-        " | viewport " + Math.round(vv?.offsetTop ?? 0) + "," + Math.round(vv?.offsetLeft ?? 0)
-      );
-    };
-    const start = (e: TouchEvent) => report(e, "inicio");
-    const move = (e: TouchEvent) => report(e, "moviendo");
-    document.addEventListener("touchstart", start, { passive: true });
-    document.addEventListener("touchmove", move, { passive: true });
-    return () => {
-      document.removeEventListener("touchstart", start);
-      document.removeEventListener("touchmove", move);
-    };
-  }, []);
-
   return (
-    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">\n      <div style={{ position: "fixed", bottom: 8, left: 8, zIndex: 9999, maxWidth: "95vw", background: "#161616", color: "#fff", padding: 8, fontSize: 12, pointerEvents: "none", borderRadius: 5 }}>{touchDebug}</div>
+    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">\n      
       <div className="md:col-span-1 ls-clientes-list-panel">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
