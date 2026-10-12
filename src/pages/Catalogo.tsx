@@ -244,9 +244,18 @@ const [imagenAmpliada, setImagenAmpliada] = useState<string | null>(null);
   }
 
   async function guardarCantidad(id: string, cantidad: number, maximo: number) {
-    const limitada = Math.min(Math.max(0, cantidad), maximo);
-    await supabase.from("catalog_products").update({ stock_available: limitada }).eq("id", id);
-    cargar();
+    if (!Number.isFinite(cantidad) || !Number.isInteger(cantidad) || cantidad < 0 || cantidad > maximo) {
+      alert(`La cantidad debe estar entre 0 y ${maximo}.`);
+      await cargar();
+      return;
+    }
+    const { data, error } = await supabase.from("catalog_products").update({ stock_available: cantidad }).eq("id", id).select("id, stock_available").maybeSingle();
+    if (error || !data || Number(data.stock_available) !== cantidad) {
+      alert("No se confirmó el guardado de la cantidad en Supabase. " + (error?.message ?? "Comprueba permisos y conexión."));
+      await cargar();
+      return;
+    }
+    await cargar();
   }
 async function guardarDescripcion(id: string, descripcion: string) {
   const { error } = await supabase
@@ -1051,13 +1060,7 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                           maximo
                         )
                       }
-                      onBlur={(e) =>
-                        guardarCantidad(
-                          p.id,
-                          Number(e.target.value),
-                          maximo
-                        )
-                      }
+                      onBlur={(e) => void guardarCantidad(p.id, Number(e.currentTarget.value), maximo)}
                       className="w-20 px-2 py-2 rounded text-sm text-center outline-none"
                       style={{
                         background: "#F7F3EC",
@@ -1077,8 +1080,8 @@ const itemsCatalogoFiltrados = items.filter((p) => {
                   onKeyDown={(e) => {
                     if (e.key === "Enter") {
                       e.preventDefault();
-                      guardarDescripcion(p.id, e.currentTarget.value);
-                      e.currentTarget.blur();
+                      const guardar = e.currentTarget.parentElement?.querySelector("button");
+                      guardar?.click();
                     }
                   }}
                   className="flex-1 min-w-0 px-3 py-2 rounded text-xs outline-none"
