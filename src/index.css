@@ -378,3 +378,28 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-workspace > .ls-sidebar { height: auto !important; }
   .ls-sidebar-nav { overflow-x: auto !important; overflow-y: hidden !important; }
 }
+
+/* Narrow screens and zoomed browser: avoid fixed Clientes viewport traps. */
+@media (min-width: 768px) and (max-width: 1100px) {
+  html:has(.ls-clientes-workspace), body:has(.ls-clientes-workspace),
+  #root:has(.ls-clientes-workspace) { height: auto !important; overflow: auto !important; }
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    position: static !important; inset: auto !important;
+    height: auto !important; max-height: none !important; min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    height: auto !important; max-height: none !important; min-height: 0 !important;
+    overflow: visible !important; flex: initial !important;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: auto !important; max-height: none !important; min-height: 0 !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar-nav {
+    overflow-x: auto !important;
+  }
+}
