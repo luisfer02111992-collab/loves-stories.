@@ -183,29 +183,6 @@ useEffect(() => {
     try {
       let p = productosCacheRef.current.get(codigoLeido);
 
-      // Si el producto normal ya fue leído una vez, las siguientes lecturas
-      // suman inmediatamente sin esperar otra consulta a Supabase.
-      if (p) {
-        const actual = carritoRef.current;
-        const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
-        if (existente) {
-          if (existente.cantidad >= p.stock_available) {
-            setAvisoBloqueante({ tipo: "agotado", codigo: p.code, nombre: p.name });
-            return;
-          }
-          const siguiente = actual.map((l) =>
-                l.product.id === p!.id && !l.ringSize
-                  ? { ...l, cantidad: l.cantidad + 1 }
-                  : l
-              );
-          carritoRef.current = siguiente;
-          setCarrito(siguiente);
-          setFilaSeleccionada(null);
-          requestAnimationFrame(() => setFilaSeleccionada(p!.id));
-          return;
-        }
-      }
-
       setBuscando(true);
 
       if (!p) {
@@ -231,20 +208,46 @@ useEffect(() => {
         return;
       }
 
-      // Asignación manual: se usa únicamente el stock disponible general.
-      // Las tallas publicadas pertenecen exclusivamente al catálogo.
-
       const actual = carritoRef.current;
-      const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
-      if (existente && existente.cantidad >= p.stock_available) {
+      const yaAgregadas = actual.filter(l => l.product.id === p!.id).reduce((n,l) => n+l.cantidad,0);
+      if (yaAgregadas >= p.stock_available) {
         setAvisoBloqueante({ tipo: "agotado", codigo: p.code, nombre: p.name });
         return;
       }
+      const {data: publicaciones,error: errCat} = await supabase.from("catalog_products")
+        .select("variant_type,variant_stock,stock_available").eq("product_id",p.id).eq("active",true);
+      if (errCat) throw new Error(errCat.message);
+      const publicado = (publicaciones ?? []).reduce((n:number,c:any) => n + (
+        c.variant_type === "ring_size"
+          ? Object.values(c.variant_stock ?? {}).reduce((a:number,v:any)=>a+Math.max(0,Number(v)||0),0)
+          : Math.max(0,Number(c.stock_available)||0)),0);
+      const pedirTalla = publicado === p.stock_available &&
+        (publicaciones ?? []).some((c:any)=>c.variant_type === "ring_size");
+      let talla: string | null = null;
+      let stockTalla: number | null = null;
+      if (pedirTalla) {
+        const opciones = new Map<string,number>();
+        for (const c of publicaciones ?? []) {
+          if (c.variant_type !== "ring_size") continue;
+          for (const [t,n] of Object.entries(c.variant_stock ?? {}))
+            opciones.set(t,(opciones.get(t)??0)+Number(n||0));
+        }
+        for (const l of actual.filter(l=>l.product.id===p!.id && l.ringSize))
+          opciones.set(l.ringSize!,Math.max(0,(opciones.get(l.ringSize!)??0)-l.cantidad));
+        const disponibles = [...opciones.entries()].filter(([,n])=>n>0);
+        if (!disponibles.length) throw new Error("No quedan tallas disponibles.");
+        const respuesta = window.prompt(
+          `¿Qué talla deseas asignar para ${p.code}?\n${disponibles.map(([t,n])=>`Talla ${t}: ${n} disponible(s)`).join("\n")}\nEscribe la talla:`,
+          disponibles[0][0]);
+        if (respuesta === null) return;
+        talla = respuesta.trim();
+        if ((opciones.get(talla)??0)<1) throw new Error("La talla elegida no está disponible.");
+        stockTalla = (opciones.get(talla)??0) + actual.filter(l=>l.product.id===p!.id && l.ringSize===talla).reduce((n,l)=>n+l.cantidad,0);
+      }
+      const existente = actual.find(l=>l.product.id===p!.id && (l.ringSize??null)===talla);
       const siguiente = existente
-        ? actual.map((l) =>
-            l.product.id === p!.id && !l.ringSize
-              ? { ...l, cantidad: l.cantidad + 1 } : l)
-        : [...actual, { product: p, cantidad: 1 }];
+        ? actual.map(l=>l===existente?{...l,cantidad:l.cantidad+1}:l)
+        : [...actual,{product:p,cantidad:1,ringSize:talla,stockTalla}];
 
       carritoRef.current = siguiente;
       setCarrito(siguiente);
@@ -488,45 +491,14 @@ if (linea) {
   }
 
   // La talla solo se usa internamente cuando TODO el stock está publicado.
-  async function prepararItemsCatalogo(lineas: LineaCarrito[]) {
-    const items: {product_id: string; quantity: number; unit_price: number; ring_size?: string | null}[] = [];
-    for (const linea of lineas) {
-      const { data: publicaciones, error } = await supabase.from("catalog_products")
-        .select("stock_available, variant_type, variant_stock")
-        .eq("product_id", linea.product.id).eq("active", true);
-      if (error) throw new Error(error.message);
-      const publicado = (publicaciones ?? []).reduce((s: number, p: any) => s + (p.variant_type === "ring_size" ? Object.values(p.variant_stock ?? {}).reduce((a: number, n: any) => a + Math.max(0, Number(n) || 0), 0) : Math.max(0, Number(p.stock_available) || 0)), 0);
-      const { data: inventario, error: errorStock } = await supabase.from("products")
-        .select("stock_available").eq("id", linea.product.id).single();
-      if (errorStock) throw new Error(errorStock.message);
-      const completo = publicado > 0 && publicado === Number(inventario?.stock_available ?? -1);
-      const conTallas = completo && (publicaciones ?? []).some((p: any) => p.variant_type === "ring_size");
-      if (conTallas) {
-        const opciones = new Map<string, number>();
-        for (const pub of publicaciones ?? []) {
-          if (pub.variant_type !== "ring_size") continue;
-          for (const [talla, cantidad] of Object.entries(pub.variant_stock ?? {})) {
-            opciones.set(talla, (opciones.get(talla) ?? 0) + Number(cantidad || 0));
-          }
-        }
-        for (let n = 0; n < linea.cantidad; n++) {
-          const disponibles = [...opciones.entries()].filter(([, cantidad]) => cantidad > 0);
-          if (!disponibles.length) throw new Error("No quedan tallas disponibles en el catálogo.");
-          const respuesta = window.prompt(
-            `¿Qué talla deseas descontar del catálogo para ${linea.product.code}?\\n${disponibles.map(([t, q]) => `Talla ${t}: ${q} disponible(s)`).join("\\n")}\\nEscribe la talla:`,
-            disponibles[0][0]
-          );
-          if (respuesta === null) throw new Error("Asignación cancelada. No se modificó el inventario.");
-          const talla = respuesta.trim();
-          if (!opciones.has(talla) || (opciones.get(talla) ?? 0) < 1) throw new Error(`La talla ${talla} no está disponible.`);
-          opciones.set(talla, (opciones.get(talla) ?? 0) - 1);
-          items.push({ product_id: linea.product.id, quantity: 1, unit_price: precioPreview(linea), ring_size: talla });
-        }
-      } else {
-        items.push({ product_id: linea.product.id, quantity: linea.cantidad, unit_price: precioPreview(linea) });
-      }
-    }
-    return items;
+  // Las tallas se eligen al agregar; al confirmar solo se envían los datos ya elegidos.
+  function prepararItemsCatalogo(lineas: LineaCarrito[]) {
+    return lineas.map(l => ({
+      product_id: l.product.id,
+      quantity: l.cantidad,
+      unit_price: precioPreview(l),
+      ring_size: l.ringSize ?? null,
+    }));
   }
 
   // Único momento en que se escribe de verdad en Supabase (con protección
@@ -541,6 +513,7 @@ if (linea) {
     procesandoRef.current = true;
     setProcesando(true);
     try {
+      const itemsPreparados = prepararItemsCatalogo(carrito);
       // Validar stock de TODAS las líneas antes de escribir nada, para no
       // dejar una asignación a medias si algo cambió justo antes de confirmar.
       const ids = carrito.map((l) => l.product.id);
