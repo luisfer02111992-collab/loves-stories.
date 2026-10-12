@@ -262,7 +262,7 @@ export default function PedidosCatalogo() {
     // Es informativo: no modifica los precios ni se guarda en Supabase.
     const grupoDe = (nombre: string) => {
       const n = nombre.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-      if (/(aret|dije|pulser|\\bset\\b|collar)/.test(n)) return "A";
+      if (/(aret|dije|pulser|\bset\b|collar)/.test(n)) return "A";
       if (/(anill|caden)/.test(n)) return "B";
       return "otro";
     };
