@@ -550,6 +550,10 @@ export default function Clientes() {
   async function generarPdfAbierto() {
   if (!seleccionado) return;
 
+  // Reservar la pestaña durante el clic: Android/Chrome bloquea window.open
+  // si se llama después de esperar a que se genere el PDF.
+  const ventanaWhatsapp = window.open("about:blank", "_blank");
+
   setGenerandoPdf(true);
 
   try {
@@ -586,10 +590,16 @@ enlace.click();
 document.body.removeChild(enlace);
 URL.revokeObjectURL(urlPdf);
 
-window.open(
-  linkWhatsapp(seleccionado.phone, texto),
-  "_blank"
-);
+const destinoWhatsapp = linkWhatsapp(seleccionado.phone, texto);
+if (ventanaWhatsapp && !ventanaWhatsapp.closed) {
+  ventanaWhatsapp.location.href = destinoWhatsapp;
+} else {
+  window.location.href = destinoWhatsapp;
+}
+  } catch (error) {
+    ventanaWhatsapp?.close();
+    console.error("Error generando PDF y WhatsApp:", error);
+    alert("No se pudo generar el PDF. Inténtalo de nuevo.");
   } finally {
     setGenerandoPdf(false);
   }
@@ -606,6 +616,10 @@ async function generarPdfPorFecha(fechaElegida: string) {
   const gruposDia = agruparPorProducto(reglas, itemsDeEseDia);
   const subDia = gruposDia.reduce((a, g) => a + g.subtotalSinDescuento, 0);
   const totalDia = gruposDia.reduce((a, g) => a + g.subtotalConDescuento, 0);
+
+  // Reservar la pestaña durante el clic: Android/Chrome bloquea window.open
+  // si se llama después de esperar a que se genere el PDF.
+  const ventanaWhatsapp = window.open("about:blank", "_blank");
 
   setGenerandoPdf(true);
 
@@ -649,12 +663,18 @@ setTimeout(() => {
   URL.revokeObjectURL(urlPdf);
 }, 2000);
 
-window.open(
-  linkWhatsapp(seleccionado.phone, texto),
-  "_blank"
-);
+const destinoWhatsapp = linkWhatsapp(seleccionado.phone, texto);
+if (ventanaWhatsapp && !ventanaWhatsapp.closed) {
+  ventanaWhatsapp.location.href = destinoWhatsapp;
+} else {
+  window.location.href = destinoWhatsapp;
+}
 
     setMostrarSelectorFecha(false);
+  } catch (error) {
+    ventanaWhatsapp?.close();
+    console.error("Error generando PDF y WhatsApp:", error);
+    alert("No se pudo generar el PDF. Inténtalo de nuevo.");
   } finally {
     setGenerandoPdf(false);
   }
