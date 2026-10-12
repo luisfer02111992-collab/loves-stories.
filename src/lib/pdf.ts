@@ -1464,12 +1464,32 @@ export async function generarPdfCatalogo(
 
   encabezadoTabla();
 
-  // PRODUCTOS
+  // Agrupar variantes del mismo código en una sola ficha con UNA foto.
+  // Se separan precios distintos para no mezclar importes unitarios.
+  const gruposCatalogo = new Map<string, {
+    codigo: string; nombre: string; imagen: string | null;
+    precio: number; cantidad: number; variantes: string[];
+  }>();
   for (const item of ordenarProductosAZ(datos.items)) {
-    let imagenCargada: Awaited<
-      ReturnType<typeof cargarImagenComoDataUrl>
-    > = null;
+    const clave = `${item.codigo}::${item.precio}`;
+    const existente = gruposCatalogo.get(clave);
+    const detalle = item.variante
+      ? `${item.variante}: ${item.cantidad} ud.`
+      : null;
+    if (existente) {
+      existente.cantidad += item.cantidad;
+      if (detalle) existente.variantes.push(detalle);
+    } else {
+      gruposCatalogo.set(clave, {
+        codigo: item.codigo, nombre: item.nombre, imagen: item.imagen,
+        precio: item.precio, cantidad: item.cantidad,
+        variantes: detalle ? [detalle] : [],
+      });
+    }
+  }
 
+  for (const item of gruposCatalogo.values()) {
+    let imagenCargada: Awaited<ReturnType<typeof cargarImagenComoDataUrl>> = null;
     if (item.imagen) {
       try {
         imagenCargada = await cargarImagenComoDataUrl(item.imagen);
@@ -1478,7 +1498,13 @@ export async function generarPdfCatalogo(
       }
     }
 
-    const altoFila = imagenCargada ? 19 : 13;
+    const variantesTexto = item.variantes.join("  ·  ");
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(7);
+    const lineasVariantes = variantesTexto
+      ? doc.splitTextToSize(variantesTexto, 79) as string[]
+      : [];
+    const altoFila = Math.max(imagenCargada ? 19 : 13, 9 + lineasVariantes.length * 3.8);
 
     if (y + altoFila > 282) {
       doc.addPage();
@@ -1487,20 +1513,10 @@ export async function generarPdfCatalogo(
     }
 
     const yInicio = y;
-
-    // FOTO
     if (imagenCargada) {
       try {
-        doc.addImage(
-          imagenCargada.dataUrl,
-          imagenCargada.formato,
-          xFoto,
-          yInicio + 1,
-          16,
-          16,
-          undefined,
-          "FAST"
-        );
+        doc.addImage(imagenCargada.dataUrl, imagenCargada.formato,
+          xFoto, yInicio + 1, 16, 16, undefined, "FAST");
       } catch {
         // Continúa sin foto.
       }
@@ -1511,62 +1527,30 @@ export async function generarPdfCatalogo(
       doc.text("—", xFoto + 7, yInicio + 5);
     }
 
-    // PRODUCTO
     doc.setTextColor(20, 20, 20);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(7.5);
+    doc.text(`${item.codigo} · ${item.nombre}`, xProducto, yInicio + 5,
+      { maxWidth: 80 });
 
-    doc.text(
-      `${item.codigo} · ${item.nombre}`,
-      xProducto,
-      yInicio + 5,
-      { maxWidth: 80 }
-    );
-
-    if (item.variante) {
+    if (lineasVariantes.length) {
       doc.setFont("helvetica", "normal");
       doc.setFontSize(7);
       doc.setTextColor(122, 95, 45);
-
-      doc.text(
-        item.variante,
-        xProducto,
-        yInicio + 10,
-        { maxWidth: 80 }
-      );
+      doc.text(lineasVariantes, xProducto, yInicio + 10);
     }
 
-    // CANTIDAD
     doc.setFont("helvetica", "normal");
     doc.setFontSize(7);
     doc.setTextColor(20, 20, 20);
-
-    doc.text(
-      String(item.cantidad),
-      xCant + 5,
-      yInicio + 5,
-      { align: "center" }
-    );
-
-    // PRECIO
-    doc.text(
-      `Bs ${item.precio.toFixed(2)}`,
-      xPrecio,
-      yInicio + 5
-    );
-
-    // SUBTOTAL
+    doc.text(String(item.cantidad), xCant + 5, yInicio + 5,
+      { align: "center" });
+    doc.text(`Bs ${item.precio.toFixed(2)}`, xPrecio, yInicio + 5);
     doc.setFont("helvetica", "bold");
-
-    doc.text(
-      `Bs ${(item.precio * item.cantidad).toFixed(2)}`,
-      xSubtotal,
-      yInicio + 5,
-      { align: "right" }
-    );
+    doc.text(`Bs ${(item.precio * item.cantidad).toFixed(2)}`,
+      xSubtotal, yInicio + 5, { align: "right" });
 
     y += altoFila;
-
     doc.setDrawColor(225, 220, 215);
     doc.line(margen, y, margen + anchoUtil, y);
   }
