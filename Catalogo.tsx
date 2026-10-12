@@ -197,6 +197,12 @@ export default function Catalogo() {
                 max={productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available}
                 value={p.stock_available}
                 onChange={(e) => actualizarCantidadLocal(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === "NumpadEnter") {
+                    e.preventDefault();
+                    e.currentTarget.blur(); // onBlur guarda la cantidad, también en teclado móvil
+                  }
+                }}
                 onBlur={(e) => guardarCantidad(p.id, Number(e.target.value), productos.find((pr) => pr.id === p.product_id)?.stock_available ?? p.stock_available)}
                 className="w-16 px-2 py-1.5 rounded text-sm text-center outline-none"
                 style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
