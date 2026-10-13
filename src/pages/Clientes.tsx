@@ -20,6 +20,12 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
+  // Activar el diseño táctil también en accesos directos que simulan escritorio.
+  useEffect(() => {
+    if (navigator.maxTouchPoints < 1 && !("ontouchstart" in window)) return;
+    document.documentElement.classList.add("ls-clientes-touch");
+    return () => document.documentElement.classList.remove("ls-clientes-touch");
+  }, []);
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
