@@ -130,11 +130,11 @@ async function cerrarSesionSeguro() {
       </div>
 
       <div className="flex flex-1 min-h-0 flex-col md:flex-row ls-workspace" style={{ minHeight: 0 }}>
-        <div className="md:w-56 shrink-0 px-3 pt-3 pb-3 ls-sidebar" style={{ background: fondoBarra, display: "flex", flexDirection: "column", minHeight: 0, height: "100%" }}>
+        <div className="md:w-56 shrink-0 px-3 pt-3 pb-3 ls-sidebar" style={{ background: fondoBarra, display: "flex", flexDirection: "column" }}>
           <div className="ls-sidebar-brand hidden md:block mb-3">
             <img src="/loves-stories-sidebar-brand.png" alt="LOVE'S STORIES Jewelry" />
           </div>
-          <div className="flex md:flex-col gap-1 ls-sidebar-nav" style={{ flex: "1 1 0%", minHeight: 0, overflowY: "scroll", overflowX: "hidden", overscrollBehavior: "contain", scrollbarWidth: "auto" }}>
+          <div className="flex md:flex-col gap-1 ls-sidebar-nav" >
             {secciones.map((s) => {
               const Icon = s.icon;
               return (
@@ -160,7 +160,7 @@ async function cerrarSesionSeguro() {
           </div>
         </div>
 
-        <div className="p-5 flex-1 min-w-0 ls-main-content" style={{ height: "100%", minHeight: 0, overflowY: "auto", overflowX: "auto" }}>
+        <div className="p-5 flex-1 min-w-0 ls-main-content" >
           <div className="ls-global-banner mb-5" aria-label="LOVE’S STORIES Jewelry">
             <img src="/loves-stories-banner.png" alt="LOVE’S STORIES Jewelry — Importamos sueños, entregamos emociones" />
           </div>
