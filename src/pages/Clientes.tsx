@@ -20,41 +20,40 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
-  // En pantallas táctiles que muestran el diseño de escritorio, reenviar el arrastre
-  // al scroll nativo de la ventana. En una PC real este código no se activa.
+  // Si Clientes se muestra con diseño de escritorio en un teléfono, Chrome puede
+  // mantener el viewport visual inmóvil aunque el documento sea más alto.
+  // Este arrastre actúa sobre el elemento desplazable real (document.scrollingElement).
   const paginaClientesRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if ((navigator.maxTouchPoints || 0) < 1) return;
     const root = paginaClientesRef.current;
-    if (!root) return;
+    const scroller = document.scrollingElement as HTMLElement | null;
+    if (!root || !scroller) return;
     let lastY: number | null = null;
-    const start = (e: TouchEvent) => {
-      lastY = e.touches.length === 1 ? e.touches[0].clientY : null;
+    const startDrag = (e: PointerEvent) => {
+      if (e.pointerType !== "touch") return;
+      lastY = e.clientY;
     };
-    const move = (e: TouchEvent) => {
-      if (lastY === null || e.touches.length !== 1) return;
+    const moveDrag = (e: PointerEvent) => {
+      if (e.pointerType !== "touch" || lastY === null) return;
       const target = e.target as Element | null;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) {
-        lastY = null;
-        return;
-      }
-      const y = e.touches[0].clientY;
-      const dy = lastY - y;
-      lastY = y;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
+      const dy = lastY - e.clientY;
+      lastY = e.clientY;
       if (Math.abs(dy) < 1) return;
-      window.scrollBy(0, dy);
+      scroller.scrollTop += dy;
       e.preventDefault();
     };
-    const stop = () => { lastY = null; };
-    root.addEventListener("touchstart", start, { passive: true });
-    root.addEventListener("touchmove", move, { passive: false });
-    root.addEventListener("touchend", stop);
-    root.addEventListener("touchcancel", stop);
+    const stopDrag = () => { lastY = null; };
+    root.addEventListener("pointerdown", startDrag);
+    root.addEventListener("pointermove", moveDrag, { passive: false });
+    root.addEventListener("pointerup", stopDrag);
+    root.addEventListener("pointercancel", stopDrag);
     return () => {
-      root.removeEventListener("touchstart", start);
-      root.removeEventListener("touchmove", move);
-      root.removeEventListener("touchend", stop);
-      root.removeEventListener("touchcancel", stop);
+      root.removeEventListener("pointerdown", startDrag);
+      root.removeEventListener("pointermove", moveDrag);
+      root.removeEventListener("pointerup", stopDrag);
+      root.removeEventListener("pointercancel", stopDrag);
     };
   }, []);
 
