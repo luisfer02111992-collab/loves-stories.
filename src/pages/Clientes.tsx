@@ -818,7 +818,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
       <div className="md:col-span-1">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
