@@ -7,7 +7,6 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import InicioVentas from "./pages/InicioVentas";
 import Clientes from "./pages/Clientes";
-import ClientesAndroid from "./pages/ClientesAndroid";
 import ReportesDelDia from "./pages/ReportesDelDia";
 import Productos from "./pages/Productos";
 import Inventario from "./pages/Inventario";
@@ -62,8 +61,7 @@ export default function App() {
 }
 
 function VistaClientes() {
-  const esAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
-  return esAndroid ? <ClientesAndroid /> : <Clientes />;
+  return <Clientes />;
 }
 
 function AppRoutes() {
