@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
 import { Plus, Minus, MessageCircle, FileDown, AlertTriangle, UserX, Pencil, Trash2, RotateCcw, Wallet, Printer, Bell, Search } from "lucide-react";
 import { supabase } from "../lib/supabase";
 import { useSellerSession } from "../hooks/useSellerSession";
@@ -818,7 +817,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
+    <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-1">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
@@ -1115,9 +1114,8 @@ function linkWhatsapp(telefono: string, mensaje: string) {
               </div>
             )}
 
-            {mostrarResumenCierre && createPortal(
-              <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4" style={{ background: "rgba(24,16,24,0.7)" }}>
-                <div role="dialog" aria-modal="true" aria-label="Confirmar cierre de pedido" className="w-full max-w-md max-h-[85dvh] overflow-y-auto rounded-xl p-5 shadow-2xl" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
+            {mostrarResumenCierre && (
+              <div className="p-4 mb-3 rounded-md" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
                 <p className="text-sm font-medium mb-2" style={{ color: "#7A5F2D" }}>Confirmar cierre de pedido</p>
                 <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Total del pedido: Bs {total.toFixed(2)} (incluye Bs {descuentoTotal.toFixed(2)} de descuento)</div>
                 <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Dinero disponible para este pedido: Bs {depositado.toFixed(2)}</div>
@@ -1129,8 +1127,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
                   </button>
                   <button onClick={() => { setMostrarResumenCierre(false); setPendienteSobrante(false); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
                 </div>
-                </div>
-              </div>, document.body
+              </div>
             )}
 
             {mostrarRecibo && (
