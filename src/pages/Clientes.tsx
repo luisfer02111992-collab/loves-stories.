@@ -99,7 +99,12 @@ export default function Clientes() {
       const target = e.target as HTMLElement;
       if (target.closest("input, textarea, select, [contenteditable=true]")) return;
       const desplazable = [panel, panel.parentElement, panel.parentElement?.parentElement,
-        document.scrollingElement].find(el => el && el.scrollHeight > el.clientHeight + 2);
+        document.scrollingElement].find(el => {
+          if (!el || el.scrollHeight <= el.clientHeight + 2) return false;
+          if (el === document.scrollingElement) return true;
+          const overflow = getComputedStyle(el).overflowY;
+          return overflow === "auto" || overflow === "scroll";
+        });
       if (!desplazable) return;
       const antes = desplazable.scrollTop;
       desplazable.scrollTop += dy;
