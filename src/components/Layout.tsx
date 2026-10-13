@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet } from "react-router-dom";
 import {
   LayoutDashboard, Users, Tag, Boxes, Truck, ScanLine, Share2,
   ShoppingBag, BarChart3, Settings, LogOut, Send, Inbox, Receipt,
@@ -34,7 +34,6 @@ const SECCIONES = [
 ];
 
 export default function Layout() {
-  const location = useLocation();
   const { profile, signOut } = useAuth();
   const { vendedores, vendedorActivoId, vendedorActivoNombre, iniciarSesion, finalizarSesion } = useSellerSession();
   const rol = profile?.role ?? "employee";
