@@ -398,3 +398,45 @@ html[data-ls-theme="borgona_luxury"] body {
     align-items: start !important;
   }
 }
+
+/* Clientes en acceso directo / app instalada Android:
+   habilitar desplazamiento del documento, independientemente del viewport
+   reportado por el modo escritorio. No afecta a equipos sin pantalla táctil. */
+html.ls-clientes-touch-page,
+html.ls-clientes-touch-page body,
+html.ls-clientes-touch-page #root {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-x: auto !important;
+  overflow-y: auto !important;
+  touch-action: auto !important;
+}
+html.ls-clientes-touch-page .ls-app-shell,
+html.ls-clientes-touch-page .ls-app-shell > .ls-workspace,
+html.ls-clientes-touch-page .ls-app-shell .ls-main-content,
+html.ls-clientes-touch-page .ls-clientes-workspace,
+html.ls-clientes-touch-page .ls-clientes-list-panel,
+html.ls-clientes-touch-page .ls-clientes-order-panel {
+  position: static !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+  touch-action: auto !important;
+}
+html.ls-clientes-touch-page .ls-app-shell {
+  min-height: 100dvh !important;
+}
+html.ls-clientes-touch-page .ls-app-shell > .ls-workspace,
+html.ls-clientes-touch-page .ls-app-shell .ls-main-content,
+html.ls-clientes-touch-page .ls-clientes-workspace {
+  flex: 0 0 auto !important;
+}
+html.ls-clientes-touch-page .ls-clientes-workspace {
+  display: grid !important;
+  grid-template-rows: auto !important;
+  align-items: start !important;
+}
+html.ls-clientes-touch-page .ls-clientes-workspace * {
+  touch-action: auto !important;
+}
