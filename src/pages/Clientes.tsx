@@ -20,6 +20,44 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
+  // En pantallas táctiles que muestran el diseño de escritorio, reenviar el arrastre
+  // al scroll nativo de la ventana. En una PC real este código no se activa.
+  const paginaClientesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if ((navigator.maxTouchPoints || 0) < 1) return;
+    const root = paginaClientesRef.current;
+    if (!root) return;
+    let lastY: number | null = null;
+    const start = (e: TouchEvent) => {
+      lastY = e.touches.length === 1 ? e.touches[0].clientY : null;
+    };
+    const move = (e: TouchEvent) => {
+      if (lastY === null || e.touches.length !== 1) return;
+      const target = e.target as Element | null;
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) {
+        lastY = null;
+        return;
+      }
+      const y = e.touches[0].clientY;
+      const dy = lastY - y;
+      lastY = y;
+      if (Math.abs(dy) < 1) return;
+      window.scrollBy(0, dy);
+      e.preventDefault();
+    };
+    const stop = () => { lastY = null; };
+    root.addEventListener("touchstart", start, { passive: true });
+    root.addEventListener("touchmove", move, { passive: false });
+    root.addEventListener("touchend", stop);
+    root.addEventListener("touchcancel", stop);
+    return () => {
+      root.removeEventListener("touchstart", start);
+      root.removeEventListener("touchmove", move);
+      root.removeEventListener("touchend", stop);
+      root.removeEventListener("touchcancel", stop);
+    };
+  }, []);
+
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
@@ -818,7 +856,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4">
+    <div ref={paginaClientesRef} className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-1 ls-clientes-list-panel">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
