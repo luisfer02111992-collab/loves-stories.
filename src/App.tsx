@@ -7,6 +7,7 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import InicioVentas from "./pages/InicioVentas";
 import Clientes from "./pages/Clientes";
+import ClientesAndroid from "./pages/ClientesAndroid";
 import ReportesDelDia from "./pages/ReportesDelDia";
 import Productos from "./pages/Productos";
 import Inventario from "./pages/Inventario";
@@ -60,6 +61,11 @@ export default function App() {
   );
 }
 
+function VistaClientes() {
+  const esAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+  return esAndroid ? <ClientesAndroid /> : <Clientes />;
+}
+
 function AppRoutes() {
   const { recovery } = useAuth();
 
@@ -92,7 +98,7 @@ function AppRoutes() {
       >
         <Route index element={<ConPermiso permiso="asignar"><InicioVentas /></ConPermiso>} />
         <Route path="resumen" element={<ConPermiso permiso="resumen"><Dashboard /></ConPermiso>} />
-        <Route path="clientes" element={<ConPermiso permiso="clientes"><Clientes /></ConPermiso>} />
+        <Route path="clientes" element={<ConPermiso permiso="clientes"><VistaClientes /></ConPermiso>} />
         <Route path="reportes-dia" element={<ConPermiso permiso="reportes_dia"><ReportesDelDia /></ConPermiso>} />
         <Route path="productos" element={<ConPermiso permiso="productos"><Productos /></ConPermiso>} />
         <Route path="inventario" element={<ConPermiso permiso="inventario"><Inventario /></ConPermiso>} />
