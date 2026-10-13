@@ -20,6 +20,15 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
+  // La app instalada puede informar un ancho de escritorio aunque sea táctil.
+  // Activar el desplazamiento nativo solo dentro de Clientes y solo en dispositivos táctiles.
+  useEffect(() => {
+    const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
+    if (!touch) return;
+    document.documentElement.classList.add("ls-clientes-touch-page");
+    return () => document.documentElement.classList.remove("ls-clientes-touch-page");
+  }, []);
+
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
@@ -67,6 +76,7 @@ export default function Clientes() {
   const clienteRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const productoRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const pedidoSolicitud = useRef(0);
+
   const clientesVisibles = useMemo(() => {
     const q = busquedaCliente.trim().toLowerCase();
     const base = q ? clientes : clientes.filter(c => pestanaClientes === "abiertas" ? clientesAbiertos.has(c.id) : !clientesAbiertos.has(c.id));
@@ -93,7 +103,7 @@ export default function Clientes() {
   }, [seleccionado?.id]);
 
   useEffect(() => {
-    if (productoSeleccionado && !window.matchMedia("(pointer: coarse), (any-pointer: coarse)").matches) productoRefs.current[productoSeleccionado]?.scrollIntoView({ block: "nearest" });
+    if (productoSeleccionado) productoRefs.current[productoSeleccionado]?.scrollIntoView({ block: "nearest" });
   }, [productoSeleccionado]);
 
   useEffect(() => {
@@ -817,8 +827,8 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4">
-      <div className="md:col-span-1">
+    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
+      <div className="md:col-span-1 ls-clientes-list-panel">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
           <button onClick={() => setMostrarNuevo((v) => !v)} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
@@ -892,7 +902,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
         )}
       </div>
 
-      <div className="md:col-span-2">
+      <div className="md:col-span-2 ls-clientes-order-panel">
         {!seleccionado ? (
           <p className="text-sm" style={{ color: "#5B4E5E" }}>Selecciona o crea un cliente.</p>
         ) : (
