@@ -223,3 +223,40 @@ html[data-ls-theme="borgona_luxury"] body {
     touch-action: auto;
   }
 }
+
+/* Solo Clientes en dispositivos táctiles (incluido Chrome "sitio de escritorio").
+   Evitar el recorte de 100dvh del diseño desktop y usar el scroll
+   natural del documento, como en Catálogo. */
+@media (any-pointer: coarse) {
+  html:has(.ls-clientes-workspace),
+  body:has(.ls-clientes-workspace),
+  #root:has(.ls-clientes-workspace) {
+    height: auto !important;
+    min-height: 100% !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    position: relative !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 100dvh !important;
+    overflow: visible !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    flex: 1 1 auto !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace,
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+    touch-action: auto !important;
+  }
+}
