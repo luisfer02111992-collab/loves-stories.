@@ -490,3 +490,32 @@ html.ls-clientes-touch .ls-clientes-workspace > .ls-clientes-order-panel {
   overscroll-behavior: auto !important;
   touch-action: auto !important;
 }
+
+/* Android Clientes: el scroll real pertenece al documento, no a una
+   cuadrícula de altura cero ni a un contenedor recortado. */
+html.ls-clientes-touch .ls-app-shell:has(.ls-clientes-workspace),
+html.ls-clientes-touch .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
+html.ls-clientes-touch .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
+html.ls-clientes-touch .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+  position: relative !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  flex: 0 0 auto !important;
+}
+html.ls-clientes-touch .ls-app-shell:has(.ls-clientes-workspace) {
+  min-height: 100dvh !important;
+}
+html.ls-clientes-touch .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+  display: grid !important;
+  grid-template-rows: auto !important;
+  align-items: start !important;
+}
+html.ls-clientes-touch .ls-clientes-workspace > .ls-clientes-list-panel,
+html.ls-clientes-touch .ls-clientes-workspace > .ls-clientes-order-panel {
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  touch-action: auto !important;
+}
