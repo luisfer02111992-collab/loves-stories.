@@ -62,8 +62,8 @@ export default function App() {
 }
 
 function VistaClientes() {
-  // Misma estructura desplazable en móvil, zoom y modo escritorio.
-  return <ClientesAndroid />;
+  const esAndroid = typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+  return esAndroid ? <ClientesAndroid /> : <Clientes />;
 }
 
 function AppRoutes() {
