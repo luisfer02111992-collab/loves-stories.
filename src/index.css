@@ -187,10 +187,6 @@ html[data-ls-theme="borgona_luxury"] body {
     scrollbar-width: auto !important;
     scrollbar-color: #a78a64 #f1e9e3;
   }
-  /* Clientes ya dispone de scroll separado para lista y asignaciones. */
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
-    overflow: hidden !important;
-  }
   .ls-sidebar-nav::-webkit-scrollbar,
   .ls-main-content::-webkit-scrollbar { width: 11px; }
   .ls-sidebar-nav::-webkit-scrollbar-thumb {
@@ -208,95 +204,22 @@ html[data-ls-theme="borgona_luxury"] body {
 }
 
 
-/* Clientes: una única superficie de desplazamiento nativa.
-   Se evita el anidamiento de barras y los recortes de altura fija.
-   Se aplica exclusivamente a Clientes, sin modificar otras secciones. */
-.ls-app-shell:has(.ls-clientes-workspace),
-.ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
-.ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
-.ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
-  height: auto !important;
-  max-height: none !important;
-  min-height: 0 !important;
-  overflow: visible !important;
-}
-.ls-app-shell:has(.ls-clientes-workspace) {
-  min-height: 100dvh !important;
-  position: relative !important;
-}
-.ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
-.ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
-.ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
-  flex: 1 1 auto !important;
-}
-.ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
-  grid-template-rows: auto !important;
-  align-items: start !important;
+
+/* Clientes: usar exactamente el desplazamiento del contenedor principal
+   compartido con Catálogo, sin barras internas ni recortes adicionales. */
+.ls-clientes-workspace {
+  grid-template-rows: auto;
+  align-items: start;
 }
 .ls-clientes-workspace > .ls-clientes-list-panel,
 .ls-clientes-workspace > .ls-clientes-order-panel {
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  overflow: visible !important;
-}
-@media (pointer: coarse), (any-pointer: coarse) {
-  html:has(.ls-clientes-workspace),
-  body:has(.ls-clientes-workspace),
-  #root:has(.ls-clientes-workspace) {
-    height: auto !important;
-    overflow-y: auto !important;
-    overflow-x: auto !important;
-    touch-action: auto !important;
-  }
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace * {
-    touch-action: auto !important;
-  }
-}
-
-/* Clientes adopta el scroll nativo del Catálogo: el contenedor principal
-   es el único que desplaza, incluyendo todos los productos y botones finales. */
-@media (min-width: 768px) {
-  .ls-app-shell:has(.ls-clientes-workspace) {
-    height: 100dvh !important;
-    max-height: 100dvh !important;
-    overflow: hidden !important;
-  }
-  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace {
-    flex: 1 1 0% !important;
-    height: 0 !important;
-    min-height: 0 !important;
-    overflow: hidden !important;
-  }
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
-    flex: 1 1 0% !important;
-    height: 100% !important;
-    min-height: 0 !important;
-    overflow-y: auto !important;
-    overflow-x: auto !important;
-    overscroll-behavior: auto !important;
-    -webkit-overflow-scrolling: touch;
-  }
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
-    display: grid !important;
-    height: auto !important;
-    max-height: none !important;
-    min-height: 0 !important;
-    overflow: visible !important;
-    grid-template-rows: auto !important;
-  }
-  .ls-clientes-workspace > .ls-clientes-list-panel,
-  .ls-clientes-workspace > .ls-clientes-order-panel {
-    height: auto !important;
-    max-height: none !important;
-    overflow: visible !important;
-  }
+  height: auto;
+  max-height: none;
+  overflow: visible;
 }
 @media (any-pointer: coarse) {
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
   .ls-clientes-workspace,
   .ls-clientes-workspace * {
-    touch-action: auto !important;
+    touch-action: auto;
   }
 }
