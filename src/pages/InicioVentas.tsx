@@ -47,6 +47,7 @@ export default function InicioVentas() {
   const [metodoPago, setMetodoPago] = useState("efectivo");
   const [procesando, setProcesando] = useState(false);
   const procesandoRef = useRef(false);
+  const colaEscaneosRef = useRef<Promise<void>>(Promise.resolve());
   const [ultimoResultado, setUltimoResultado] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Category[]>([]);
 
@@ -170,16 +171,24 @@ useEffect(() => {
   }
 }, [carrito]);
 
-  async function buscarYAgregar(e: React.FormEvent) {
+  // Capturar cada Enter inmediatamente, antes de esperar a Supabase.
+  // La cola serializa lecturas repetidas y evita perder cantidades.
+  function buscarYAgregar(e: React.FormEvent) {
     e.preventDefault();
-    const codigoLeido = codigo.trim();
+    const codigoLeido = (inputRef.current?.value || codigo).trim();
     if (!codigoLeido) return;
-
+    if (inputRef.current) inputRef.current.value = "";
     setCodigo("");
     setNoEncontrado(false);
     setProductoSinStock(null);
     inputRef.current?.focus();
 
+    colaEscaneosRef.current = colaEscaneosRef.current
+      .catch(() => {})
+      .then(() => procesarCodigoEscaneado(codigoLeido));
+  }
+
+  async function procesarCodigoEscaneado(codigoLeido: string) {
     try {
       let p = productosCacheRef.current.get(codigoLeido);
 
