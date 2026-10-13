@@ -429,3 +429,25 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow-y: visible !important;
   }
 }
+
+/* Android Chrome en modo escritorio: desplazamiento vertical independiente
+   de la lista y del pedido, para alcanzar los botones PDF/WhatsApp. */
+@media (min-width: 768px) and (pointer: coarse) {
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    align-items: start !important;
+    grid-template-rows: minmax(0, 1fr) !important;
+    height: calc(100dvh - 110px) !important;
+    min-height: 350px !important;
+    overflow: hidden !important;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: 100% !important;
+    min-height: 0 !important;
+    max-height: 100% !important;
+    overflow-y: scroll !important;
+    overflow-x: hidden !important;
+    touch-action: pan-y pinch-zoom !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
