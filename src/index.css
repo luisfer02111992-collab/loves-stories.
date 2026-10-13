@@ -327,3 +327,59 @@ body:has(.ls-clientes-android),
   height: auto !important;
   overflow: visible !important;
 }
+
+/* Corrección estructural Clientes Android: ruta explícita, sin depender
+   de :has() ni de la modalidad móvil/escritorio del navegador. */
+html:has(.ls-clientes-android-shell),
+body:has(.ls-clientes-android-shell),
+#root:has(.ls-clientes-android-shell) {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+}
+.ls-app-shell.ls-clientes-android-shell {
+  display: block !important;
+  position: static !important;
+  height: auto !important;
+  min-height: 100dvh !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.ls-app-shell.ls-clientes-android-shell > .ls-workspace {
+  display: flex !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: none !important;
+  overflow: visible !important;
+}
+.ls-app-shell.ls-clientes-android-shell > .ls-workspace > .ls-sidebar {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  align-self: stretch !important;
+}
+.ls-app-shell.ls-clientes-android-shell .ls-sidebar > .ls-sidebar-nav {
+  flex: none !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+}
+.ls-app-shell.ls-clientes-android-shell > .ls-workspace > .ls-main-content {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 1 1 auto !important;
+  overflow: visible !important;
+  overscroll-behavior: auto !important;
+}
+.ls-app-shell.ls-clientes-android-shell .ls-clientes-android,
+.ls-app-shell.ls-clientes-android-shell .ls-clientes-android > div {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
