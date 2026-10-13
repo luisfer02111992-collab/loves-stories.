@@ -20,15 +20,6 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
-  // La app instalada puede informar un ancho de escritorio aunque sea táctil.
-  // Activar el desplazamiento nativo solo dentro de Clientes y solo en dispositivos táctiles.
-  useEffect(() => {
-    const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
-    if (!touch) return;
-    document.documentElement.classList.add("ls-clientes-touch-page");
-    return () => document.documentElement.classList.remove("ls-clientes-touch-page");
-  }, []);
-
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
@@ -827,7 +818,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
+    <div className="grid md:grid-cols-3 gap-4">
       <div className="md:col-span-1 ls-clientes-list-panel">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
