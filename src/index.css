@@ -165,7 +165,7 @@ html, body, #root {
 
 /* En Android con “Sitio de escritorio”, Chrome debe desplazar el documento.
    Los paneles internos conservan su scroll en PC con puntero fino. */
-@media (min-width: 768px) and (pointer: coarse) {
+@media (min-width: 768px) and (any-pointer: coarse) and (hover: none) {
   html:has(.ls-clientes-workspace),
   body:has(.ls-clientes-workspace),
   #root:has(.ls-clientes-workspace) {
