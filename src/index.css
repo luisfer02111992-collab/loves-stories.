@@ -383,3 +383,25 @@ body:has(.ls-clientes-android-shell),
   max-height: none !important;
   overflow: visible !important;
 }
+
+/* Clientes Android: contenedor REAL de scroll.
+   Las reglas antiguas .ls-clientes-workspace no corresponden al DOM actual.
+   Mantener el desplazamiento dentro del área de contenido, sin bloquearlo
+   por el alto fijo de la aplicación en modo sitio de escritorio. */
+.ls-app-shell.ls-clientes-android-shell > .ls-workspace > .ls-main-content {
+  display: block !important;
+  height: calc(100dvh - 110px) !important;
+  min-height: 280px !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  overscroll-behavior: auto !important;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y pinch-zoom !important;
+}
+.ls-app-shell.ls-clientes-android-shell .ls-clientes-android {
+  height: auto !important;
+  min-height: 100% !important;
+  overflow: visible !important;
+  touch-action: pan-x pan-y pinch-zoom !important;
+}
