@@ -35,7 +35,7 @@ const SECCIONES = [
 
 export default function Layout() {
   const location = useLocation();
-  const clientesAndroid = location.pathname === "/clientes" && typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
+  const clientesAndroid = location.pathname === "/clientes";
   const { profile, signOut } = useAuth();
   const { vendedores, vendedorActivoId, vendedorActivoNombre, iniciarSesion, finalizarSesion } = useSellerSession();
   const rol = profile?.role ?? "employee";
