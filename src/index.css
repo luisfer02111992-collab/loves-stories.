@@ -254,3 +254,49 @@ html[data-ls-theme="borgona_luxury"] body {
     touch-action: auto !important;
   }
 }
+
+/* Clientes adopta el scroll nativo del Catálogo: el contenedor principal
+   es el único que desplaza, incluyendo todos los productos y botones finales. */
+@media (min-width: 768px) {
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    height: 100dvh !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace {
+    flex: 1 1 0% !important;
+    height: 0 !important;
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    flex: 1 1 0% !important;
+    height: 100% !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    overscroll-behavior: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    display: grid !important;
+    height: auto !important;
+    max-height: none !important;
+    min-height: 0 !important;
+    overflow: visible !important;
+    grid-template-rows: auto !important;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    height: auto !important;
+    max-height: none !important;
+    overflow: visible !important;
+  }
+}
+@media (any-pointer: coarse) {
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
+  .ls-clientes-workspace,
+  .ls-clientes-workspace * {
+    touch-action: auto !important;
+  }
+}
