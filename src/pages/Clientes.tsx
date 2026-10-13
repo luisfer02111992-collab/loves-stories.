@@ -20,43 +20,6 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
-  // Si Clientes se muestra con diseño de escritorio en un teléfono, Chrome puede
-  // mantener el viewport visual inmóvil aunque el documento sea más alto.
-  // Este arrastre actúa sobre el elemento desplazable real (document.scrollingElement).
-  const paginaClientesRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if ((navigator.maxTouchPoints || 0) < 1) return;
-    const root = paginaClientesRef.current;
-    const scroller = document.scrollingElement as HTMLElement | null;
-    if (!root || !scroller) return;
-    let lastY: number | null = null;
-    const startDrag = (e: PointerEvent) => {
-      if (e.pointerType !== "touch") return;
-      lastY = e.clientY;
-    };
-    const moveDrag = (e: PointerEvent) => {
-      if (e.pointerType !== "touch" || lastY === null) return;
-      const target = e.target as Element | null;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) return;
-      const dy = lastY - e.clientY;
-      lastY = e.clientY;
-      if (Math.abs(dy) < 1) return;
-      scroller.scrollTop += dy;
-      e.preventDefault();
-    };
-    const stopDrag = () => { lastY = null; };
-    root.addEventListener("pointerdown", startDrag);
-    root.addEventListener("pointermove", moveDrag, { passive: false });
-    root.addEventListener("pointerup", stopDrag);
-    root.addEventListener("pointercancel", stopDrag);
-    return () => {
-      root.removeEventListener("pointerdown", startDrag);
-      root.removeEventListener("pointermove", moveDrag);
-      root.removeEventListener("pointerup", stopDrag);
-      root.removeEventListener("pointercancel", stopDrag);
-    };
-  }, []);
-
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
@@ -855,7 +818,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   return (
-    <div ref={paginaClientesRef} className="grid md:grid-cols-3 gap-4">
+    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
       <div className="md:col-span-1 ls-clientes-list-panel">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
