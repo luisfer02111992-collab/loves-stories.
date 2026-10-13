@@ -274,3 +274,56 @@ html[data-ls-theme="borgona_luxury"] body {
     touch-action: auto !important;
   }
 }
+
+/* NUEVA VISTA ANDROID DE CLIENTES.
+   La detección se hace por dispositivo Android (no por ancho), de modo
+   que también funciona con la opción "sitio de escritorio" y zoom. */
+html:has(.ls-clientes-android),
+body:has(.ls-clientes-android),
+#root:has(.ls-clientes-android) {
+  height: auto !important;
+  min-height: 100% !important;
+  max-height: none !important;
+  overflow-y: auto !important;
+}
+.ls-app-shell:has(.ls-clientes-android) {
+  height: auto !important;
+  min-height: 100dvh !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.ls-app-shell:has(.ls-clientes-android) > .ls-workspace {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+  overflow: visible !important;
+}
+.ls-app-shell:has(.ls-clientes-android) .ls-workspace > .ls-sidebar {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.ls-app-shell:has(.ls-clientes-android) .ls-workspace > .ls-main-content {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+  flex: 1 1 auto !important;
+}
+.ls-clientes-android {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+  touch-action: pan-y pinch-zoom;
+}
+.ls-clientes-android > div,
+.ls-clientes-android > div > div {
+  min-height: 0 !important;
+  max-height: none !important;
+  height: auto !important;
+  overflow: visible !important;
+}
