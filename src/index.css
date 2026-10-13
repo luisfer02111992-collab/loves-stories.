@@ -361,82 +361,50 @@ html[data-ls-theme="borgona_luxury"] body {
   }
 }
 
-/* Clientes: en pantallas estrechas con Chrome en modo escritorio,
-   permitir desplazamiento real del documento hasta el pie del pedido.
-   No depende de que Android anuncie pointer:coarse. */
-@media (min-width: 768px) and (max-width: 1200px) {
-  html:has(.ls-clientes-workspace),
-  body:has(.ls-clientes-workspace),
-  #root:has(.ls-clientes-workspace) {
-    height: auto !important;
-    overflow-y: auto !important;
-  }
-  .ls-app-shell:has(.ls-clientes-workspace),
-  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace,
-  .ls-clientes-workspace > .ls-clientes-list-panel,
-  .ls-clientes-workspace > .ls-clientes-order-panel {
-    position: static !important;
-    height: auto !important;
-    max-height: none !important;
-    overflow-y: visible !important;
-    overflow-x: visible !important;
-    touch-action: auto !important;
-    overscroll-behavior: auto !important;
-  }
-  .ls-app-shell:has(.ls-clientes-workspace) {
-    min-height: 100dvh !important;
-  }
-  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
-    flex: 1 0 auto !important;
-  }
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
-    grid-template-rows: auto !important;
-    align-items: start !important;
-  }
-}
 
-/* Clientes en acceso directo / app instalada Android:
-   habilitar desplazamiento del documento, independientemente del viewport
-   reportado por el modo escritorio. No afecta a equipos sin pantalla táctil. */
+/* Clientes: misma técnica que Productos (overflow-y-auto + maxHeight).
+   En dispositivos táctiles se desplazan las columnas, sin fijar el shell
+   ni bloquear el gesto de pinza de la aplicación instalada. */
 html.ls-clientes-touch-page,
 html.ls-clientes-touch-page body,
 html.ls-clientes-touch-page #root {
   height: auto !important;
-  min-height: 100% !important;
   overflow-x: auto !important;
   overflow-y: auto !important;
   touch-action: auto !important;
 }
 html.ls-clientes-touch-page .ls-app-shell,
 html.ls-clientes-touch-page .ls-app-shell > .ls-workspace,
-html.ls-clientes-touch-page .ls-app-shell .ls-main-content,
-html.ls-clientes-touch-page .ls-clientes-workspace,
-html.ls-clientes-touch-page .ls-clientes-list-panel,
-html.ls-clientes-touch-page .ls-clientes-order-panel {
-  position: static !important;
+html.ls-clientes-touch-page .ls-main-content,
+html.ls-clientes-touch-page .ls-clientes-workspace {
+  position: relative !important;
   height: auto !important;
   max-height: none !important;
+  min-height: 0 !important;
   overflow: visible !important;
-  overscroll-behavior: auto !important;
   touch-action: auto !important;
 }
 html.ls-clientes-touch-page .ls-app-shell {
   min-height: 100dvh !important;
 }
 html.ls-clientes-touch-page .ls-app-shell > .ls-workspace,
-html.ls-clientes-touch-page .ls-app-shell .ls-main-content,
+html.ls-clientes-touch-page .ls-main-content,
 html.ls-clientes-touch-page .ls-clientes-workspace {
   flex: 0 0 auto !important;
 }
 html.ls-clientes-touch-page .ls-clientes-workspace {
-  display: grid !important;
   grid-template-rows: auto !important;
   align-items: start !important;
 }
-html.ls-clientes-touch-page .ls-clientes-workspace * {
-  touch-action: auto !important;
+html.ls-clientes-touch-page .ls-clientes-workspace > .ls-clientes-list-panel,
+html.ls-clientes-touch-page .ls-clientes-workspace > .ls-clientes-order-panel {
+  position: relative !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: 68dvh !important;
+  overflow-y: auto !important;
+  overflow-x: auto !important;
+  overscroll-behavior: auto !important;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y pinch-zoom !important;
 }
