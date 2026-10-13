@@ -413,19 +413,24 @@ html[data-ls-theme="borgona_luxury"] body {
   }
 }
 
-/* Clientes on Android desktop-site mode: let Chrome own the touch gesture.
-   Unlike pan-x/pan-y directives, auto preserves native visual-viewport
-   panning after the pinch ends. Scoped to Clientes content only. */
-@media (any-pointer: coarse) {
-  .ls-clientes-workspace,
-  .ls-clientes-workspace *,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
-    touch-action: auto !important;
-    overscroll-behavior: auto !important;
-  }
+/* Clientes en Chrome Android con modo escritorio: paneles desplazables al
+   arrastrar sobre las tarjetas, sin depender de barras diminutas.
+   No se modifica el comportamiento de PC ni de otras carpetas. */
+@media (min-width: 768px) and (any-pointer: coarse) {
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar-nav,
   .ls-clientes-workspace > .ls-clientes-list-panel,
   .ls-clientes-workspace > .ls-clientes-order-panel {
-    overflow-x: visible !important;
-    overflow-y: visible !important;
+    height: min(78dvh, 900px) !important;
+    max-height: min(78dvh, 900px) !important;
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    overscroll-behavior: auto !important;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x pan-y pinch-zoom !important;
+  }
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    overflow: visible !important;
+    align-items: start !important;
   }
 }
