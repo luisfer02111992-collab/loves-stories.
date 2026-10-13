@@ -819,7 +819,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
 
   return (
     <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
-      <div className="md:col-span-1 ls-clientes-list-panel">
+      <div className="md:col-span-1 ls-clientes-list-panel" style={{ WebkitOverflowScrolling: "touch" }}>
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
           <button onClick={() => setMostrarNuevo((v) => !v)} className="text-xs px-3 py-1.5 rounded-md flex items-center gap-1.5" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
@@ -893,7 +893,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
         )}
       </div>
 
-      <div className="md:col-span-2 ls-clientes-order-panel">
+      <div className="md:col-span-2 ls-clientes-order-panel" style={{ WebkitOverflowScrolling: "touch" }}>
         {!seleccionado ? (
           <p className="text-sm" style={{ color: "#5B4E5E" }}>Selecciona o crea un cliente.</p>
         ) : (
