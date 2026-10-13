@@ -98,11 +98,15 @@ export default function Clientes() {
 
   useEffect(() => { setIndiceBusqueda(0); }, [busquedaCliente, pestanaClientes]);
 
+  // En móviles el scrollIntoView automático mueve el documento completo,
+  // incluso al abrir Clientes por primera vez. Solo usarlo con ratón/teclado.
   useEffect(() => {
+    if (navigator.maxTouchPoints > 0) return;
     if (seleccionado?.id) clienteRefs.current[seleccionado.id]?.scrollIntoView({ block: "nearest" });
   }, [seleccionado?.id]);
 
   useEffect(() => {
+    if (navigator.maxTouchPoints > 0) return;
     if (productoSeleccionado) productoRefs.current[productoSeleccionado]?.scrollIntoView({ block: "nearest" });
   }, [productoSeleccionado]);
 
