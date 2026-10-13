@@ -93,7 +93,7 @@ export default function Clientes() {
   }, [seleccionado?.id]);
 
   useEffect(() => {
-    if (productoSeleccionado) productoRefs.current[productoSeleccionado]?.scrollIntoView({ block: "nearest" });
+    if (productoSeleccionado && !window.matchMedia("(pointer: coarse), (any-pointer: coarse)").matches) productoRefs.current[productoSeleccionado]?.scrollIntoView({ block: "nearest" });
   }, [productoSeleccionado]);
 
   useEffect(() => {
