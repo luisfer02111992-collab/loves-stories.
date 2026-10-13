@@ -143,7 +143,7 @@ html[data-ls-theme="borgona_luxury"] body {
 /* Scroll nativo en pantallas táctiles que usan el diseño de escritorio.
    Mantiene independientes la navegación, la lista de clientes y el pedido.
    No intercepta gestos: Chrome conserva el desplazamiento y el zoom por pellizco. */
-@media (min-width: 768px) and (pointer: coarse) and (hover: none) {
+@media (min-width: 768px) and (any-pointer: coarse) and (hover: none) {
   html:has(.ls-clientes-workspace),
   body:has(.ls-clientes-workspace),
   #root:has(.ls-clientes-workspace) {
