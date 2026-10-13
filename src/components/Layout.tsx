@@ -35,7 +35,6 @@ const SECCIONES = [
 
 export default function Layout() {
   const location = useLocation();
-  const clientesAndroid = location.pathname === "/clientes" && typeof navigator !== "undefined" && /Android/i.test(navigator.userAgent);
   const { profile, signOut } = useAuth();
   const { vendedores, vendedorActivoId, vendedorActivoNombre, iniciarSesion, finalizarSesion } = useSellerSession();
   const rol = profile?.role ?? "employee";
@@ -95,7 +94,7 @@ async function cerrarSesionSeguro() {
   const textoBarra = visualTheme ? temaVisual.text : (estiloBarra === "claro" ? "#2B1E2E" : "#C9BFC7");
 
   return (
-    <div className={`min-h-screen flex flex-col ls-app-shell${clientesAndroid ? " ls-clientes-android-shell" : ""}`} style={{ background: temaVisual.shell, minHeight: "100dvh" }}>
+    <div className="min-h-screen flex flex-col ls-app-shell" style={{ background: temaVisual.shell, minHeight: "100dvh" }}>
       <div className="flex items-center justify-between px-4 py-2.5 gap-3 flex-wrap" style={{ background: fondoBarra }}>
         <div className="flex items-center gap-2"><img src="/loves-stories-logo.jpeg" alt="Logo Loves Stories" className="w-9 h-9 rounded-full object-cover border border-white/40"/><p className="font-cursive text-2xl" style={{ color: visualTheme === "rosa_claro" ? "#7b173b" : "#ffd3df" }}>{nombre}</p></div>
 
