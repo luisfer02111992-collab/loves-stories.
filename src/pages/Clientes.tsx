@@ -73,52 +73,6 @@ export default function Clientes() {
   const clienteRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const productoRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const pedidoSolicitud = useRef(0);
-  const panelPedidoRef = useRef<HTMLDivElement | null>(null);
-
-  // En el acceso directo Android, el gesto sobre las tarjetas no siempre
-  // desplaza el panel aunque la barra lateral sí funcione.
-  useEffect(() => {
-    const panel = panelPedidoRef.current;
-    if (!panel || navigator.maxTouchPoints < 1) return;
-    let anteriorY: number | null = null;
-    let anteriorX: number | null = null;
-    const inicio = (e: TouchEvent) => {
-      if (e.touches.length !== 1) { anteriorY = null; return; }
-      anteriorY = e.touches[0].clientY;
-      anteriorX = e.touches[0].clientX;
-    };
-    const mover = (e: TouchEvent) => {
-      if (e.touches.length !== 1 || anteriorY === null || anteriorX === null) return;
-      const t = e.touches[0];
-      const dy = anteriorY - t.clientY;
-      const dx = anteriorX - t.clientX;
-      anteriorY = t.clientY;
-      anteriorX = t.clientX;
-      if (Math.abs(dx) > Math.abs(dy) * 1.5) return;
-      // No interferir con campos ni con el zoom de dos dedos.
-      const target = e.target as HTMLElement;
-      if (target.closest("input, textarea, select, [contenteditable=true]")) return;
-      const desplazable = [panel, panel.parentElement, panel.parentElement?.parentElement,
-        document.scrollingElement].find(el => {
-          if (!el || el.scrollHeight <= el.clientHeight + 2) return false;
-          if (el === document.scrollingElement) return true;
-          const overflow = getComputedStyle(el).overflowY;
-          return overflow === "auto" || overflow === "scroll";
-        });
-      if (!desplazable) return;
-      const antes = desplazable.scrollTop;
-      desplazable.scrollTop += dy;
-      if (desplazable.scrollTop !== antes && e.cancelable) e.preventDefault();
-    };
-    panel.addEventListener("touchstart", inicio, { passive: true });
-    panel.addEventListener("touchmove", mover, { passive: false });
-    return () => {
-      panel.removeEventListener("touchstart", inicio);
-      panel.removeEventListener("touchmove", mover);
-    };
-  }, []);
-
-
   const clientesVisibles = useMemo(() => {
     const q = busquedaCliente.trim().toLowerCase();
     const base = q ? clientes : clientes.filter(c => pestanaClientes === "abiertas" ? clientesAbiertos.has(c.id) : !clientesAbiertos.has(c.id));
@@ -944,7 +898,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
         )}
       </div>
 
-      <div ref={panelPedidoRef} className="md:col-span-2 ls-clientes-order-panel" style={{ WebkitOverflowScrolling: "touch" }}>
+      <div className="md:col-span-2 ls-clientes-order-panel">
         {!seleccionado ? (
           <p className="text-sm" style={{ color: "#5B4E5E" }}>Selecciona o crea un cliente.</p>
         ) : (
