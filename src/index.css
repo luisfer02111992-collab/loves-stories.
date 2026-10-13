@@ -429,3 +429,21 @@ html[data-ls-theme="borgona_luxury"] body {
     overflow-y: visible !important;
   }
 }
+
+/* Clientes: desplazamiento táctil dentro de los paneles, como en Productos.
+   Sobrescribe únicamente los bloqueos del layout fijo de Clientes. */
+@media (min-width: 768px) and (any-pointer: coarse) {
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-workspace {
+    min-height: 0 !important;
+    overflow: hidden !important;
+  }
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
+    min-height: 0 !important;
+    overflow-y: auto !important;
+    overflow-x: auto !important;
+    touch-action: pan-y pan-x pinch-zoom !important;
+    overscroll-behavior: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+}
