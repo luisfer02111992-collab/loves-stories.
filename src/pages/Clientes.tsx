@@ -20,15 +20,6 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
-  // La app instalada puede informar un ancho de escritorio aunque sea táctil.
-  // Activar el desplazamiento nativo solo dentro de Clientes y solo en dispositivos táctiles.
-  useEffect(() => {
-    const touch = navigator.maxTouchPoints > 0 || "ontouchstart" in window;
-    if (!touch) return;
-    document.documentElement.classList.add("ls-clientes-touch-page");
-    return () => document.documentElement.classList.remove("ls-clientes-touch-page");
-  }, []);
-
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
@@ -98,15 +89,11 @@ export default function Clientes() {
 
   useEffect(() => { setIndiceBusqueda(0); }, [busquedaCliente, pestanaClientes]);
 
-  // En móviles el scrollIntoView automático mueve el documento completo,
-  // incluso al abrir Clientes por primera vez. Solo usarlo con ratón/teclado.
   useEffect(() => {
-    if (navigator.maxTouchPoints > 0) return;
     if (seleccionado?.id) clienteRefs.current[seleccionado.id]?.scrollIntoView({ block: "nearest" });
   }, [seleccionado?.id]);
 
   useEffect(() => {
-    if (navigator.maxTouchPoints > 0) return;
     if (productoSeleccionado) productoRefs.current[productoSeleccionado]?.scrollIntoView({ block: "nearest" });
   }, [productoSeleccionado]);
 
