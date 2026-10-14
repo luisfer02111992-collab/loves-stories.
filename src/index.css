@@ -140,13 +140,35 @@ html[data-ls-theme="borgona_luxury"] body {
 :root[data-ls-theme="borgona_luxury"] .ls-code-search-button { background:#c33d78!important; }
 @media (max-width:700px){ .ls-global-banner{height:105px}.ls-global-banner img{object-fit:cover} }
 
-/* Scroll táctil nativo en Clientes con diseño de escritorio.
-   Mantiene scroll independiente en los tres paneles y permite zoom del navegador. */
+/* Desplazamiento estándar del navegador.
+   No se aplican reglas especiales a Clientes ni a dispositivos táctiles.
+   En PC se conserva el diseño responsive de Tailwind y el documento usa scroll nativo. */
+html, body, #root {
+  min-height: 100%;
+  height: auto;
+  overflow-x: auto;
+  overflow-y: auto;
+}
+.ls-app-shell {
+  min-height: 100dvh !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.ls-app-shell > .ls-workspace,
+.ls-workspace > .ls-main-content {
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+
+/* Scroll táctil independiente en los tres paneles de Clientes en Android con “Sitio de escritorio”. */
 @media (min-width: 768px) and (any-pointer: coarse) and (hover: none) {
   .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar {
     max-height: calc(100dvh - 64px);
-    overflow-x: hidden;
-    overflow-y: auto;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
     touch-action: auto;
     -webkit-overflow-scrolling: touch;
   }
@@ -155,8 +177,8 @@ html[data-ls-theme="borgona_luxury"] body {
   .ls-clientes-workspace > .ls-clientes-order-panel {
     max-height: calc(100dvh - 290px);
     min-height: 0;
-    overflow-x: auto;
-    overflow-y: auto;
+    overflow-x: auto !important;
+    overflow-y: auto !important;
     touch-action: auto;
     -webkit-overflow-scrolling: touch;
   }
