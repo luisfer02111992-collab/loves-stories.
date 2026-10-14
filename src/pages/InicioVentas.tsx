@@ -50,6 +50,8 @@ export default function InicioVentas() {
   const colaEscaneosRef = useRef<Promise<void>>(Promise.resolve());
   const [ultimoResultado, setUltimoResultado] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Category[]>([]);
+  const [tallaPendiente, setTallaPendiente] = useState<{ product: Product; tallas: Record<string, number> } | null>(null);
+  const [tallaElegida, setTallaElegida] = useState("");
 
   useEffect(() => {
     supabase.from("customers").select("*").is("deleted_at", null).order("name").then(({ data }) => setClientes((data as Customer[]) ?? []));
@@ -130,8 +132,8 @@ useEffect(() => {
         return [{
           ...linea,
           product: productoActual,
-          ringSize: null,
-          stockTalla: null,
+          ringSize: linea.ringSize ?? null,
+          stockTalla: linea.stockTalla ?? null,
           cantidad: Math.min(linea.cantidad, productoActual.stock_available),
         }];
       });
@@ -188,83 +190,124 @@ useEffect(() => {
       .then(() => procesarCodigoEscaneado(codigoLeido));
   }
 
+  async function obtenerTallasPublicadas(producto: Product): Promise<Record<string, number>> {
+    const { data, error } = await supabase
+      .from("catalog_products")
+      .select("variant_stock")
+      .eq("product_id", producto.id)
+      .eq("active", true)
+      .eq("variant_type", "ring_size");
+    if (error) throw new Error(error.message);
+
+    const acumuladas: Record<string, number> = {};
+    for (const publicacion of data ?? []) {
+      for (const [talla, cantidad] of Object.entries((publicacion.variant_stock ?? {}) as Record<string, number>)) {
+        acumuladas[talla] = (acumuladas[talla] ?? 0) + Math.max(0, Number(cantidad) || 0);
+      }
+    }
+    return Object.fromEntries(Object.entries(acumuladas).filter(([, cantidad]) => cantidad > 0));
+  }
+
+  function agregarUnidadAlCarrito(producto: Product, ringSize: string | null = null, maxCantidad: number | null = null) {
+    const actual = carritoRef.current;
+    const existente = actual.find((linea) =>
+      linea.product.id === producto.id && (linea.ringSize ?? null) === ringSize
+    );
+    const limite = maxCantidad ?? producto.stock_available;
+    if (existente && existente.cantidad >= limite) {
+      setAvisoBloqueante({ tipo: "agotado", codigo: producto.code, nombre: producto.name });
+      return;
+    }
+
+    const siguiente = existente
+      ? actual.map((linea) =>
+          linea.product.id === producto.id && (linea.ringSize ?? null) === ringSize
+            ? { ...linea, cantidad: linea.cantidad + 1, stockTalla: maxCantidad ?? linea.stockTalla }
+            : linea
+        )
+      : [...actual, { product: producto, cantidad: 1, ringSize, stockTalla: maxCantidad }];
+
+    carritoRef.current = siguiente;
+    setCarrito(siguiente);
+    setFilaSeleccionada(ringSize ? `${producto.id}-${ringSize}` : producto.id);
+  }
+
   async function procesarCodigoEscaneado(codigoLeido: string) {
     try {
-      let p = productosCacheRef.current.get(codigoLeido);
-
-      // Si el producto normal ya fue leído una vez, las siguientes lecturas
-      // suman inmediatamente sin esperar otra consulta a Supabase.
-      if (p) {
-        const actual = carritoRef.current;
-        const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
-        if (existente) {
-          if (existente.cantidad >= p.stock_available) {
-            setAvisoBloqueante({ tipo: "agotado", codigo: p.code, nombre: p.name });
-            return;
-          }
-          const siguiente = actual.map((l) =>
-                l.product.id === p!.id && !l.ringSize
-                  ? { ...l, cantidad: l.cantidad + 1 }
-                  : l
-              );
-          carritoRef.current = siguiente;
-          setCarrito(siguiente);
-          setFilaSeleccionada(null);
-          requestAnimationFrame(() => setFilaSeleccionada(p!.id));
-          return;
-        }
-      }
-
+      let producto = productosCacheRef.current.get(codigoLeido);
       setBuscando(true);
 
-      if (!p) {
-        const { data: producto, error } = await supabase
+      if (!producto) {
+        const { data, error } = await supabase
           .from("products").select("*")
           .eq("code", codigoLeido)
           .is("deleted_at", null)
           .maybeSingle();
 
         if (error) throw new Error(error.message);
-        if (!producto) {
-          setNoEncontrado(false);
+        if (!data) {
           setAvisoBloqueante({ tipo: "no_encontrado", codigo: codigoLeido });
           return;
         }
-        p = producto as Product;
-        productosCacheRef.current.set(codigoLeido, p);
+        producto = data as Product;
+        productosCacheRef.current.set(codigoLeido, producto);
       }
 
-      if (p.stock_available < 1) {
+      if (producto.stock_available < 1) {
         setProductoSinStock(null);
-        setAvisoBloqueante({ tipo: "agotado", codigo: p.code, nombre: p.name });
+        setAvisoBloqueante({ tipo: "agotado", codigo: producto.code, nombre: producto.name });
         return;
       }
 
-      // Asignación manual: se usa únicamente el stock disponible general.
-      // Las tallas publicadas pertenecen exclusivamente al catálogo.
-
+      const tallas = await obtenerTallasPublicadas(producto);
+      const totalCatalogo = Object.values(tallas).reduce((suma, cantidad) => suma + cantidad, 0);
       const actual = carritoRef.current;
-      const existente = actual.find((l) => l.product.id === p!.id && !l.ringSize);
-      if (existente && existente.cantidad >= p.stock_available) {
-        setAvisoBloqueante({ tipo: "agotado", codigo: p.code, nombre: p.name });
+      const unidadesSinTallaEnCarrito = actual
+        .filter((linea) => linea.product.id === producto!.id && !linea.ringSize)
+        .reduce((suma, linea) => suma + linea.cantidad, 0);
+      const stockFueraCatalogo = Math.max(0, producto.stock_available - totalCatalogo);
+
+      if (totalCatalogo > 0 && stockFueraCatalogo - unidadesSinTallaEnCarrito <= 0) {
+        const tallasEnCarrito: Record<string, number> = {};
+        for (const linea of actual) {
+          if (linea.product.id === producto.id && linea.ringSize) {
+            tallasEnCarrito[linea.ringSize] = (tallasEnCarrito[linea.ringSize] ?? 0) + linea.cantidad;
+          }
+        }
+        const tallasRestantes = Object.fromEntries(
+          Object.entries(tallas)
+            .map(([talla, stock]) => [talla, Math.max(0, stock - (tallasEnCarrito[talla] ?? 0))])
+            .filter(([, stock]) => Number(stock) > 0)
+        );
+        if (Object.keys(tallasRestantes).length === 0) {
+          setAvisoBloqueante({ tipo: "agotado", codigo: producto.code, nombre: producto.name });
+          return;
+        }
+        setTallaPendiente({ product: producto, tallas: tallasRestantes });
+        setTallaElegida("");
+        inputRef.current?.blur();
         return;
       }
-      const siguiente = existente
-        ? actual.map((l) =>
-            l.product.id === p!.id && !l.ringSize
-              ? { ...l, cantidad: l.cantidad + 1 } : l)
-        : [...actual, { product: p, cantidad: 1 }];
 
-      carritoRef.current = siguiente;
-      setCarrito(siguiente);
-      setFilaSeleccionada(null);
-      requestAnimationFrame(() => setFilaSeleccionada(p!.id));
+      agregarUnidadAlCarrito(producto, null, totalCatalogo > 0 ? stockFueraCatalogo : null);
     } catch (error: any) {
       alert(error?.message ?? "No se pudo agregar el producto.");
     } finally {
       setBuscando(false);
-      inputRef.current?.focus();
+      if (!tallaPendiente) inputRef.current?.focus();
     }
+  }
+
+  function confirmarTallaPendiente() {
+    if (!tallaPendiente || !tallaElegida) return;
+    const enCarrito = carritoRef.current
+      .filter((linea) => linea.product.id === tallaPendiente.product.id && linea.ringSize === tallaElegida)
+      .reduce((suma, linea) => suma + linea.cantidad, 0);
+    const maxCantidad = enCarrito + (tallaPendiente.tallas[tallaElegida] ?? 0);
+    agregarUnidadAlCarrito(tallaPendiente.product, tallaElegida, maxCantidad);
+    setTallaPendiente(null);
+    setTallaElegida("");
+    setTimeout(() => inputRef.current?.focus(), 0);
   }
   useEffect(() => {
   if (!filaSeleccionada || !listaCarritoRef.current) return;
@@ -295,7 +338,7 @@ useEffect(() => {
         if (!mismaLinea) return l;
 
         const limite =
-          l.ringSize && l.stockTalla != null
+          l.stockTalla != null
             ? Math.min(l.product.stock_available, l.stockTalla)
             : l.product.stock_available;
 
@@ -536,12 +579,13 @@ if (linea) {
       if (modo === "directa") {
         const { data: orden, error } = await supabase.from("orders").insert({ customer_id: null, direct_sale: true }).select().single();
         if (error || !orden) throw new Error(error?.message ?? "No se pudo iniciar la venta directa");
-        const { error: errAsig } = await supabase.rpc("assign_products_to_order_batch", {
+        const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch", {
           p_order_id: orden.id,
           p_items: carrito.map((l) => ({
             product_id: l.product.id,
             quantity: l.cantidad,
             unit_price: precioPreview(l),
+            ring_size: l.ringSize ?? null,
           })),
           p_seller_id: vendedorActivoId,
           p_session_id: sesionActivaId,
@@ -557,12 +601,13 @@ if (linea) {
         setUltimoResultado(`Venta directa finalizada — Total Bs ${(totalReal ?? 0).toFixed(2)}`);
       } else if (customerId) {
         const orderId = await obtenerOrdenAbierta(customerId);
-        const { error: errAsig } = await supabase.rpc("assign_products_to_order_batch", {
+        const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch", {
           p_order_id: orderId,
           p_items: carrito.map((l) => ({
             product_id: l.product.id,
             quantity: l.cantidad,
             unit_price: precioPreview(l),
+            ring_size: l.ringSize ?? null,
           })),
           p_seller_id: vendedorActivoId,
           p_session_id: sesionActivaId,
@@ -597,6 +642,28 @@ if (linea) {
 
   return (
     <>
+      {tallaPendiente && (
+        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4" style={{ background: "rgba(25, 15, 25, 0.72)" }} role="presentation">
+          <section role="dialog" aria-modal="true" aria-labelledby="talla-asignacion-titulo" className="w-full max-w-md rounded-xl p-5 shadow-2xl" style={{ background: "#FFF9F7", border: "2px solid #9C7A3C" }}>
+            <h2 id="talla-asignacion-titulo" className="font-serif text-xl mb-2" style={{ color: "#7A2540" }}>
+              Elegir talla · {tallaPendiente.product.code}
+            </h2>
+            <p className="text-sm mb-3" style={{ color: "#5B4E5E" }}>
+              Ya se usaron las unidades fuera del catálogo. Elige la talla que se descontará del catálogo.
+            </p>
+            <select autoFocus value={tallaElegida} onChange={(e) => setTallaElegida(e.target.value)} className="w-full px-3 py-3 rounded text-base mb-4" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+              <option value="">Seleccionar talla…</option>
+              {Object.entries(tallaPendiente.tallas).sort(([a], [b]) => Number(a) - Number(b)).map(([talla, stock]) => (
+                <option key={talla} value={talla}>Talla {talla} — {stock} disponibles</option>
+              ))}
+            </select>
+            <div className="flex gap-2 justify-end">
+              <button type="button" onClick={() => { setTallaPendiente(null); setTallaElegida(""); setTimeout(() => inputRef.current?.focus(), 0); }} className="px-4 py-2 rounded text-sm" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
+              <button type="button" disabled={!tallaElegida} onClick={confirmarTallaPendiente} className="px-4 py-2 rounded text-sm" style={{ background: "#9C7A3C", color: "#FFF9F7", opacity: tallaElegida ? 1 : 0.55 }}>Agregar con talla</button>
+            </div>
+          </section>
+        </div>
+      )}
       {avisoBloqueante && (
         <div className="fixed inset-0 z-[99999] flex items-center justify-center p-4" style={{ background: "rgba(25, 15, 25, 0.72)" }} role="dialog" aria-modal="true">
           <div className="w-full max-w-md rounded-xl p-6 text-center shadow-2xl" style={{ background: "#FFF9F7", border: "3px solid #7A2540" }}>
@@ -739,7 +806,7 @@ style={{
 <button
   onClick={(e) => {
     e.stopPropagation();
-    const limite = l.ringSize && l.stockTalla != null
+    const limite = l.stockTalla != null
       ? Math.min(l.product.stock_available, l.stockTalla)
       : l.product.stock_available;
     if (l.cantidad >= limite) {
