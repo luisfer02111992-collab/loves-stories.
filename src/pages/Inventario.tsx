@@ -784,7 +784,7 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
   <div
     key={p.id}
     data-inventory-product
-    className="grid grid-cols-5 px-3.5 py-2.5 text-sm items-center
+    className="grid grid-cols-5 px-3.5 py-2.5 text-sm items-center"
     style={{ borderBottom: i < lista.length - 1 ? "1px solid #D9D0C2" : "none" }}
   >
     <span>
