@@ -772,7 +772,7 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
       </div>
 
       <div ref={listaInventarioRef} style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-       <div className="grid grid-cols-5 px-3.5 py-2 text-xs style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
+       <div className="grid grid-cols-5 px-3.5 py-2 text-xs" style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
   <span>Imagen</span>
   <span>Código</span>
   <span>Descripción</span>
