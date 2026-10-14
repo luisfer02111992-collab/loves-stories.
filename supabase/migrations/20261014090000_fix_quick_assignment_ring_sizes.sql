@@ -132,7 +132,7 @@ BEGIN
       p_seller_id,
       p_session_id,
       unit_price,
-      talla
+      NULL
     );
 
     IF catid IS NOT NULL THEN
