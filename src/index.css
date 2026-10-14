@@ -179,10 +179,12 @@ html, body, #root {
 }
 
 
-/* Clientes (prueba): copia completa aislada para probar el panel táctil sin alterar /clientes.
-   En teléfonos con Chrome en modo escritorio se apila el contenido y la lista de productos
-   tiene un área de desplazamiento propia. */
-@media (min-width: 768px) and (max-width: 1300px) and (any-pointer: coarse) {
+/* Clientes (prueba): acceso oculto en PC y visible solo en teléfono táctil.
+   La lista de productos tiene un área de desplazamiento propia en esta copia. */
+@media (max-width: 1300px) and (pointer: coarse) {
+  .ls-clientes-mobile-test-link {
+    display: flex !important;
+  }
   .ls-clientes-nuevo-workspace {
     grid-template-columns: minmax(0, 1fr) !important;
   }
@@ -197,3 +199,6 @@ html, body, #root {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* El nuevo acceso no aparece en PC; se habilita únicamente en la regla táctil de arriba. */
+.ls-clientes-mobile-test-link { display: none !important; }
