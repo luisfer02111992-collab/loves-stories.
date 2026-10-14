@@ -67,8 +67,11 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
   const [mermaCantidad, setMermaCantidad] = useState(1);
   const [mermaMotivo, setMermaMotivo] = useState("Dañado");
   const fileRef = useRef<HTMLInputElement>(null);
+  const buscadorRef = useRef<HTMLInputElement>(null);
+  const listaInventarioRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    buscadorRef.current?.focus({ preventScroll: true });
     cargar();
     supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
   }, []);
@@ -422,8 +425,20 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
       <div className="flex items-center gap-2 mb-3">
         <div className="flex items-center gap-2 px-3 py-2 rounded flex-1" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           <Search size={14} style={{ color: "#5B4E5E" }} />
-          <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por código o descripción…"
-            className="flex-1 text-sm outline-none bg-transparent" />
+          <input
+            ref={buscadorRef}
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return;
+              e.preventDefault();
+              listaInventarioRef.current
+                ?.querySelector<HTMLElement>("[data-inventory-product]")
+                ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+            }}
+            placeholder="Buscar por código o descripción…"
+            className="flex-1 text-sm outline-none bg-transparent"
+          />
         </div>
         <button onClick={() => setBuscarFoto((v) => !v)} title="Buscar por similitud de imagen"
           className="w-10 h-10 rounded-md flex items-center justify-center shrink-0"
@@ -756,8 +771,8 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
         </button>
       </div>
 
-      <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-       <div className="grid grid-cols-5 px-3.5 py-2 text-xs" style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
+      <div ref={listaInventarioRef} style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+       <div className="grid grid-cols-5 px-3.5 py-2 text-xs style={{ color: "#5B4E5E", borderBottom: "1px solid #D9D0C2" }}>
   <span>Imagen</span>
   <span>Código</span>
   <span>Descripción</span>
@@ -768,7 +783,8 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
 {lista.map((p, i) => (
   <div
     key={p.id}
-    className="grid grid-cols-5 px-3.5 py-2.5 text-sm items-center"
+    data-inventory-product
+    className="grid grid-cols-5 px-3.5 py-2.5 text-sm items-center
     style={{ borderBottom: i < lista.length - 1 ? "1px solid #D9D0C2" : "none" }}
   >
     <span>
