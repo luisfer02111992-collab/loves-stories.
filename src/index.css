@@ -165,66 +165,36 @@ html, body, #root {
 
 
 
-/* Scroll independiente en PC: navegación, lista de clientes y contenido principal.
-   Solo aplica a escritorio con mouse; el scroll/zoom táctil del celular queda intacto. */
+/* Scroll en PC: se conserva el scroll general de todas las secciones.
+   Solo las listas de Clientes tienen un área propia más amplia. */
 @media (min-width: 768px) and (hover: hover) and (pointer: fine) {
-  html,
-  body,
-  #root {
-    height: 100%;
-    min-height: 0;
-    overflow: hidden;
-  }
-
-  #root {
-    height: 100dvh;
-  }
-
-  .ls-app-shell {
-    height: 100dvh !important;
-    min-height: 0 !important;
-    max-height: 100dvh !important;
-    overflow: hidden !important;
-  }
-
-  .ls-workspace {
-    height: 0 !important;
-    min-height: 0 !important;
-    flex: 1 1 0% !important;
-    overflow: hidden !important;
-  }
-
   .ls-sidebar {
-    height: 100%;
+    position: sticky;
+    top: 0;
+    align-self: flex-start;
+    height: calc(100dvh - 70px);
     min-height: 0;
-    max-height: 100%;
+    max-height: calc(100dvh - 70px);
     overflow-x: hidden !important;
     overflow-y: auto !important;
     overscroll-behavior-y: contain;
     scrollbar-gutter: stable;
   }
 
-  .ls-main-content {
-    height: 100%;
-    min-height: 0 !important;
-    max-height: 100%;
-    overflow-x: auto !important;
-    overflow-y: auto !important;
-  }
-
-  .ls-clientes-list-panel {
-    display: flex;
-    flex-direction: column;
-    min-height: 0;
-    max-height: calc(100dvh - 380px);
-  }
-
   .ls-clientes-client-list {
-    flex: 1 1 auto;
-    min-height: 140px;
+    height: clamp(320px, 48vh, 560px);
+    min-height: 320px;
+    max-height: 560px;
+    flex: none;
     overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior-y: contain;
     scrollbar-gutter: stable;
+  }
+
+  .ls-clientes-productos {
+    max-height: 72vh !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
   }
 }
