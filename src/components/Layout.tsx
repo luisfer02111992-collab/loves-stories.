@@ -145,7 +145,8 @@ async function cerrarSesionSeguro() {
                   end={s.to === "/"}
                   className={({ isActive }) =>
                     "flex items-center gap-2 px-3 py-2 text-sm rounded-md whitespace-nowrap shrink-0 " +
-                    (isActive ? "font-semibold" : "")
+                    (isActive ? "font-semibold" : "") +
+                    (s.to === "/clientes-nuevo" ? " ls-clientes-mobile-test-link" : "")
                   }
                   style={({ isActive }) => ({
                     background: isActive ? temaVisual.active : "transparent",
