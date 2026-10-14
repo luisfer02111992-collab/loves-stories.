@@ -981,7 +981,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{color:"#9C7A3C"}}/>
           <input value={busquedaCliente} onChange={e=>setBusquedaCliente(e.target.value)} onKeyDown={tecladoBusquedaCliente} placeholder="Buscar cliente por nombre o teléfono..." className="w-full pl-9 pr-3 py-2 rounded text-sm outline-none" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}/>
         </div>
-        <div style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+        <div className="ls-clientes-client-list" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
           {clientesVisibles.map((c, i, arr) => (
             <div key={c.id} tabIndex={0} ref={el => { clienteRefs.current[c.id] = el; }} onClick={() => { setSeleccionado(c); clienteRefs.current[c.id]?.focus({ preventScroll: true }); }} onKeyDown={e => { if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return; e.preventDefault(); const j = Math.max(0, Math.min(clientesVisibles.length - 1, i + (e.key === "ArrowDown" ? 1 : -1))); setSeleccionado(clientesVisibles[j]); clienteRefs.current[clientesVisibles[j].id]?.focus({ preventScroll: true }); }} className="px-3.5 py-3 flex items-center justify-between gap-2" style={{ background: seleccionado?.id === c.id || (busquedaCliente && i===indiceBusqueda) ? "#EDE7DE" : "transparent", borderBottom: i < arr.length - 1 ? "1px solid #D9D0C2" : "none" }}>
               <button onClick={() => setSeleccionado(c)} className="flex-1 text-left">
