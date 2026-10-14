@@ -1131,17 +1131,108 @@ function linkWhatsapp(telefono: string, mensaje: string) {
             )}
 
             {mostrarResumenCierre && (
-              <div className="p-4 mb-3 rounded-md" style={{ background: "#F6EAD2", border: "1px solid #B7791F" }}>
-                <p className="text-sm font-medium mb-2" style={{ color: "#7A5F2D" }}>Confirmar cierre de pedido</p>
-                <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Total del pedido: Bs {total.toFixed(2)} (incluye Bs {descuentoTotal.toFixed(2)} de descuento)</div>
-                <div className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Dinero disponible para este pedido: Bs {depositado.toFixed(2)}</div>
-                {saldoAFavor > 0 ? <div className="text-xs mb-2" style={{ color: "#4F6F52" }}>Saldo a favor: Bs {saldoAFavor.toFixed(2)} — al cerrar se registrará automáticamente como dinero devuelto y la cuenta terminará en Bs 0.</div> : <div className="text-xs mb-2" style={{ color: "#7A2540" }}>Saldo pendiente: Bs {saldoPendiente.toFixed(2)} — al cerrar se registrará automáticamente como pagado y la cuenta terminará en Bs 0.</div>}
-                <div className="flex gap-2">
-                  <button onClick={confirmarCierre} disabled={cerrando} className="text-xs px-4 py-2 rounded-md"
-                    style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
-                    {cerrando ? "Cerrando..." : "Confirmar y cerrar pedido"}
-                  </button>
-                  <button onClick={() => { setMostrarResumenCierre(false); setPendienteSobrante(false); }} className="text-xs px-4 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
+              <div
+                role="presentation"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (!cerrando) {
+                      setMostrarResumenCierre(false);
+                      setPendienteSobrante(false);
+                    }
+                    return;
+                  }
+                  if (e.key !== "Tab") {
+                    e.stopPropagation();
+                    return;
+                  }
+                  const focusables = e.currentTarget.querySelectorAll<HTMLElement>(
+                    'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+                  );
+                  const first = focusables[0];
+                  const last = focusables[focusables.length - 1];
+                  if (!first || !last) {
+                    e.preventDefault();
+                  } else if (e.shiftKey && document.activeElement === first) {
+                    e.preventDefault();
+                    last.focus();
+                  } else if (!e.shiftKey && document.activeElement === last) {
+                    e.preventDefault();
+                    first.focus();
+                  }
+                  e.stopPropagation();
+                }}
+                style={{
+                  position: "fixed",
+                  inset: 0,
+                  zIndex: 10000,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 16,
+                  background: "rgba(25, 8, 16, 0.58)",
+                  overflowY: "auto",
+                  overscrollBehavior: "contain",
+                  touchAction: "pan-y pinch-zoom",
+                }}
+              >
+                <div
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="confirmar-cierre-titulo"
+                  style={{
+                    width: "100%",
+                    maxWidth: 520,
+                    maxHeight: "calc(100dvh - 32px)",
+                    overflowY: "auto",
+                    padding: 20,
+                    borderRadius: 12,
+                    background: "#F6EAD2",
+                    border: "1px solid #B7791F",
+                    boxShadow: "0 18px 55px rgba(0,0,0,0.3)",
+                    overscrollBehavior: "contain",
+                    touchAction: "pan-y pinch-zoom",
+                    WebkitOverflowScrolling: "touch",
+                  }}
+                >
+                  <p id="confirmar-cierre-titulo" className="text-base font-medium mb-3" style={{ color: "#7A5F2D" }}>
+                    Confirmar cierre de pedido
+                  </p>
+                  <div className="text-sm mb-2" style={{ color: "#5B4E5E" }}>
+                    Total del pedido: Bs {total.toFixed(2)} (incluye Bs {descuentoTotal.toFixed(2)} de descuento)
+                  </div>
+                  <div className="text-sm mb-2" style={{ color: "#5B4E5E" }}>
+                    Dinero disponible para este pedido: Bs {depositado.toFixed(2)}
+                  </div>
+                  {saldoAFavor > 0 ? (
+                    <div className="text-sm mb-4" style={{ color: "#4F6F52" }}>
+                      Saldo a favor: Bs {saldoAFavor.toFixed(2)} — al cerrar se registrará automáticamente como dinero devuelto y la cuenta terminará en Bs 0.
+                    </div>
+                  ) : (
+                    <div className="text-sm mb-4" style={{ color: "#7A2540" }}>
+                      Saldo pendiente: Bs {saldoPendiente.toFixed(2)} — al cerrar se registrará automáticamente como pagado y la cuenta terminará en Bs 0.
+                    </div>
+                  )}
+                  <div className="flex gap-2 flex-wrap justify-end">
+                    <button
+                      onClick={confirmarCierre}
+                      disabled={cerrando}
+                      className="text-sm px-4 py-2 rounded-md"
+                      style={{ background: "#2B1E2E", color: "#F7F3EC", opacity: cerrando ? 0.65 : 1 }}
+                    >
+                      {cerrando ? "Cerrando..." : "Confirmar y cerrar pedido"}
+                    </button>
+                    <button
+                      autoFocus
+                      disabled={cerrando}
+                      onClick={() => { setMostrarResumenCierre(false); setPendienteSobrante(false); }}
+                      className="text-sm px-4 py-2 rounded-md"
+                      style={{ background: "#F7F3EC", border: "1px solid #D9D0C2", opacity: cerrando ? 0.65 : 1 }}
+                    >
+                      Cancelar
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
