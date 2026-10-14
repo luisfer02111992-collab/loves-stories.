@@ -140,74 +140,24 @@ html[data-ls-theme="borgona_luxury"] body {
 :root[data-ls-theme="borgona_luxury"] .ls-code-search-button { background:#c33d78!important; }
 @media (max-width:700px){ .ls-global-banner{height:105px}.ls-global-banner img{object-fit:cover} }
 
-/* Desplazamiento estándar del navegador.
-   No se aplican reglas especiales a Clientes ni a dispositivos táctiles.
-   En PC se conserva el diseño responsive de Tailwind y el documento usa scroll nativo. */
-html, body, #root {
-  min-height: 100%;
-  height: auto;
-  overflow-x: auto;
-  overflow-y: auto;
-}
-.ls-app-shell {
-  min-height: 100dvh !important;
-  height: auto !important;
-  max-height: none !important;
-  overflow: visible !important;
-}
-.ls-app-shell > .ls-workspace,
-.ls-workspace > .ls-main-content {
-  height: auto !important;
-  min-height: 0 !important;
-  max-height: none !important;
-  overflow: visible !important;
-}
-
-/* En Android con “Sitio de escritorio”, Chrome debe desplazar el documento.
-   Los paneles internos conservan su scroll en PC con puntero fino. */
-@media (min-width: 768px) and (pointer: coarse) {
-  html:has(.ls-clientes-workspace),
-  body:has(.ls-clientes-workspace),
-  #root:has(.ls-clientes-workspace) {
-    height: auto !important;
-    min-height: 100% !important;
-    max-height: none !important;
-    overflow: visible !important;
-    overscroll-behavior: auto !important;
-    touch-action: auto !important;
-  }
-
-  .ls-app-shell:has(.ls-clientes-workspace) {
-    position: relative !important;
-    inset: auto !important;
-    height: auto !important;
-    min-height: 100dvh !important;
-    max-height: none !important;
-    overflow: visible !important;
-  }
-
-  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace,
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content,
-  .ls-clientes-workspace {
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    overflow: visible !important;
-    overscroll-behavior: auto !important;
-    touch-action: auto !important;
-  }
-
-  .ls-clientes-workspace {
-    grid-template-rows: auto !important;
+/* Scroll táctil nativo en Clientes con diseño de escritorio.
+   Mantiene scroll independiente en los tres paneles y permite zoom del navegador. */
+@media (min-width: 768px) and (any-pointer: coarse) and (hover: none) {
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar {
+    max-height: calc(100dvh - 64px);
+    overflow-x: hidden;
+    overflow-y: auto;
+    touch-action: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .ls-clientes-workspace > .ls-clientes-list-panel,
   .ls-clientes-workspace > .ls-clientes-order-panel {
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    overflow: visible !important;
-    overscroll-behavior: auto !important;
-    touch-action: auto !important;
+    max-height: calc(100dvh - 290px);
+    min-height: 0;
+    overflow-x: auto;
+    overflow-y: auto;
+    touch-action: auto;
+    -webkit-overflow-scrolling: touch;
   }
 }
