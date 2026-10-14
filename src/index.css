@@ -163,23 +163,23 @@ html, body, #root {
   overflow: visible !important;
 }
 
-/* Scroll táctil independiente en los tres paneles de Clientes en Android con “Sitio de escritorio”. */
-@media (min-width: 768px) and (any-pointer: coarse) and (hover: none) {
+/* Paso 1: scroll vertical en el menú y la lista de Clientes en Android táctil. */
+@media (min-width: 768px) and (pointer: coarse) {
   .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar {
-    max-height: calc(100dvh - 64px);
+    height: calc(100dvh - 64px);
+    min-height: 0;
+    max-height: none;
     overflow-x: hidden !important;
     overflow-y: auto !important;
     touch-action: auto;
-    -webkit-overflow-scrolling: touch;
   }
 
-  .ls-clientes-workspace > .ls-clientes-list-panel,
-  .ls-clientes-workspace > .ls-clientes-order-panel {
-    max-height: calc(100dvh - 290px);
+  .ls-clientes-workspace > .ls-clientes-list-panel {
+    height: calc(100dvh - 290px);
     min-height: 0;
-    overflow-x: auto !important;
+    max-height: none;
+    overflow-x: hidden !important;
     overflow-y: auto !important;
     touch-action: auto;
-    -webkit-overflow-scrolling: touch;
   }
 }
