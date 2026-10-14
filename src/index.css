@@ -177,3 +177,23 @@ html, body, #root {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+
+/* Clientes (prueba): copia completa aislada para probar el panel táctil sin alterar /clientes.
+   En teléfonos con Chrome en modo escritorio se apila el contenido y la lista de productos
+   tiene un área de desplazamiento propia. */
+@media (min-width: 768px) and (max-width: 1300px) and (any-pointer: coarse) {
+  .ls-clientes-nuevo-workspace {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+  .ls-clientes-nuevo-items-scroll {
+    height: 55dvh !important;
+    min-height: 160px !important;
+    max-height: 65dvh !important;
+    overflow-x: hidden !important;
+    overflow-y: auto !important;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y pinch-zoom;
+    -webkit-overflow-scrolling: touch;
+  }
+}
