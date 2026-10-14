@@ -177,27 +177,3 @@ html, body, #root {
     -webkit-overflow-scrolling: touch;
   }
 }
-
-
-/* Clientes (prueba): acceso oculto en PC y visible solo en teléfono táctil.
-   La lista de productos tiene un área de desplazamiento propia en esta copia. */
-.ls-clientes-mobile-test-link { display: none !important; }
-
-@media (max-width: 1300px) and (pointer: coarse) {
-  .ls-clientes-mobile-test-link {
-    display: flex !important;
-  }
-  .ls-clientes-nuevo-workspace {
-    grid-template-columns: minmax(0, 1fr) !important;
-  }
-  .ls-clientes-nuevo-items-scroll {
-    height: 55dvh !important;
-    min-height: 160px !important;
-    max-height: 65dvh !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
-    overscroll-behavior-y: contain;
-    touch-action: pan-y pinch-zoom;
-    -webkit-overflow-scrolling: touch;
-  }
-}
