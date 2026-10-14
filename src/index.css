@@ -181,6 +181,8 @@ html, body, #root {
 
 /* Clientes (prueba): acceso oculto en PC y visible solo en teléfono táctil.
    La lista de productos tiene un área de desplazamiento propia en esta copia. */
+.ls-clientes-mobile-test-link { display: none !important; }
+
 @media (max-width: 1300px) and (pointer: coarse) {
   .ls-clientes-mobile-test-link {
     display: flex !important;
@@ -199,6 +201,3 @@ html, body, #root {
     -webkit-overflow-scrolling: touch;
   }
 }
-
-/* El nuevo acceso no aparece en PC; se habilita únicamente en la regla táctil de arriba. */
-.ls-clientes-mobile-test-link { display: none !important; }
