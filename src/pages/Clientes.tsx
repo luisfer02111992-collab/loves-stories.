@@ -822,13 +822,9 @@ function linkWhatsapp(telefono: string, mensaje: string) {
       <style>{`
         /* PC real (puntero fino): se conserva la lista de productos con su scroll propio. */
         .ls-clientes-productos { max-height: 62vh; overflow-y: auto; overscroll-behavior-y: contain; }
-        /* Pantallas táctiles (incluye Chrome Android con "Sitio de escritorio"):
-           sin contenedores de scroll anidados ni bloqueos de gestos. El scroll y el
-           zoom con dos dedos los maneja el navegador de forma nativa. */
+        /* En pantallas táctiles, el navegador desplaza la página de forma nativa
+           y conserva el zoom; la lista de productos no atrapa el gesto. */
         @media (pointer: coarse), (hover: none) {
-          .ls-clientes-workspace,
-          .ls-clientes-list-panel,
-          .ls-clientes-order-panel,
           .ls-clientes-productos {
             height: auto !important;
             max-height: none !important;
