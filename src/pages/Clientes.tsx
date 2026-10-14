@@ -1018,7 +1018,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
             {grupos.length === 0 ? (
               <p className="text-sm mb-3" style={{ color: "#5B4E5E" }}>Este cliente no tiene un pedido abierto.</p>
             ) : (
-              <div className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+              <div className="mb-3 ls-clientes-items-scroll" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
                 {grupos.map((g, i) => (
                   <div key={g.product_id} tabIndex={0} ref={el => { productoRefs.current[g.product_id] = el; }} onKeyDown={e => { if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return; if ((e.target as HTMLElement).closest("input,textarea,select")) return; e.preventDefault(); const j = Math.max(0, Math.min(grupos.length - 1, i + (e.key === "ArrowDown" ? 1 : -1))); setProductoSeleccionado(grupos[j].product_id); productoRefs.current[grupos[j].product_id]?.focus({ preventScroll: true }); }} onClick={() => { setProductoSeleccionado(g.product_id); productoRefs.current[g.product_id]?.focus({ preventScroll: true }); }}
                     className="px-3.5 py-2.5 cursor-pointer" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none", background: productoSeleccionado === g.product_id ? "#EDE7DE" : "transparent" }}>
