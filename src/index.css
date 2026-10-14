@@ -174,7 +174,8 @@ html, body, #root {
     touch-action: auto;
   }
 
-  .ls-clientes-workspace > .ls-clientes-list-panel {
+  .ls-clientes-workspace > .ls-clientes-list-panel,
+  .ls-clientes-workspace > .ls-clientes-order-panel {
     height: calc(100dvh - 290px);
     min-height: 0;
     max-height: none;
