@@ -232,6 +232,29 @@ useEffect(() => {
     setFilaSeleccionada(ringSize ? `${producto.id}-${ringSize}` : producto.id);
   }
 
+  async function solicitarTalla(producto: Product) {
+    const tallas = await obtenerTallasPublicadas(producto);
+    const tallasEnCarrito: Record<string, number> = {};
+    for (const linea of carritoRef.current) {
+      if (linea.product.id === producto.id && linea.ringSize) {
+        tallasEnCarrito[linea.ringSize] = (tallasEnCarrito[linea.ringSize] ?? 0) + linea.cantidad;
+      }
+    }
+    const tallasRestantes = Object.fromEntries(
+      Object.entries(tallas)
+        .map(([talla, stock]) => [talla, Math.max(0, stock - (tallasEnCarrito[talla] ?? 0))])
+        .filter(([, stock]) => Number(stock) > 0)
+    );
+    if (Object.keys(tallasRestantes).length === 0) {
+      setAvisoBloqueante({ tipo: "agotado", codigo: producto.code, nombre: producto.name });
+      return false;
+    }
+    setTallaPendiente({ product: producto, tallas: tallasRestantes });
+    setTallaElegida("");
+    inputRef.current?.blur();
+    return true;
+  }
+
   async function procesarCodigoEscaneado(codigoLeido: string) {
     let seleccionarTalla = false;
     try {
@@ -269,25 +292,8 @@ useEffect(() => {
       const stockFueraCatalogo = Math.max(0, producto.stock_available - totalCatalogo);
 
       if (totalCatalogo > 0 && stockFueraCatalogo - unidadesSinTallaEnCarrito <= 0) {
-        const tallasEnCarrito: Record<string, number> = {};
-        for (const linea of actual) {
-          if (linea.product.id === producto.id && linea.ringSize) {
-            tallasEnCarrito[linea.ringSize] = (tallasEnCarrito[linea.ringSize] ?? 0) + linea.cantidad;
-          }
-        }
-        const tallasRestantes = Object.fromEntries(
-          Object.entries(tallas)
-            .map(([talla, stock]) => [talla, Math.max(0, stock - (tallasEnCarrito[talla] ?? 0))])
-            .filter(([, stock]) => Number(stock) > 0)
-        );
-        if (Object.keys(tallasRestantes).length === 0) {
-          setAvisoBloqueante({ tipo: "agotado", codigo: producto.code, nombre: producto.name });
-          return;
-        }
         seleccionarTalla = true;
-        setTallaPendiente({ product: producto, tallas: tallasRestantes });
-        setTallaElegida("");
-        inputRef.current?.blur();
+        await solicitarTalla(producto);
         return;
       }
 
@@ -806,13 +812,21 @@ style={{
 </button>
 
 <button
-  onClick={(e) => {
+  onClick={async (e) => {
     e.stopPropagation();
     const limite = l.stockTalla != null
       ? Math.min(l.product.stock_available, l.stockTalla)
       : l.product.stock_available;
     if (l.cantidad >= limite) {
-      setAvisoBloqueante({ tipo: "agotado", codigo: l.product.code, nombre: l.product.name });
+      if (!l.ringSize && l.stockTalla != null) {
+        try {
+          await solicitarTalla(l.product);
+        } catch (error: any) {
+          alert(error?.message ?? "No se pudo consultar las tallas.");
+        }
+      } else {
+        setAvisoBloqueante({ tipo: "agotado", codigo: l.product.code, nombre: l.product.name });
+      }
       return;
     }
     cambiarCantidad(l.product.id, 1, l.ringSize);
