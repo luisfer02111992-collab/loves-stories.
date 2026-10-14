@@ -40,6 +40,7 @@ export default function Productos() {
   const listaRef = useRef<HTMLDivElement>(null);
 
 useEffect(() => {
+  buscadorRef.current?.focus({ preventScroll: true });
   cargar();
 
   supabase
