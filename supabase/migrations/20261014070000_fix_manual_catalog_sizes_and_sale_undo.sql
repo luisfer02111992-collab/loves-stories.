@@ -74,6 +74,7 @@ declare
   v_customer uuid;
   v_direct boolean := false;
   v_item record;
+  v_variant_qty integer;
   v_auto_return_ids uuid[];
 begin
   if not public.is_staff() then
@@ -108,6 +109,37 @@ begin
 
       insert into public.inventory_movements(product_id,type,quantity_delta,order_id,performed_by,reason)
       values(v_item.product_id,'devolucion',v_item.qty,p_order_id,auth.uid(),'Venta directa eliminada: producto devuelto al inventario');
+    end loop;
+
+    -- Si la venta directa salió de una publicación, restituir sus unidades
+    -- en la misma publicación y talla registrada.
+    for v_item in
+      select oi.catalog_product_id, oi.ring_size, oi.quantity::int as qty,
+             cp.variant_type, coalesce(cp.variant_stock,'{}'::jsonb) as variant_stock
+      from public.order_items oi
+      join public.catalog_products cp on cp.id = oi.catalog_product_id
+      where oi.order_id = p_order_id
+      for update of cp
+    loop
+      if v_item.variant_type = 'ring_size' then
+        if v_item.ring_size is null then
+          raise exception 'No se registró la talla original; no se puede devolver la publicación con seguridad';
+        end if;
+        v_variant_qty := coalesce((v_item.variant_stock ->> v_item.ring_size)::int,0);
+        update public.catalog_products
+           set stock_available = stock_available + v_item.qty,
+               variant_stock = jsonb_set(
+                 v_item.variant_stock,
+                 array[v_item.ring_size],
+                 to_jsonb(v_variant_qty + v_item.qty),
+                 true
+               )
+         where id = v_item.catalog_product_id;
+      else
+        update public.catalog_products
+           set stock_available = stock_available + v_item.qty
+         where id = v_item.catalog_product_id;
+      end if;
     end loop;
 
     update public.orders
