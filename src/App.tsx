@@ -7,7 +7,6 @@ import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import InicioVentas from "./pages/InicioVentas";
 import Clientes from "./pages/Clientes";
-import ClientesPruebaMovil from "./pages/ClientesPruebaMovil";
 import ReportesDelDia from "./pages/ReportesDelDia";
 import Productos from "./pages/Productos";
 import Inventario from "./pages/Inventario";
@@ -98,7 +97,6 @@ function AppRoutes() {
         <Route index element={<ConPermiso permiso="asignar"><InicioVentas /></ConPermiso>} />
         <Route path="resumen" element={<ConPermiso permiso="resumen"><Dashboard /></ConPermiso>} />
         <Route path="clientes" element={<ConPermiso permiso="clientes"><VistaClientes /></ConPermiso>} />
-        <Route path="clientes-nuevo" element={<ConPermiso permiso="clientes"><ClientesPruebaMovil /></ConPermiso>} />
         <Route path="reportes-dia" element={<ConPermiso permiso="reportes_dia"><ReportesDelDia /></ConPermiso>} />
         <Route path="productos" element={<ConPermiso permiso="productos"><Productos /></ConPermiso>} />
         <Route path="inventario" element={<ConPermiso permiso="inventario"><Inventario /></ConPermiso>} />
