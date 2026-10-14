@@ -233,6 +233,7 @@ useEffect(() => {
   }
 
   async function procesarCodigoEscaneado(codigoLeido: string) {
+    let seleccionarTalla = false;
     try {
       let producto = productosCacheRef.current.get(codigoLeido);
       setBuscando(true);
@@ -283,6 +284,7 @@ useEffect(() => {
           setAvisoBloqueante({ tipo: "agotado", codigo: producto.code, nombre: producto.name });
           return;
         }
+        seleccionarTalla = true;
         setTallaPendiente({ product: producto, tallas: tallasRestantes });
         setTallaElegida("");
         inputRef.current?.blur();
@@ -294,7 +296,7 @@ useEffect(() => {
       alert(error?.message ?? "No se pudo agregar el producto.");
     } finally {
       setBuscando(false);
-      if (!tallaPendiente) inputRef.current?.focus();
+      if (!seleccionarTalla) inputRef.current?.focus();
     }
   }
 
