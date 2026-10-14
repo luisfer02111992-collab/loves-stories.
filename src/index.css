@@ -163,24 +163,67 @@ html, body, #root {
   overflow: visible !important;
 }
 
-/* Paso 1: scroll vertical en el menú y la lista de Clientes en Android táctil. */
-@media (min-width: 768px) and (pointer: coarse) {
+/* En Android con “Sitio de escritorio”, el viewport conserva el layout ancho.
+   El workspace debe ocupar el alto disponible y cada columna manejar su propio scroll.
+   La condición excluye PCs habituales con puntero/hover de mouse. */
+@media (min-width: 768px) and (max-width: 1200px) and (hover: none) and (any-pointer: coarse) {
+  .ls-app-shell:has(.ls-clientes-workspace) {
+    height: 100dvh !important;
+    min-height: 0 !important;
+    max-height: 100dvh !important;
+    overflow: hidden !important;
+  }
+
+  .ls-app-shell:has(.ls-clientes-workspace) > .ls-workspace {
+    flex: 1 1 0%;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
+  }
+
   .ls-app-shell:has(.ls-clientes-workspace) .ls-sidebar {
-    height: calc(100dvh - 64px);
-    min-height: 0;
-    max-height: none;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
-    touch-action: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y pinch-zoom;
+  }
+
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-main-content {
+    display: flex;
+    flex: 1 1 0%;
+    flex-direction: column;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
+  }
+
+  .ls-app-shell:has(.ls-clientes-workspace) .ls-global-banner {
+    flex: 0 0 166px;
+  }
+
+  .ls-clientes-workspace {
+    flex: 1 1 0%;
+    grid-template-rows: minmax(0, 1fr);
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: hidden !important;
   }
 
   .ls-clientes-workspace > .ls-clientes-list-panel,
   .ls-clientes-workspace > .ls-clientes-order-panel {
-    height: calc(100dvh - 290px);
-    min-height: 0;
-    max-height: none;
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
     overflow-x: hidden !important;
     overflow-y: auto !important;
-    touch-action: auto;
+    overscroll-behavior-y: contain;
+    touch-action: pan-y pinch-zoom;
+    -webkit-overflow-scrolling: touch;
   }
 }
