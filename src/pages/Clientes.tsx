@@ -20,6 +20,85 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
+  // En Chrome Android con "Sitio de escritorio" el gesto nativo puede quedarse
+  // en el viewport. En Clientes, dirigir el gesto de un dedo al scroll local de
+  // productos y, fuera de esa lista, al desplazamiento de la página.
+  const paginaClientesRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if ((navigator.maxTouchPoints || 0) < 1) return;
+    const root = paginaClientesRef.current;
+    if (!root) return;
+
+    let scrollerActivo: HTMLElement | null = null;
+    let ultimaY: number | null = null;
+
+    function iniciarDesplazamiento(e: TouchEvent) {
+      if (e.touches.length !== 1) {
+        scrollerActivo = null;
+        ultimaY = null;
+        return;
+      }
+
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest("input, textarea, select, button, a, [contenteditable='true']")) {
+        scrollerActivo = null;
+        ultimaY = null;
+        return;
+      }
+
+      const touch = e.touches[0];
+      let node = target instanceof HTMLElement ? target : target?.parentElement ?? null;
+      scrollerActivo = null;
+
+      while (node && node !== root) {
+        const overflowY = window.getComputedStyle(node).overflowY;
+        if ((overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
+            node.scrollHeight > node.clientHeight + 1) {
+          scrollerActivo = node;
+          break;
+        }
+        node = node.parentElement;
+      }
+
+      scrollerActivo ??= document.scrollingElement as HTMLElement | null;
+      ultimaY = touch.clientY;
+    }
+
+    function moverDesplazamiento(e: TouchEvent) {
+      if (e.touches.length !== 1) {
+        scrollerActivo = null;
+        ultimaY = null;
+        return;
+      }
+      if (!scrollerActivo || ultimaY === null) return;
+
+      const touch = e.touches[0];
+      const diferenciaY = ultimaY - touch.clientY;
+      ultimaY = touch.clientY;
+      if (Math.abs(diferenciaY) < 1) return;
+
+      scrollerActivo.scrollTop += diferenciaY;
+      if (e.cancelable) e.preventDefault();
+    }
+
+    function terminarDesplazamiento() {
+      scrollerActivo = null;
+      ultimaY = null;
+    }
+
+    root.addEventListener("touchstart", iniciarDesplazamiento, { passive: true });
+    root.addEventListener("touchmove", moverDesplazamiento, { passive: false });
+    root.addEventListener("touchend", terminarDesplazamiento, { passive: true });
+    root.addEventListener("touchcancel", terminarDesplazamiento, { passive: true });
+
+    return () => {
+      root.removeEventListener("touchstart", iniciarDesplazamiento);
+      root.removeEventListener("touchmove", moverDesplazamiento);
+      root.removeEventListener("touchend", terminarDesplazamiento);
+      root.removeEventListener("touchcancel", terminarDesplazamiento);
+    };
+  }, []);
+
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
@@ -818,7 +897,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   return (
-    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
+    <div ref={paginaClientesRef} className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
       <div className="md:col-span-1 ls-clientes-list-panel">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
