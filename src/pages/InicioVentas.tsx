@@ -764,7 +764,7 @@ style={{
                     <div>
                 <p className="text-sm">
   {l.product.code} · {l.product.name}
-  {l.ringSize ? ` · Talla ${l.ringSize}` : ""} × {l.cantidad}
+   × {l.cantidad}
 </p>
 <div className="flex items-center gap-2 mt-1">
   <span className="text-xs" style={{ color: "#5B4E5E" }}>
