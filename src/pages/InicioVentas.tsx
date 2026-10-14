@@ -229,7 +229,7 @@ useEffect(() => {
 
     carritoRef.current = siguiente;
     setCarrito(siguiente);
-    setFilaSeleccionada(ringSize ? `${producto.id}-${ringSize}` : producto.id);
+    setFilaSeleccionada(producto.id);
   }
 
   async function solicitarTalla(producto: Product) {
@@ -370,16 +370,21 @@ useEffect(() => {
   );
   setFilaSeleccionada(null);
 }
+function quitarProductoCarrito(productId: string) {
+  setCarrito((prev) => prev.filter((linea) => linea.product.id !== productId));
+  setFilaSeleccionada(null);
+}
 function cambiarPrecio(
   productId: string,
   valor: string,
-  ringSize?: string | null
+  ringSize?: string | null,
+  todasLasTallas = false
 ) {
   setCarrito((prev) =>
     prev.map((l) => {
       const mismaLinea =
         l.product.id === productId &&
-        (l.ringSize ?? null) === (ringSize ?? null);
+        (todasLasTallas || (l.ringSize ?? null) === (ringSize ?? null));
 
       if (!mismaLinea) return l;
 
@@ -409,7 +414,7 @@ function cambiarPrecio(
 );
 
 if (linea) {
-  quitarLinea(linea.product.id, linea.ringSize);
+  quitarProductoCarrito(linea.product.id);
 }
       }
     }
@@ -438,9 +443,7 @@ if (linea) {
       e.preventDefault();
       e.stopPropagation();
 
-      const claves = carrito.map((l) =>
-        l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id
-      );
+      const claves = [...new Set(carrito.map((l) => l.product.id))];
 
       let indiceActual = filaSeleccionada ? claves.indexOf(filaSeleccionada) : -1;
       let indiceDestino: number;
@@ -743,105 +746,75 @@ if (linea) {
   }}
 >
           {carrito.length === 0 && <p className="text-sm p-4" style={{ color: "#5B4E5E" }}>Escanea o escribe un código para empezar. Selecciona una fila y presiona Supr para quitarla.</p>}
-          {carrito.map((l, i) => (
+          {[...new Set(carrito.map((linea) => linea.product.id))].map((productId, i) => {
+            const lineas = carrito.filter((linea) => linea.product.id === productId);
+            const l = lineas[0]!;
+            const cantidad = lineas.reduce((suma, linea) => suma + linea.cantidad, 0);
+            const totalLinea = lineas.reduce((suma, linea) => suma + precioPreview(linea) * linea.cantidad, 0);
+            return (
             <div
- key={`${l.product.id}-${l.ringSize ?? "normal"}`}
-id={`producto-carrito-${l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id}`}
-onClick={() =>
-  setFilaSeleccionada(
-    l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id
-  )
-}
+              key={productId}
+              id={`producto-carrito-${productId}`}
+              onClick={() => setFilaSeleccionada(productId)}
               className="flex items-center justify-between px-3.5 py-2.5 cursor-pointer"
-style={{
-  borderBottom: i < carrito.length - 1 ? "1px solid #D9D0C2" : "none",
-  background:
-    filaSeleccionada ===
-    (l.ringSize ? `${l.product.id}-${l.ringSize}` : l.product.id)
-      ? "#EDE7DE"
-      : "transparent",
-}}>
-                    <div>
-                <p className="text-sm">
-  {l.product.code} · {l.product.name}
-   × {l.cantidad}
-</p>
-<div className="flex items-center gap-2 mt-1">
-  <span className="text-xs" style={{ color: "#5B4E5E" }}>
-    Precio Bs
-  </span>
-  <input
-    type="number"
-    min="0"
-    step="1"
-    value={l.precioPersonalizado ?? precioPreview(l)}
-    onClick={(e) => e.stopPropagation()}
-    onChange={(e) =>
-  cambiarPrecio(l.product.id, e.target.value, l.ringSize)
-}
-    onKeyDown={(e) => {
-      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-        e.preventDefault();
-        e.stopPropagation();
-        inputRef.current?.focus();
-      }
-    }}
-    className="w-20 px-2 py-1 rounded text-xs outline-none"
-    style={{
-      background: "#FFFFFF",
-      border: "1px solid #D9D0C2",
-      color: "#2B1E2E",
-    }}
-  />
-  <span className="text-xs" style={{ color: "#5B4E5E" }}>
-    c/u · {l.product.stock_available} disponibles
-  </span>
-</div>
+              style={{
+                borderBottom: i < new Set(carrito.map((linea) => linea.product.id)).size - 1 ? "1px solid #D9D0C2" : "none",
+                background: filaSeleccionada === productId ? "#EDE7DE" : "transparent",
+              }}
+            >
+              <div>
+                <p className="text-sm">{l.product.code} · {l.product.name} × {cantidad}</p>
+                <div className="flex items-center gap-2 mt-1">
+                  <span className="text-xs" style={{ color: "#5B4E5E" }}>Precio Bs</span>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    value={l.precioPersonalizado ?? (cantidad ? totalLinea / cantidad : precioPreview(l))}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => cambiarPrecio(l.product.id, e.target.value, undefined, true)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        inputRef.current?.focus();
+                      }
+                    }}
+                    className="w-20 px-2 py-1 rounded text-xs outline-none"
+                    style={{ background: "#FFFFFF", border: "1px solid #D9D0C2", color: "#2B1E2E" }}
+                  />
+                  <span className="text-xs" style={{ color: "#5B4E5E" }}>c/u · {l.product.stock_available} disponibles</span>
+                </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className="font-serif text-sm">Bs {(precioPreview(l) * l.cantidad).toFixed(2)}</span>
+                <span className="font-serif text-sm">Bs {totalLinea.toFixed(2)}</span>
                 <button
-  onClick={(e) => {
-    e.stopPropagation();
-    cambiarCantidad(l.product.id, -1, l.ringSize);
-  }}
-  className="w-7 h-7 rounded-full flex items-center justify-center"
-  style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
->
-  <Minus size={13} />
-</button>
-
-<button
-  onClick={async (e) => {
-    e.stopPropagation();
-    const limite = l.stockTalla != null
-      ? Math.min(l.product.stock_available, l.stockTalla)
-      : l.product.stock_available;
-    if (l.cantidad >= limite) {
-      if (!l.ringSize && l.stockTalla != null) {
-        try {
-          await solicitarTalla(l.product);
-        } catch (error: any) {
-          alert(error?.message ?? "No se pudo consultar las tallas.");
-        }
-      } else {
-        setAvisoBloqueante({ tipo: "agotado", codigo: l.product.code, nombre: l.product.name });
-      }
-      return;
-    }
-    cambiarCantidad(l.product.id, 1, l.ringSize);
-  }}
-  className="w-7 h-7 rounded-full flex items-center justify-center"
-  style={{ background: "#9C7A3C", color: "#F7F3EC" }}
->
-  <Plus size={13} />
-</button>
-                <button onClick={(e) => { e.stopPropagation(); quitarLinea(l.product.id, l.ringSize); }} className="w-7 h-7 rounded-full flex items-center justify-center" style={{ background: "#F4E3E6", color: "#7A2540" }} title="Quitar (Supr)">
-                  <Trash2 size={13} />
-                </button>
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const ultima = lineas[lineas.length - 1]!;
+                    cambiarCantidad(l.product.id, -1, ultima.ringSize);
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}
+                ><Minus size={13} /></button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void procesarCodigoEscaneado(l.product.code);
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ background: "#9C7A3C", color: "#F7F3EC" }}
+                ><Plus size={13} /></button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); quitarProductoCarrito(l.product.id); }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center"
+                  style={{ background: "#F4E3E6", color: "#7A2540" }}
+                  title="Quitar producto"
+                ><Trash2 size={13} /></button>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
