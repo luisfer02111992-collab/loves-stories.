@@ -62,6 +62,15 @@ export default function Clientes() {
   const [editandoPrecio, setEditandoPrecio] = useState<string | null>(null);
   const [precioManual, setPrecioManual] = useState(0);
   const [guardandoPrecio, setGuardandoPrecio] = useState(false);
+  const [selectorTallas, setSelectorTallas] = useState<{
+    productId: string;
+    code: string;
+    name: string;
+    available: number;
+    variantStock: Record<string, number>;
+    selected: Record<string, number>;
+  } | null>(null);
+  const [guardandoTallas, setGuardandoTallas] = useState(false);
   const [busquedaCliente, setBusquedaCliente] = useState("");
   const [indiceBusqueda, setIndiceBusqueda] = useState(0);
   const clienteRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -387,11 +396,107 @@ export default function Clientes() {
 
   async function aumentarUnidad(productId: string) {
     if (!ordenId) return;
-    await supabase.rpc("assign_product_to_order", {
-      p_order_id: ordenId, p_product_id: productId, p_quantity: 1, p_origin: "manual",
-      p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
+
+    const [{ data: producto, error: errorProducto }, { data: publicacion, error: errorPublicacion }] = await Promise.all([
+      supabase.from("products").select("code, name, stock_available").eq("id", productId).single(),
+      supabase.from("catalog_products")
+        .select("variant_stock")
+        .eq("product_id", productId)
+        .eq("active", true)
+        .eq("variant_type", "ring_size")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .maybeSingle(),
+    ]);
+
+    if (errorProducto || !producto) {
+      alert(`No se pudo comprobar el stock: ${errorProducto?.message ?? "producto no encontrado"}`);
+      return;
+    }
+    if (errorPublicacion) {
+      alert(`No se pudieron consultar las tallas del catálogo: ${errorPublicacion.message}`);
+      return;
+    }
+
+    const variantStock = (publicacion?.variant_stock ?? {}) as Record<string, number>;
+    const tallasDisponibles = Object.fromEntries(
+      Object.entries(variantStock)
+        .map(([talla, cantidad]) => [talla, Math.max(0, Number(cantidad) || 0)])
+        .filter(([, cantidad]) => Number(cantidad) > 0)
+    ) as Record<string, number>;
+
+    if (Object.keys(tallasDisponibles).length > 0) {
+      setSelectorTallas({
+        productId,
+        code: producto.code,
+        name: producto.name,
+        available: Math.max(0, Number(producto.stock_available) || 0),
+        variantStock: tallasDisponibles,
+        selected: {},
+      });
+      return;
+    }
+
+    const { error } = await supabase.rpc("assign_product_to_order", {
+      p_order_id: ordenId,
+      p_product_id: productId,
+      p_quantity: 1,
+      p_origin: "manual",
+      p_seller_id: vendedorActivoId,
+      p_session_id: sesionActivaId,
     });
-    if (seleccionado) cargarPedido(seleccionado.id);
+    if (error) {
+      alert(`No se pudo agregar el producto: ${error.message}`);
+      return;
+    }
+    if (seleccionado) await cargarPedido(seleccionado.id);
+  }
+
+  async function guardarTallasPedido() {
+    if (!selectorTallas || !ordenId || guardandoTallas) return;
+    const seleccion = Object.entries(selectorTallas.selected)
+      .map(([ring_size, quantity]) => ({ ring_size, quantity: Math.max(0, Math.floor(Number(quantity) || 0)) }))
+      .filter((x) => x.quantity > 0);
+    const totalSeleccionado = seleccion.reduce((total, x) => total + x.quantity, 0);
+
+    if (totalSeleccionado < 1) {
+      alert("Selecciona al menos una unidad por talla.");
+      return;
+    }
+    if (totalSeleccionado > selectorTallas.available) {
+      alert(`Solo hay ${selectorTallas.available} unidades disponibles en inventario.`);
+      return;
+    }
+    const excedida = seleccion.find((x) => x.quantity > Number(selectorTallas.variantStock[x.ring_size] ?? 0));
+    if (excedida) {
+      alert(`No hay suficientes unidades de la talla ${excedida.ring_size} en el catálogo.`);
+      return;
+    }
+
+    setGuardandoTallas(true);
+    const { error } = await supabase.rpc("assign_manual_catalog_batch", {
+      p_order_id: ordenId,
+      p_seller_id: vendedorActivoId,
+      p_session_id: sesionActivaId,
+      p_items: seleccion.map((x) => ({
+        product_id: selectorTallas.productId,
+        quantity: x.quantity,
+        unit_price: null,
+        ring_size: x.ring_size,
+      })),
+    });
+    if (error) {
+      alert(`No se pudo asignar el producto por talla: ${error.message}`);
+      setGuardandoTallas(false);
+      return;
+    }
+
+    setSelectorTallas(null);
+    setGuardandoTallas(false);
+    if (seleccionado) {
+      await cargarPedido(seleccionado.id);
+      await cargarClientes();
+    }
   }
 
   async function quitarProductoCompleto(g: GrupoProducto) {
@@ -1289,6 +1394,85 @@ function linkWhatsapp(telefono: string, mensaje: string) {
           </>
         )}
       </div>
+
+      {selectorTallas && (
+        <div
+          role="presentation"
+          style={{
+            position: "fixed",
+            inset: 0,
+            zIndex: 11000,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16,
+            background: "rgba(25, 8, 16, 0.58)",
+          }}
+        >
+          <section
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="clientes-tallas-titulo"
+            className="w-full max-w-md rounded-xl p-4"
+            style={{
+              background: "#F7F3EC",
+              border: "1px solid #9C7A3C",
+              boxShadow: "0 18px 55px rgba(0,0,0,0.3)",
+            }}
+          >
+            <h2 id="clientes-tallas-titulo" className="font-serif text-lg mb-1">
+              Elegir tallas · {selectorTallas.code}
+            </h2>
+            <p className="text-sm mb-3" style={{ color: "#5B4E5E" }}>
+              {selectorTallas.name} · {selectorTallas.available} unidades disponibles en inventario
+            </p>
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+              {Object.entries(selectorTallas.variantStock).map(([talla, disponibleTalla]) => (
+                <label key={talla} className="flex items-center justify-between gap-3 p-2 rounded"
+                  style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+                  <span className="text-sm">Talla {talla} · {disponibleTalla} en catálogo</span>
+                  <input
+                    type="number"
+                    min={0}
+                    max={Math.min(disponibleTalla, selectorTallas.available)}
+                    step={1}
+                    value={selectorTallas.selected[talla] ?? 0}
+                    onChange={(e) => setSelectorTallas((actual) => actual ? {
+                      ...actual,
+                      selected: { ...actual.selected, [talla]: Math.max(0, Math.floor(Number(e.target.value) || 0)) },
+                    } : actual)}
+                    className="w-20 px-2 py-1.5 rounded text-center text-sm"
+                    style={{ background: "#FFFDF8", border: "1px solid #D9D0C2" }}
+                  />
+                </label>
+              ))}
+            </div>
+            <p className="text-sm mt-3" style={{ color: "#5B4E5E" }}>
+              Seleccionadas: {Object.values(selectorTallas.selected).reduce((n, cantidad) => n + Math.max(0, Number(cantidad) || 0), 0)} / {selectorTallas.available}
+            </p>
+            <div className="flex justify-end gap-2 mt-4">
+              <button
+                type="button"
+                disabled={guardandoTallas}
+                onClick={() => setSelectorTallas(null)}
+                className="px-3 py-2 rounded-md text-sm"
+                style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={guardandoTallas || selectorTallas.available < 1}
+                onClick={() => void guardarTallasPedido()}
+                className="px-3 py-2 rounded-md text-sm"
+                style={{ background: "#2B1E2E", color: "#F7F3EC", opacity: guardandoTallas ? 0.65 : 1 }}
+              >
+                {guardandoTallas ? "Guardando..." : "Agregar al pedido"}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </div>
   );
 }
