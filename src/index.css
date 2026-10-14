@@ -163,16 +163,15 @@ html, body, #root {
   overflow: visible !important;
 }
 
-/* Paso actual: habilitar solo el desplazamiento vertical de la lista de ítems.
-   any-pointer contempla teléfonos táctiles aunque Chrome anuncie un puntero híbrido
-   al solicitar “Sitio de escritorio”. */
+/* La lista de productos obtiene su propio scroll solo en teléfonos táctiles
+   que usan el diseño de escritorio. La vista normal de PC queda intacta. */
 @media (min-width: 768px) and (max-width: 1300px) and (any-pointer: coarse) {
-  .ls-app-shell:has(.ls-clientes-workspace) .ls-clientes-order-panel {
-    height: calc(100dvh - 290px) !important;
-    min-height: 0 !important;
-    max-height: calc(100dvh - 290px) !important;
-    overflow-x: hidden !important;
-    overflow-y: auto !important;
+  .ls-clientes-workspace .ls-clientes-items-scroll {
+    height: 55dvh;
+    min-height: 150px;
+    max-height: 65dvh;
+    overflow-x: hidden;
+    overflow-y: auto;
     overscroll-behavior-y: contain;
     touch-action: pan-y pinch-zoom;
     -webkit-overflow-scrolling: touch;
