@@ -40,7 +40,7 @@ export default function Clientes() {
       }
 
       const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest("input, textarea, select, button, a, [contenteditable='true']")) {
+      if (target?.closest("input, textarea, select, [contenteditable='true']")) {
         scrollerActivo = null;
         ultimaY = null;
         return;
