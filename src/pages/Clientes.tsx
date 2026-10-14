@@ -20,85 +20,6 @@ interface DepositoDetalle {
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
-  // En Chrome Android con "Sitio de escritorio" el gesto nativo puede quedarse
-  // en el viewport. En Clientes, dirigir el gesto de un dedo al scroll local de
-  // productos y, fuera de esa lista, al desplazamiento de la página.
-  const paginaClientesRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if ((navigator.maxTouchPoints || 0) < 1) return;
-    const root = paginaClientesRef.current;
-    if (!root) return;
-
-    let scrollerActivo: HTMLElement | null = null;
-    let ultimaY: number | null = null;
-
-    function iniciarDesplazamiento(e: TouchEvent) {
-      if (e.touches.length !== 1) {
-        scrollerActivo = null;
-        ultimaY = null;
-        return;
-      }
-
-      const target = e.target instanceof Element ? e.target : null;
-      if (target?.closest("input, textarea, select, [contenteditable='true']")) {
-        scrollerActivo = null;
-        ultimaY = null;
-        return;
-      }
-
-      const touch = e.touches[0];
-      let node = target instanceof HTMLElement ? target : target?.parentElement ?? null;
-      scrollerActivo = null;
-
-      while (node && node !== root) {
-        const overflowY = window.getComputedStyle(node).overflowY;
-        if ((overflowY === "auto" || overflowY === "scroll" || overflowY === "overlay") &&
-            node.scrollHeight > node.clientHeight + 1) {
-          scrollerActivo = node;
-          break;
-        }
-        node = node.parentElement;
-      }
-
-      scrollerActivo ??= document.scrollingElement as HTMLElement | null;
-      ultimaY = touch.clientY;
-    }
-
-    function moverDesplazamiento(e: TouchEvent) {
-      if (e.touches.length !== 1) {
-        scrollerActivo = null;
-        ultimaY = null;
-        return;
-      }
-      if (!scrollerActivo || ultimaY === null) return;
-
-      const touch = e.touches[0];
-      const diferenciaY = ultimaY - touch.clientY;
-      ultimaY = touch.clientY;
-      if (Math.abs(diferenciaY) < 1) return;
-
-      scrollerActivo.scrollTop += diferenciaY;
-      if (e.cancelable) e.preventDefault();
-    }
-
-    function terminarDesplazamiento() {
-      scrollerActivo = null;
-      ultimaY = null;
-    }
-
-    root.addEventListener("touchstart", iniciarDesplazamiento, { passive: true });
-    root.addEventListener("touchmove", moverDesplazamiento, { passive: false });
-    root.addEventListener("touchend", terminarDesplazamiento, { passive: true });
-    root.addEventListener("touchcancel", terminarDesplazamiento, { passive: true });
-
-    return () => {
-      root.removeEventListener("touchstart", iniciarDesplazamiento);
-      root.removeEventListener("touchmove", moverDesplazamiento);
-      root.removeEventListener("touchend", terminarDesplazamiento);
-      root.removeEventListener("touchcancel", terminarDesplazamiento);
-    };
-  }, []);
-
   const { vendedorActivoId, sesionActivaId } = useSellerSession();
   const { userId, profile } = useAuth();
   const [productoSeleccionado, setProductoSeleccionado] = useState<string | null>(null);
@@ -175,6 +96,8 @@ export default function Clientes() {
   useEffect(() => {
     if (productoSeleccionado) productoRefs.current[productoSeleccionado]?.scrollIntoView({ block: "nearest" });
   }, [productoSeleccionado]);
+
+  const grupos: GrupoProducto[] = useMemo(() => agruparPorProducto(reglas, items), [items, reglas]);
 
   useEffect(() => {
     function navegarProductos(e: KeyboardEvent) {
@@ -358,8 +281,6 @@ export default function Clientes() {
     setDepositos(disponibles);
     setDisponible(disponibles.reduce((a, p) => a + p.amount, 0));
   }
-
-  const grupos: GrupoProducto[] = useMemo(() => agruparPorProducto(reglas, items), [items, reglas]);
 
   function resumenFechas(g: GrupoProducto) {
     const porFecha = new Map<string, number>();
@@ -897,7 +818,22 @@ function linkWhatsapp(telefono: string, mensaje: string) {
   }
 
   return (
-    <div ref={paginaClientesRef} className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
+    <div className="grid md:grid-cols-3 gap-4 ls-clientes-workspace">
+      <style>{`
+        /* PC real (puntero fino): se conserva la lista de productos con su scroll propio. */
+        .ls-clientes-productos { max-height: 62vh; overflow-y: auto; overscroll-behavior-y: contain; }
+        /* En pantallas táctiles, el navegador desplaza la página de forma nativa
+           y conserva el zoom; la lista de productos no atrapa el gesto. */
+        @media (pointer: coarse), (hover: none) {
+          .ls-clientes-productos {
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            overscroll-behavior: auto !important;
+            touch-action: auto !important;
+          }
+        }
+      `}</style>
       <div className="md:col-span-1 ls-clientes-list-panel">
         <div className="flex items-center justify-between mb-3">
           <p className="font-serif text-lg">Clientes</p>
@@ -1097,7 +1033,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
             {grupos.length === 0 ? (
               <p className="text-sm mb-3" style={{ color: "#5B4E5E" }}>Este cliente no tiene un pedido abierto.</p>
             ) : (
-              <div className="mb-3" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2", maxHeight: "62vh", overflowY: "auto", overscrollBehaviorY: "contain", touchAction: "pan-y pinch-zoom", WebkitOverflowScrolling: "touch" }}>
+              <div className="mb-3 ls-clientes-productos" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
                 {grupos.map((g, i) => (
                   <div key={g.product_id} tabIndex={0} ref={el => { productoRefs.current[g.product_id] = el; }} onKeyDown={e => { if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return; if ((e.target as HTMLElement).closest("input,textarea,select")) return; e.preventDefault(); const j = Math.max(0, Math.min(grupos.length - 1, i + (e.key === "ArrowDown" ? 1 : -1))); setProductoSeleccionado(grupos[j].product_id); productoRefs.current[grupos[j].product_id]?.focus({ preventScroll: true }); }} onClick={() => { setProductoSeleccionado(g.product_id); productoRefs.current[g.product_id]?.focus({ preventScroll: true }); }}
                     className="px-3.5 py-2.5 cursor-pointer" style={{ borderBottom: i < grupos.length - 1 ? "1px solid #D9D0C2" : "none", background: productoSeleccionado === g.product_id ? "#EDE7DE" : "transparent" }}>
