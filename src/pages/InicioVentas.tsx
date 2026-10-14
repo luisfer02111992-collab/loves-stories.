@@ -504,11 +504,17 @@ if (linea) {
 
   const categoria =
     categorias.find((c) => c.id === l.product.category_id)?.name ?? null;
+  // El producto puede estar dividido en líneas internas (por ejemplo, unidades
+  // con talla y sin talla). El descuento se determina por la cantidad total
+  // del mismo producto en toda la asignación, como en Clientes.
+  const cantidadTotalProducto = carrito
+    .filter((linea) => linea.product.id === l.product.id)
+    .reduce((suma, linea) => suma + linea.cantidad, 0);
 
   return precioNegocioPorCantidad(
     categoria,
     l.product.name,
-    l.cantidad,
+    cantidadTotalProducto,
     Number(l.product.price),
     l.product.description
   );
