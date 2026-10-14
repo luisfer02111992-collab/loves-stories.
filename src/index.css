@@ -163,17 +163,3 @@ html, body, #root {
   overflow: visible !important;
 }
 
-/* La lista de productos obtiene su propio scroll solo en teléfonos táctiles
-   que usan el diseño de escritorio. La vista normal de PC queda intacta. */
-@media (min-width: 768px) and (max-width: 1300px) and (any-pointer: coarse) {
-  .ls-clientes-workspace .ls-clientes-items-scroll {
-    height: 55dvh;
-    min-height: 150px;
-    max-height: 65dvh;
-    overflow-x: hidden;
-    overflow-y: auto;
-    overscroll-behavior-y: contain;
-    touch-action: pan-y pinch-zoom;
-    -webkit-overflow-scrolling: touch;
-  }
-}
