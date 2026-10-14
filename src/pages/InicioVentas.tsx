@@ -601,7 +601,7 @@ if (linea) {
           p_items: carrito.map((l) => ({
             product_id: l.product.id,
             quantity: l.cantidad,
-            unit_price: precioPreview(l),
+            unit_price: l.precioPersonalizado ?? Number(l.product.price),
             ring_size: l.ringSize ?? null,
           })),
           p_seller_id: vendedorActivoId,
@@ -623,7 +623,7 @@ if (linea) {
           p_items: carrito.map((l) => ({
             product_id: l.product.id,
             quantity: l.cantidad,
-            unit_price: precioPreview(l),
+            unit_price: l.precioPersonalizado ?? Number(l.product.price),
             ring_size: l.ringSize ?? null,
           })),
           p_seller_id: vendedorActivoId,
