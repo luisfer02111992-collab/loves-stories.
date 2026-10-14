@@ -31,6 +31,7 @@ const SECCIONES = [
   { permission: "vendedores" as PermissionKey, to: "/vendedores", label: "Vendedores", icon: UserCog, roles: ["admin"] },
   { permission: "reporte_vendedores" as PermissionKey, to: "/reporte-vendedores", label: "Reporte de vendedores", icon: BadgePercent, roles: ["admin"] },
   { permission: "configuracion" as PermissionKey, to: "/configuracion", label: "Configuración", icon: Settings, roles: ["admin"] },
+  { permission: "clientes" as PermissionKey, to: "/clientes-nuevo", label: "Clientes (prueba)", icon: Users, roles: ["admin", "employee"] },
 ];
 
 export default function Layout() {
