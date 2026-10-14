@@ -158,13 +158,7 @@ BEGIN
       IF variant = 'ring_size' THEN
         talla_qty := coalesce((variants ->> talla)::int, 0);
         UPDATE public.catalog_products
-        SET stock_available = LEAST(
-              stock_available,
-              greatest(
-                0,
-                (SELECT coalesce(sum(value::int), 0) FROM jsonb_each_text(variants)) - qty
-              )
-            ),
+        SET stock_available = GREATEST(stock_available - qty, 0),
             variant_stock = jsonb_set(
               variants,
               ARRAY[talla],
