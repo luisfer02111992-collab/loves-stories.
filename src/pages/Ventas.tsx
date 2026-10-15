@@ -240,7 +240,7 @@ setAperturas(aperturaPorOrden);
 
   async function agregarItem(orderId: string) {
     if (agregandoItem || !codigoNuevo.trim()) return;
-    const codigo = codigoNuevo.replace(/[\\r\\n\\t]/g, "").trim();
+    const codigo = codigoNuevo.trim();
     if (!codigo) return;
 
     setAgregandoItem(true);
