@@ -33,7 +33,6 @@ export default function Ventas() {
   const [editando, setEditando] = useState<string | null>(null);
   const [codigoNuevo, setCodigoNuevo] = useState("");
   const [cantidadNueva, setCantidadNueva] = useState(1);
-  const [agregandoItem, setAgregandoItem] = useState(false);
   const [devoluciones, setDevoluciones] = useState<Record<string, (Devolucion & { items: DevolucionItem[] })[]>>({});
   const [pagos, setPagos] = useState<Record<string, number>>({});
   const [aperturas, setAperturas] = useState<Record<string, number>>({});
@@ -209,13 +208,13 @@ setAperturas(aperturaPorOrden);
   }, [ventas, reglas, devoluciones, pagos]);
 
   // La edición es un borrador: + / - y productos nuevos NO tocan inventario ni dinero hasta Guardar cambios.
-  async function ajustarVentaDirecta(orderId: string, productId: string, delta: number, codigo="", nombre=""): Promise<boolean> {
+  async function ajustarVentaDirecta(orderId: string, productId: string, delta: number, codigo="", nombre="") {
     const venta=ventas.find(v=>v.id===orderId);
     const actual=venta?.items.filter(i=>i.product_id===productId).reduce((a,i)=>a+i.cantidad,0)??0;
     const previo=cambiosPendientes[orderId]?.[productId]?.delta??0;
 
     // No permitir quitar más unidades de las que existen en el pedido.
-    if(actual+previo+delta<0) return false;
+    if(actual+previo+delta<0) return;
 
     // Al pulsar + solo preparamos el borrador, pero comprobamos el stock REAL disponible.
     // El inventario no se descuenta todavía: eso ocurre únicamente al Guardar cambios.
@@ -224,57 +223,27 @@ setAperturas(aperturaPorOrden);
         .select("stock_available")
         .eq("id",productId)
         .single();
-      if(error){alert(`No se pudo verificar el inventario: ${error.message}`);return false;}
+      if(error){alert(`No se pudo verificar el inventario: ${error.message}`);return;}
       const disponible=Number(producto?.stock_available??0);
       const aumentoPendiente=Math.max(0,previo);
       if(aumentoPendiente+delta>disponible){
         alert(`Stock insuficiente. Solo hay ${disponible} unidad${disponible===1?"":"es"} disponible${disponible===1?"":"s"} en inventario.`);
-        return false;
+        return;
       }
     }
 
     setCambiosPendientes(prev=>({...prev,[orderId]:{...(prev[orderId]??{}),[productId]:{delta:previo+delta,codigo,nombre}}}));
     setCambiosSinGuardar(prev=>new Set(prev).add(orderId));
-    return true;
   }
 
   async function agregarItem(orderId: string) {
-    if (agregandoItem || !codigoNuevo.trim()) return;
-    const codigo = codigoNuevo.trim();
-    if (!codigo) return;
-
-    setAgregandoItem(true);
-    try {
-      const { data: producto, error } = await supabase
-        .from("products")
-        .select("id,code,name,stock_available")
-        .eq("code", codigo)
-        .is("deleted_at", null)
-        .maybeSingle();
-
-      if (error) {
-        alert(`No se pudo buscar el producto: ${error.message}`);
-        return;
-      }
-      if (!producto) {
-        alert(`No se encontró el código ${codigo} en el inventario.`);
-        return;
-      }
-
-      const previo=cambiosPendientes[orderId]?.[producto.id]?.delta??0;
-      if(Number(producto.stock_available??0)<previo+cantidadNueva){
-        alert(`Stock insuficiente. Disponible: ${producto.stock_available}`);
-        return;
-      }
-
-      const agregado = await ajustarVentaDirecta(orderId, producto.id, cantidadNueva, producto.code, producto.name);
-      if (!agregado) return;
-
-      setCodigoNuevo("");
-      setCantidadNueva(1);
-    } finally {
-      setAgregandoItem(false);
-    }
+    if (!codigoNuevo.trim()) return;
+    const { data: producto } = await supabase.from("products").select("id,code,name,stock_available").eq("code", codigoNuevo.trim()).is("deleted_at", null).maybeSingle();
+    if (!producto) { alert("No se encontró ese código en el inventario."); return; }
+    const previo=cambiosPendientes[orderId]?.[producto.id]?.delta??0;
+    if(Number(producto.stock_available??0)<previo+cantidadNueva){alert(`Stock insuficiente. Disponible: ${producto.stock_available}`);return;}
+    ajustarVentaDirecta(orderId, producto.id, cantidadNueva, producto.code, producto.name);
+    setCodigoNuevo(""); setCantidadNueva(1);
   }
 
   async function guardarCambios(orderId: string) {
@@ -701,7 +670,7 @@ saldoAFavor: 0,
     Apertura registrada: Bs {(aperturas[v.id] ?? 0).toFixed(2)}
   </p>
 </div>
-                <div className="flex flex-wrap gap-2 items-end"><div><p className="text-xs mb-1">Código de otro producto</p><input value={codigoNuevo} onChange={e=>setCodigoNuevo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();void agregarItem(v.id)}}} className="px-2 py-1.5 rounded text-sm" placeholder="Código" autoComplete="off"/></div><div><p className="text-xs mb-1">Cantidad</p><input type="number" min={1} value={cantidadNueva} onChange={e=>setCantidadNueva(Math.max(1,Number(e.target.value)))} className="w-20 px-2 py-1.5 rounded text-sm"/></div><button onClick={()=>void agregarItem(v.id)} disabled={agregandoItem} className="text-xs px-3 py-2 rounded disabled:opacity-60" style={{background:"#4F6F52",color:"white"}}><Plus size={12} className="inline"/> {agregandoItem ? "Agregando…" : "Agregar"}</button><button onClick={()=>guardarCambios(v.id)} className="text-xs px-3 py-2 rounded flex items-center gap-1" style={{background:"#9C7A3C",color:"white"}}><Save size={12}/> Guardar cambios</button><button onClick={()=>cancelarCambios(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>Cancelar</button></div>
+                <div className="flex flex-wrap gap-2 items-end"><div><p className="text-xs mb-1">Código de otro producto</p><input value={codigoNuevo} onChange={e=>setCodigoNuevo(e.target.value)} onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();agregarItem(v.id)}}} className="px-2 py-1.5 rounded text-sm" placeholder="Código"/></div><div><p className="text-xs mb-1">Cantidad</p><input type="number" min={1} value={cantidadNueva} onChange={e=>setCantidadNueva(Math.max(1,Number(e.target.value)))} className="w-20 px-2 py-1.5 rounded text-sm"/></div><button onClick={()=>agregarItem(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#4F6F52",color:"white"}}><Plus size={12} className="inline"/> Agregar</button><button onClick={()=>guardarCambios(v.id)} className="text-xs px-3 py-2 rounded flex items-center gap-1" style={{background:"#9C7A3C",color:"white"}}><Save size={12}/> Guardar cambios</button><button onClick={()=>cancelarCambios(v.id)} className="text-xs px-3 py-2 rounded" style={{background:"#F7F3EC",border:"1px solid #D9D0C2"}}>Cancelar</button></div>
                 {Object.entries(cambiosPendientes[v.id]??{}).filter(([pid,x])=>x.delta>0 && !t.grupos.some(g=>g.product_id===pid)).map(([pid,x])=><p key={pid} className="text-xs mt-2" style={{color:"#4F6F52"}}>+ {x.delta} × {x.codigo} · {x.nombre}</p>)}
               </div>}
 
