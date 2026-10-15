@@ -187,7 +187,40 @@ export default function Live() {
             <label className="mb-2 block text-sm font-semibold text-[#54263b]">Buscar producto por código o nombre</label>
             <div className="relative">
               <Search className="absolute left-3 top-3 text-[#8d6d78]" size={18} />
-              <input autoFocus value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Ej.: 025" className="w-full rounded-lg border border-[#d8c6cc] py-2.5 pl-10 pr-3 outline-none focus:border-[#8d465f]" />
+              <input
+                autoFocus
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                onKeyDown={async (e) => {
+                  if (e.key !== "Enter") return;
+                  e.preventDefault();
+                  const q = busqueda.trim();
+                  if (!q || procesando) return;
+
+                  let seleccionado = productos[0];
+                  if (!seleccionado) {
+                    setProcesando(true);
+                    const { data, error } = await supabase
+                      .from("products")
+                      .select("id,code,name,price,stock_available,image_url")
+                      .is("deleted_at", null)
+                      .eq("active", true)
+                      .or(`code.ilike.%${q}%,name.ilike.%${q}%`)
+                      .order("code")
+                      .limit(12);
+                    setProcesando(false);
+                    if (error) {
+                      setMensaje(error.message);
+                      return;
+                    }
+                    seleccionado = (data as ProductoLive[] | null)?.[0];
+                  }
+
+                  if (seleccionado) void mostrarProducto(seleccionado);
+                }}
+                placeholder="Ej.: 025"
+                className="w-full rounded-lg border border-[#d8c6cc] py-2.5 pl-10 pr-3 outline-none focus:border-[#8d465f]"
+              />
             </div>
             {productos.length > 0 && (
               <div className="mt-2 divide-y overflow-hidden rounded-lg border">
