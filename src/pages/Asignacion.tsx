@@ -76,7 +76,7 @@ categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base
 
   const { data: producto } = await supabase
     .from("products")
-    .select("*")
+    .select("id, code, name, price, stock_available")
     .eq("code", codigo.trim())
     .is("deleted_at", null)
     .maybeSingle();
