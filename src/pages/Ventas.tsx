@@ -596,20 +596,8 @@ saldoAFavor: 0,
                   <button onClick={() => imprimirRecibo(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Ticket térmico 80 mm, sin imágenes">
                     <Printer size={12} /> Ticket 80 mm
                   </button>
-                  <button onClick={() => abrirDevolucion(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540" }}>
-                    <Undo2 size={12} /> Registrar devolución
-                  </button>
                   <button onClick={() => eliminarVenta(v)} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#F4E3E6", color: "#7A2540", border: "1px solid #D8A9B5" }} title="Deshacer el cierre de esta venta">
                     <Trash2 size={12} /> Eliminar venta
-                  </button>
-                  <button onClick={() => {
-                    if (abierto && cambiosSinGuardar.has(v.id)) {
-                      const salir = confirm("Tienes cambios sin guardar en esta venta. Si sales ahora, el total oficial NO se actualizará. ¿Salir de todas formas?");
-                      if (!salir) return;
-                    }
-                    setEditando(abierto ? null : v.id);
-                  }} className="text-xs px-2.5 py-1.5 rounded-md flex items-center gap-1" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
-                    <Pencil size={12} /> {abierto ? "Cerrar edición" : "Editar (corregir)"}
                   </button>
                 </div>
               </div>
@@ -674,44 +662,6 @@ saldoAFavor: 0,
                 {Object.entries(cambiosPendientes[v.id]??{}).filter(([pid,x])=>x.delta>0 && !t.grupos.some(g=>g.product_id===pid)).map(([pid,x])=><p key={pid} className="text-xs mt-2" style={{color:"#4F6F52"}}>+ {x.delta} × {x.codigo} · {x.nombre}</p>)}
               </div>}
 
-              {mostrarDevolucion === v.id && (
-                <div className="p-3 mb-2 rounded-md" style={{ background: "#F4E3E6", border: "1px solid #7A2540" }}>
-                  <p className="text-xs font-medium mb-2" style={{ color: "#7A2540" }}>Registrar devolución</p>
-                  <div className="grid sm:grid-cols-2 gap-2 mb-2">
-                    <select value={devItemId} onChange={(e) => setDevItemId(e.target.value)} className="px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                      {v.items.map((it) => <option key={it.id} value={it.id}>{it.codigo} · {it.nombre} ({it.cantidad} vendidas)</option>)}
-                    </select>
-                    <select value={devMotivo} onChange={(e) => setDevMotivo(e.target.value)} className="px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                      {MOTIVOS.map((m) => <option key={m}>{m}</option>)}
-                    </select>
-                  </div>
-                  <div className="grid sm:grid-cols-3 gap-2 mb-2">
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Cantidad</p>
-                      <input type="number" min={1} value={devCantidad} onChange={(e) => setDevCantidad(Math.max(1, Number(e.target.value)))} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                    </div>
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Monto a devolver (Bs)</p>
-                      <input type="number" min={0} value={devMonto} onChange={(e) => setDevMonto(Number(e.target.value))} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                    </div>
-                    <div>
-                      <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>¿El producto vuelve al inventario?</p>
-                      <select value={devRestock} onChange={(e) => setDevRestock(e.target.value as any)} className="w-full px-2 py-1.5 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
-                        <option value="">Elige una opción...</option>
-                        <option value="si">Sí, está en buen estado</option>
-                        <option value="no">No, está dañado / no vendible</option>
-                      </select>
-                    </div>
-                  </div>
-                  <input value={devObs} onChange={(e) => setDevObs(e.target.value)} placeholder="Observación (opcional)"
-                    className="w-full mb-2 px-3 py-2 rounded text-sm outline-none" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }} />
-                  <div className="flex gap-2">
-                    <button onClick={() => confirmarDevolucion(v)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#7A2540", color: "#F7F3EC" }}>Confirmar devolución</button>
-                    <button onClick={() => setMostrarDevolucion(null)} className="text-xs px-3 py-2 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
-                  </div>
-                </div>
-              )}
-
               {devs.length > 0 && (
                 <div className="mb-2">
                   <p className="text-xs mb-1" style={{ color: "#5B4E5E" }}>Devoluciones de esta venta</p>
@@ -722,9 +672,6 @@ saldoAFavor: 0,
                         {d.status === "anulada" && ` (anulada: ${d.cancel_reason})`}
                       </span>
                       {d.status === "activa" && (
-                        <button onClick={() => anularDevolucion(d.id)} className="text-xs px-2 py-1 rounded flex items-center gap-1" style={{ color: "#7A2540" }}>
-                          <RotateCcw size={11} /> Anular
-                        </button>
                       )}
                     </div>
                   ))}
