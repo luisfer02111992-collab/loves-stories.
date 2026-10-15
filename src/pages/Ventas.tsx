@@ -17,7 +17,7 @@ interface VentaCerrada {
   total_cerrado: number | null;
   cerradoPor: string;
   rolCierre: string;
-  items: (LineaPedido & { descripcion?: string; costo?: number })[];
+  items: (LineaPedido & { descripcion?: string; costo?: number; origin?: string })[];
 }
 
 const MOTIVOS = ["Producto roto", "Producto defectuoso", "Producto equivocado", "Otro"];
@@ -83,7 +83,7 @@ export default function Ventas() {
     const hasta = new Date(fecha + "T23:59:59");
     const { data } = await supabase
       .from("orders")
-      .select("id, order_number, closed_at, total_cerrado, closed_by, customers(name, phone), closed_profile:profiles!orders_closed_by_fkey(full_name, role), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, products(code, name, description, category_id, cost, image_url))")
+      .select("id, order_number, closed_at, total_cerrado, closed_by, customers(name, phone), closed_profile:profiles!orders_closed_by_fkey(full_name, role), order_items(id, product_id, quantity, unit_price, assigned_at, seller_id, origin, products(code, name, description, category_id, cost, image_url))")
       .eq("status", "closed")
       .gte("closed_at", desde.toISOString())
       .lte("closed_at", hasta.toISOString())
@@ -111,6 +111,7 @@ export default function Ventas() {
         precio_base: it.unit_price,
         fecha: new Date(it.assigned_at).toLocaleDateString("es-BO"),
         vendedorNombre: it.seller_id ? (vendedoresMapa[it.seller_id] ?? "Vendedor eliminado") : "Sin vendedor",
+        origin: it.origin ?? undefined,
       })),
     }));
     setVentas(lista);
@@ -168,12 +169,16 @@ setAperturas(aperturaPorOrden);
   }
 
   function totalesVenta(v: VentaCerrada) {
-    // "Venta bruta" es el total vigente (total_cerrado): si hubo una corrección,
-    // YA está actualizado al valor correcto. Por eso la venta neta solo resta
-    // las devoluciones REALES de producto — los reembolsos por corrección NO se
-    // vuelven a restar aquí (evita el doble descuento que corregimos en V4).
+    // Las correcciones de ventas cerradas deben reflejarse aunque el total
+    // guardado haya quedado obsoleto por una versión anterior de la función SQL.
     const grupos = agruparPorProducto(reglas, v.items);
-    const bruta = v.total_cerrado ?? grupos.reduce((a, g) => a + g.subtotalConDescuento, 0);
+    const totalPorItems = grupos.reduce((a, g) => a + g.subtotalConDescuento, 0);
+    const tieneCorreccion = v.items.some((item) => item.origin === "correccion");
+    const totalGuardado = v.total_cerrado;
+    const bruta =
+      tieneCorreccion && totalGuardado !== null && Math.abs(totalGuardado - totalPorItems) > 0.01
+        ? totalPorItems
+        : totalGuardado ?? totalPorItems;
     const devsActivas = (devoluciones[v.id] ?? []).filter((d) => d.status === "activa");
     const devolucionProducto = devsActivas.filter((d) => d.type === "producto").reduce((a, d) => a + d.total_amount, 0);
     const reembolsoCorreccion = 0;
