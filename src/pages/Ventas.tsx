@@ -671,8 +671,6 @@ saldoAFavor: 0,
                         {d.type === "correccion" ? "Ajuste por corrección" : (d.items[0]?.reason ?? "Devolución")} — Bs {d.total_amount.toFixed(2)}
                         {d.status === "anulada" && ` (anulada: ${d.cancel_reason})`}
                       </span>
-                      {d.status === "activa" && (
-                      )}
                     </div>
                   ))}
                 </div>
