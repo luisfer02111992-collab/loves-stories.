@@ -397,16 +397,14 @@ export default function Clientes() {
   async function aumentarUnidad(productId: string) {
     if (!ordenId) return;
 
-    const [{ data: producto, error: errorProducto }, { data: publicacion, error: errorPublicacion }] = await Promise.all([
+    const [{ data: producto, error: errorProducto }, { data: publicaciones, error: errorPublicacion }] = await Promise.all([
       supabase.from("products").select("code, name, stock_available").eq("id", productId).single(),
       supabase.from("catalog_products")
-        .select("variant_stock")
+        .select("id, stock_available, variant_type, variant_stock")
         .eq("product_id", productId)
         .eq("active", true)
-        .eq("variant_type", "ring_size")
         .order("created_at", { ascending: true })
-        .limit(1)
-        .maybeSingle(),
+        .limit(100),
     ]);
 
     if (errorProducto || !producto) {
@@ -418,7 +416,12 @@ export default function Clientes() {
       return;
     }
 
-    const variantStock = (publicacion?.variant_stock ?? {}) as Record<string, number>;
+    const publicacionAnillo = (publicaciones ?? []).find((p: any) =>
+      p.variant_type === "ring_size" &&
+      Object.values((p.variant_stock ?? {}) as Record<string, number>)
+        .some((cantidad) => Number(cantidad) > 0)
+    );
+    const variantStock = (publicacionAnillo?.variant_stock ?? {}) as Record<string, number>;
     const tallasDisponibles = Object.fromEntries(
       Object.entries(variantStock)
         .map(([talla, cantidad]) => [talla, Math.max(0, Number(cantidad) || 0)])
@@ -437,14 +440,27 @@ export default function Clientes() {
       return;
     }
 
-    const { error } = await supabase.rpc("assign_product_to_order", {
-      p_order_id: ordenId,
-      p_product_id: productId,
-      p_quantity: 1,
-      p_origin: "manual",
-      p_seller_id: vendedorActivoId,
-      p_session_id: sesionActivaId,
-    });
+    // Si la unidad está publicada, reservarla con su publicación explícita.
+    // Así la devolución puede reponer exactamente el catálogo de origen.
+    const publicacionSimple = (publicaciones ?? []).find((p: any) =>
+      p.variant_type == null && Number(p.stock_available) > 0
+    );
+    const { error } = publicacionSimple
+      ? await supabase.rpc("assign_catalog_product_to_order", {
+          p_order_id: ordenId,
+          p_catalog_product_id: publicacionSimple.id,
+          p_quantity: 1,
+          p_seller_id: vendedorActivoId,
+          p_session_id: sesionActivaId,
+        })
+      : await supabase.rpc("assign_product_to_order", {
+          p_order_id: ordenId,
+          p_product_id: productId,
+          p_quantity: 1,
+          p_origin: "manual",
+          p_seller_id: vendedorActivoId,
+          p_session_id: sesionActivaId,
+        });
     if (error) {
       alert(`No se pudo agregar el producto: ${error.message}`);
       return;
