@@ -242,34 +242,103 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
 
   async function crearProducto(e: React.FormEvent) {
     e.preventDefault();
-    if (!nuevo.code || !nuevo.name) return;
-    const { data } = await supabase
-      .from("products")
-      .insert({
-        code: nuevo.code,
-        name: nuevo.name,
-        category_id: nuevo.category_id || null,
-        cost: nuevo.cost,
-        price: nuevo.price,
-        stock_physical: nuevo.stock_physical,
-        image_url: nuevo.image_url || null,
-      })
-      .select()
-      .single();
-    if (data) {
-      await supabase.from("price_history").insert({ product_id: data.id, price: data.price });
+    const codigo = nuevo.code.trim();
+    const nombre = nuevo.name.trim();
+    if (!codigo || !nombre || guardando) return;
+
+    setGuardando(true);
+    try {
+      const { data: existente, error: consultaError } = await supabase
+        .from("products")
+        .select("id, deleted_at")
+        .eq("code", codigo)
+        .maybeSingle();
+      if (consultaError) throw consultaError;
+
+      if (existente && !existente.deleted_at) {
+        window.alert(`El código ${codigo} ya está en el inventario. Búscalo en Disponibles o Agotados.`);
+        return;
+      }
+
+      let productId: string;
+      if (existente?.deleted_at) {
+        if (profile?.role !== "admin") {
+          throw new Error("Solo un administrador puede reutilizar un código de la Papelera.");
+        }
+
+        const { error: restaurarError } = await supabase.rpc(
+          "restaurar_producto_admin",
+          { p_codigo: codigo }
+        );
+        if (restaurarError) throw restaurarError;
+
+        const { error: actualizarError } = await supabase
+          .from("products")
+          .update({
+            code: codigo,
+            name: nombre,
+            category_id: nuevo.category_id || null,
+            cost: nuevo.cost,
+            price: nuevo.price,
+            stock_physical: nuevo.stock_physical,
+            image_url: nuevo.image_url || null,
+            active: true,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existente.id);
+        if (actualizarError) throw actualizarError;
+
+        productId = existente.id;
+        const { error: cerrarPrecioError } = await supabase
+          .from("price_history")
+          .update({ valid_to: new Date().toISOString() })
+          .eq("product_id", productId)
+          .is("valid_to", null);
+        if (cerrarPrecioError) console.error("Error cerrando el precio anterior:", cerrarPrecioError);
+      } else {
+        const { data, error: crearError } = await supabase
+          .from("products")
+          .insert({
+            code: codigo,
+            name: nombre,
+            category_id: nuevo.category_id || null,
+            cost: nuevo.cost,
+            price: nuevo.price,
+            stock_physical: nuevo.stock_physical,
+            image_url: nuevo.image_url || null,
+            active: true,
+          })
+          .select("id, price")
+          .single();
+        if (crearError) throw crearError;
+        if (!data) throw new Error("No se recibió el producto guardado.");
+        productId = data.id;
+      }
+
+      const { error: historialError } = await supabase
+        .from("price_history")
+        .insert({ product_id: productId, price: nuevo.price });
+      if (historialError) console.error("Error guardando el historial de precio:", historialError);
+
+      setMostrarNuevo(false);
+      setNuevo({
+        code: "",
+        name: "",
+        category_id: "",
+        cost: 0,
+        price: 0,
+        stock_physical: 0,
+        image_url: "",
+      });
+      setBusqueda(codigo);
+      setPestanaStock(Number(nuevo.stock_physical) > 0 ? "disponibles" : "agotados");
+      await cargar();
+    } catch (error) {
+      const detalle = error instanceof Error ? error.message : String(error);
+      window.alert(`No se pudo guardar el código ${codigo}: ${detalle}`);
+    } finally {
+      setGuardando(false);
     }
-    setMostrarNuevo(false);
-    setNuevo({
-      code: "",
-      name: "",
-      category_id: "",
-      cost: 0,
-      price: 0,
-      stock_physical: 0,
-      image_url: "",
-    });
-    cargar();
   }
 
   async function cargarPapelera() {
@@ -310,7 +379,7 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
       if (error) throw error;
       await Promise.all([cargarPapelera(), cargar(true)]);
       setBusqueda(producto.code);
-      setPestanaStock("disponibles");
+      setPestanaStock(Number(producto.stock_physical ?? 0) > 0 ? "disponibles" : "agotados");
       window.alert(`Producto ${producto.code} restaurado correctamente.`);
     } catch (error) {
       window.alert("No se pudo restaurar: " + (error instanceof Error ? error.message : String(error)));
@@ -462,7 +531,7 @@ if (!mantenerSeleccion || !todos.some((p) => p.id === seleccionadoId)) {
               </label>
             </div>
 
-            <button type="submit" className="text-xs px-3 py-2 rounded-md" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>Crear producto</button>
+            <button type="submit" disabled={guardando} className="text-xs px-3 py-2 rounded-md disabled:opacity-60" style={{ background: "#9C7A3C", color: "#F7F3EC" }}>{guardando ? "Guardando..." : "Crear producto"}</button>
           </form>
         )}
 
