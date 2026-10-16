@@ -163,15 +163,36 @@ const clientesFiltrados = useMemo(() => {
       }
 
       for (const prep of preparaciones) {
+        const totalProducto = Object.values(prep.cantidades).reduce((total, cantidad) => total + Math.max(0, Number(cantidad) || 0), 0);
+        const { data: publicaciones, error: errCatalogo } = await supabase
+          .from("catalog_products")
+          .select("id, stock_available")
+          .eq("product_id", prep.product.id)
+          .eq("active", true)
+          .is("variant_type", null)
+          .gte("stock_available", totalProducto)
+          .order("created_at", { ascending: true })
+          .limit(1);
+        if (errCatalogo) throw new Error(errCatalogo.message);
+        const publicacion = publicaciones?.[0];
+
         for (const [clienteId, cantidad] of Object.entries(prep.cantidades)) {
           if (cantidad <= 0) continue;
           const { data: existente } = await supabase
             .from("orders").select("id").eq("customer_id", clienteId).in("status", ["open", "reopened"]).maybeSingle();
           const orderId = existente ? existente.id : (await supabase.from("orders").insert({ customer_id: clienteId }).select().single()).data!.id;
-          const { error: errAsig } = await supabase.rpc("assign_product_to_order", {
-            p_order_id: orderId, p_product_id: prep.product.id, p_quantity: cantidad, p_origin: "manual",
-            p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
-          });
+          const { error: errAsig } = publicacion
+            ? await supabase.rpc("assign_catalog_product_to_order", {
+                p_order_id: orderId,
+                p_catalog_product_id: publicacion.id,
+                p_quantity: cantidad,
+                p_seller_id: vendedorActivoId,
+                p_session_id: sesionActivaId,
+              })
+            : await supabase.rpc("assign_product_to_order", {
+                p_order_id: orderId, p_product_id: prep.product.id, p_quantity: cantidad, p_origin: "manual",
+                p_seller_id: vendedorActivoId, p_session_id: sesionActivaId,
+              });
           if (errAsig) throw new Error(errAsig.message);
         }
       }
