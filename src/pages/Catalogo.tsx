@@ -10,8 +10,7 @@ const LARGOS_CM = ["40","45","50","55","60","65","70","75","80"];
 function tipoVariante(nombre: string): "ring_size" | "length_cm" | null {
   const n = (nombre || "").toLowerCase();
   if (n.includes("anillo")) return "ring_size";
-  if (n.includes("cadena")) return null;
-  if (n.includes("collar")) return "length_cm";
+  if (n.includes("cadena") || n.includes("collar")) return null;
   return null;
 }
 function opcionesVariante(tipo: "ring_size" | "length_cm" | null) {
