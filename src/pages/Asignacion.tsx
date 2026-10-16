@@ -64,6 +64,39 @@ categoria_id: f.products?.category_id ?? null, cantidad: f.quantity, precio_base
     return nueva!.id as string;
   }
 
+  async function asignarProducto(orderId: string, productId: string, quantity: number) {
+    const { data: publicaciones, error: errorCatalogo } = await supabase
+      .from("catalog_products")
+      .select("id, stock_available")
+      .eq("product_id", productId)
+      .eq("active", true)
+      .is("variant_type", null)
+      .gte("stock_available", quantity)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    if (errorCatalogo) return { error: errorCatalogo };
+
+    const publicacion = publicaciones?.[0];
+    if (publicacion) {
+      return await supabase.rpc("assign_catalog_product_to_order", {
+        p_order_id: orderId,
+        p_catalog_product_id: publicacion.id,
+        p_quantity: quantity,
+        p_seller_id: vendedorActivoId,
+        p_session_id: sesionActivaId,
+      });
+    }
+    return await supabase.rpc("assign_product_to_order", {
+      p_order_id: orderId,
+      p_product_id: productId,
+      p_quantity: quantity,
+      p_origin: "manual",
+      p_seller_id: vendedorActivoId,
+      p_session_id: sesionActivaId,
+      p_ring_size: null,
+    });
+  }
+
   // Escribir/escanear el código YA NO asigna nada — solo busca y muestra el
   // producto. Hace falta presionar "Asignar" (o Enter, que hace lo mismo)
   // para que la unidad se descuente del inventario de verdad.
@@ -111,15 +144,7 @@ async function confirmarAsignacion(e?: React.FormEvent) {
 
   const orderId = await obtenerOrdenAbierta(clienteId);
 
-  const { error } = await supabase.rpc("assign_product_to_order", {
-    p_order_id: orderId,
-    p_product_id: productoEncontrado.id,
-    p_quantity: cantidad,
-    p_origin: "manual",
-    p_seller_id: vendedorActivoId,
-    p_session_id: sesionActivaId,
-    p_ring_size: null,
-  });
+  const { error } = await asignarProducto(orderId, productoEncontrado.id, cantidad);
 
   setEnviando(false);
 
@@ -196,15 +221,7 @@ async function aumentarUnidad(grupoProductId: string) {
 
   const orderId = await obtenerOrdenAbierta(clienteId);
 
-  const { error } = await supabase.rpc("assign_product_to_order", {
-    p_order_id: orderId,
-    p_product_id: grupoProductId,
-    p_quantity: 1,
-    p_origin: "manual",
-    p_seller_id: vendedorActivoId,
-    p_session_id: sesionActivaId,
-    p_ring_size: null,
-  });
+  const { error } = await asignarProducto(orderId, grupoProductId, 1);
 
   setEnviando(false);
 
