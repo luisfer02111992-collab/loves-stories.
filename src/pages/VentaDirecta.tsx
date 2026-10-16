@@ -19,6 +19,7 @@ export default function VentaDirecta() {
   const [finalizando, setFinalizando] = useState(false);
   const [ultimaVenta, setUltimaVenta] = useState<{ total: number; numero: number } | null>(null);
 const [productoPendiente, setProductoPendiente] = useState<Product | null>(null);
+const [catalogoPendienteId, setCatalogoPendienteId] = useState<string | null>(null);
 const [tallasDisponibles, setTallasDisponibles] = useState<Record<string, number>>({});
 const [tallaSeleccionada, setTallaSeleccionada] = useState("");
   
@@ -66,44 +67,55 @@ ring_size: f.ring_size ?? null,
 
  async function agregar(p: Product) {
   try {
-    const { data: productoCatalogo } = await supabase
+    const { data: publicaciones, error: errorCatalogo } = await supabase
       .from("catalog_products")
-      .select("variant_type, variant_stock")
+      .select("id, stock_available, variant_type, variant_stock")
       .eq("product_id", p.id)
       .eq("active", true)
-      .eq("variant_type", "ring_size")
-      .maybeSingle();
+      .order("created_at", { ascending: true })
+      .limit(100);
+    if (errorCatalogo) throw new Error(errorCatalogo.message);
 
-    if (productoCatalogo?.variant_type === "ring_size") {
-      const tallas = (productoCatalogo.variant_stock ?? {}) as Record<string, number>;
+    const publicacionAnillo = (publicaciones ?? []).find((item: any) =>
+      item.variant_type === "ring_size" &&
+      Object.values((item.variant_stock ?? {}) as Record<string, number>).some((stock) => Number(stock) > 0)
+    );
 
+    if (publicacionAnillo) {
+      const tallas = (publicacionAnillo.variant_stock ?? {}) as Record<string, number>;
       const disponibles = Object.fromEntries(
         Object.entries(tallas).filter(([, stock]) => Number(stock) > 0)
       );
-
-      if (Object.keys(disponibles).length === 0) {
-        alert("Este anillo no tiene tallas disponibles.");
-        return;
-      }
-
       setProductoPendiente(p);
+      setCatalogoPendienteId(publicacionAnillo.id);
       setTallasDisponibles(disponibles);
       setTallaSeleccionada("");
       setMostrarLista(false);
       return;
     }
 
+    const publicacionSimple = (publicaciones ?? []).find((item: any) =>
+      item.variant_type == null && Number(item.stock_available) >= cantidad
+    );
     const id = await obtenerOrden();
 
-    const { error } = await supabase.rpc("assign_product_to_order", {
-      p_order_id: id,
-      p_product_id: p.id,
-      p_quantity: cantidad,
-      p_origin: "manual",
-      p_seller_id: vendedorActivoId,
-      p_session_id: sesionActivaId,
-      p_ring_size: null,
-    });
+    const { error } = publicacionSimple
+      ? await supabase.rpc("assign_catalog_product_to_order", {
+          p_order_id: id,
+          p_catalog_product_id: publicacionSimple.id,
+          p_quantity: cantidad,
+          p_seller_id: vendedorActivoId,
+          p_session_id: sesionActivaId,
+        })
+      : await supabase.rpc("assign_product_to_order", {
+          p_order_id: id,
+          p_product_id: p.id,
+          p_quantity: cantidad,
+          p_origin: "manual",
+          p_seller_id: vendedorActivoId,
+          p_session_id: sesionActivaId,
+          p_ring_size: null,
+        });
 
     if (error) {
       alert(error.message);
@@ -135,14 +147,17 @@ async function confirmarAnillo() {
   try {
     const id = await obtenerOrden();
 
-    const { error } = await supabase.rpc("assign_product_to_order", {
+    if (!catalogoPendienteId) {
+      alert("No se encontró la publicación original del anillo.");
+      return;
+    }
+    const { error } = await supabase.rpc("assign_catalog_product_to_order", {
       p_order_id: id,
-      p_product_id: productoPendiente.id,
+      p_catalog_product_id: catalogoPendienteId,
       p_quantity: cantidad,
-      p_origin: "manual",
       p_seller_id: vendedorActivoId,
       p_session_id: sesionActivaId,
-      p_ring_size: tallaSeleccionada,
+      p_variant_key: tallaSeleccionada,
     });
 
     if (error) {
@@ -151,6 +166,7 @@ async function confirmarAnillo() {
     }
 
     setProductoPendiente(null);
+    setCatalogoPendienteId(null);
     setTallasDisponibles({});
     setTallaSeleccionada("");
     setBusqueda("");
