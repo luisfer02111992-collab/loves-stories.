@@ -76,16 +76,16 @@ ring_size: f.ring_size ?? null,
       .limit(100);
     if (errorCatalogo) throw new Error(errorCatalogo.message);
 
-    const publicacionAnillo = (publicaciones ?? []).find((item: any) =>
-      item.variant_type === "ring_size" &&
-      Object.values((item.variant_stock ?? {}) as Record<string, number>).some((stock) => Number(stock) > 0)
-    );
-
+    const publicacionAnillo = (publicaciones ?? []).find((item: any) => item.variant_type === "ring_size");
     if (publicacionAnillo) {
       const tallas = (publicacionAnillo.variant_stock ?? {}) as Record<string, number>;
       const disponibles = Object.fromEntries(
         Object.entries(tallas).filter(([, stock]) => Number(stock) > 0)
       );
+      if (Object.keys(disponibles).length === 0) {
+        alert("Este anillo no tiene tallas disponibles.");
+        return;
+      }
       setProductoPendiente(p);
       setCatalogoPendienteId(publicacionAnillo.id);
       setTallasDisponibles(disponibles);
