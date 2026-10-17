@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Upload, AlertTriangle, Search, Camera, Image as ImageIcon, Download, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
 import { supabase } from "../lib/supabase";
 import CamaraCaptura from "../components/CamaraCaptura";
 import type { Product, Category } from "../lib/types";
@@ -123,6 +122,7 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
   setObservaciones(obs ?? []);
 }
   async function exportarInventario() {
+    const { default: ExcelJS } = await import("exceljs");
     const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet("Inventario");
     ws.columns=[
       {header:"Código",key:"codigo",width:14},{header:"Descripción",key:"descripcion",width:28},{header:"Costo",key:"costo",width:13},
