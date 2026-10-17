@@ -5,7 +5,6 @@ import { useSellerSession } from "../hooks/useSellerSession";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido } from "../lib/pricing";
 import { generarPdfPedido, generarPdfGrande, generarPdfDevolucion } from "../lib/pdf";
 import type { Devolucion, DevolucionItem } from "../lib/types";
-import ExcelJS from "exceljs";
 import { imprimirTicket } from "../lib/print";
 
 interface VentaCerrada {
@@ -436,6 +435,7 @@ saldoAFavor: 0,
   }
 
   async function exportarVentasExcel() {
+    const { default: ExcelJS } = await import("exceljs");
     const wb = new ExcelJS.Workbook();
     wb.creator = "Loves Stories";
     wb.created = new Date();
