@@ -1,31 +1,32 @@
-import React from "react";
+import React, { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./hooks/useAuth";
 import { SellerSessionProvider } from "./hooks/useSellerSession";
 import Layout from "./components/Layout";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
-import InicioVentas from "./pages/InicioVentas";
-import Clientes from "./pages/Clientes";
-import ReportesDelDia from "./pages/ReportesDelDia";
-import Productos from "./pages/Productos";
-import Inventario from "./pages/Inventario";
-import Compras from "./pages/Compras";
-import AsignacionMultiple from "./pages/AsignacionMultiple";
-import Catalogo from "./pages/Catalogo";
-import CatalogoPublico from "./pages/CatalogoPublico";
-import Reportes from "./pages/Reportes";
-import Configuracion from "./pages/Configuracion";
-import PedidosCatalogo from "./pages/PedidosCatalogo";
-import Ventas from "./pages/Ventas";
-import ResetPassword from "./pages/ResetPassword";
-import Vendedores from "./pages/Vendedores";
-import ReporteVendedores from "./pages/ReporteVendedores";
-import CierreCaja from "./pages/CierreCaja";
-import HistorialClientes from "./pages/HistorialClientes";
-import Live from "./pages/Live";
-import PedidosLive from "./pages/PedidosLive";
 import { canAccess, type PermissionKey } from "./lib/permissions";
+
+const Login = lazy(() => import("./pages/Login"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const InicioVentas = lazy(() => import("./pages/InicioVentas"));
+const Clientes = lazy(() => import("./pages/Clientes"));
+const ReportesDelDia = lazy(() => import("./pages/ReportesDelDia"));
+const Productos = lazy(() => import("./pages/Productos"));
+const Inventario = lazy(() => import("./pages/Inventario"));
+const Compras = lazy(() => import("./pages/Compras"));
+const AsignacionMultiple = lazy(() => import("./pages/AsignacionMultiple"));
+const Catalogo = lazy(() => import("./pages/Catalogo"));
+const CatalogoPublico = lazy(() => import("./pages/CatalogoPublico"));
+const Reportes = lazy(() => import("./pages/Reportes"));
+const Configuracion = lazy(() => import("./pages/Configuracion"));
+const PedidosCatalogo = lazy(() => import("./pages/PedidosCatalogo"));
+const Ventas = lazy(() => import("./pages/Ventas"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Vendedores = lazy(() => import("./pages/Vendedores"));
+const ReporteVendedores = lazy(() => import("./pages/ReporteVendedores"));
+const CierreCaja = lazy(() => import("./pages/CierreCaja"));
+const HistorialClientes = lazy(() => import("./pages/HistorialClientes"));
+const Live = lazy(() => import("./pages/Live"));
+const PedidosLive = lazy(() => import("./pages/PedidosLive"));
 
 function Privado({ children }: { children: React.ReactNode }) {
   const { loading, userId } = useAuth();
@@ -73,13 +74,16 @@ function AppRoutes() {
   // pantalla de nueva contraseña, sin importar la ruta, hasta que el usuario la cambie.
   if (recovery) {
     return (
-      <Routes>
-        <Route path="*" element={<ResetPassword />} />
-      </Routes>
+      <Suspense fallback={<div className="p-6 text-sm">Cargando sección…</div>}>
+        <Routes>
+          <Route path="*" element={<ResetPassword />} />
+        </Routes>
+      </Suspense>
     );
   }
 
   return (
+    <Suspense fallback={<div className="p-6 text-sm">Cargando sección…</div>}>
     <Routes>
       {/* El catálogo público se ve sin iniciar sesión, con un link para compartir por WhatsApp */}
       <Route path="/catalogo-publico" element={<CatalogoPublico />} />
@@ -140,5 +144,6 @@ function AppRoutes() {
         />
       </Route>
     </Routes>
+    </Suspense>
   );
 }
