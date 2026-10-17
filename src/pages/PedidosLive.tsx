@@ -10,15 +10,16 @@ type LiveItem = {
   product_id: string;
   product_code: string | null;
   product_name: string | null;
-  product_image_url: string | null;
-  live_image_url: string | null;
   dictated_customer_name: string | null;
   customer_id: string | null;
   customer_name: string | null;
   quantity: number;
   ring_size: string | null;
-  status: "pending" | "assigned" | "rejected" | "waiting";
+  source?: "inventario" | "catalogo" | "live";
+  status: "pending" | "assigned" | "rejected" | "waiting" | "shown";
   created_at: string;
+  modified_at?: string | null;
+  resolved_at?: string | null;
   shown_at: string;
   elapsed_seconds: number;
   price: number | null;
@@ -46,7 +47,12 @@ function formatDate(value: string | null) {
   return new Intl.DateTimeFormat("es-BO", {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit", second: "2-digit",
+    timeZone: "America/La_Paz",
   }).format(new Date(value));
+}
+
+function dateKey(value: string) {
+  return new Date(value).toLocaleDateString("en-CA", { timeZone: "America/La_Paz" });
 }
 
 function formatElapsed(total: number | null | undefined) {
@@ -64,6 +70,7 @@ function statusLabel(status: LiveOrder["status"]) {
 }
 
 function itemStatusLabel(status: LiveItem["status"]) {
+  if (status === "shown") return "Solo mostrado";
   if (status === "assigned") return "Asignado";
   if (status === "rejected") return "Rechazado";
   if (status === "waiting") return "En espera";
@@ -78,16 +85,18 @@ export default function PedidosLive() {
   const [message, setMessage] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [liveDate, setLiveDate] = useState("");
+  const [historyOpenId, setHistoryOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [customerSearch, setCustomerSearch] = useState("");
   const [selectedCustomerId, setSelectedCustomerId] = useState("");
   const [newQuantity, setNewQuantity] = useState(1);
   const [busyId, setBusyId] = useState<string | null>(null);
 
-  async function loadLives() {
+  async function loadLives(selectedDate = liveDate) {
     setLoading(true);
     setError("");
-    const { data, error: rpcError } = await supabase.rpc("get_live_orders");
+    const { data, error: rpcError } = await supabase.rpc("get_live_orders_v2", { p_live_date: selectedDate || null });
     if (rpcError) {
       setError(rpcError.message || "No se pudieron cargar los Pedidos Live.");
       setLives([]);
@@ -115,15 +124,16 @@ export default function PedidosLive() {
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return lives;
-    return lives.filter((live) =>
-      live.items.some((item) =>
+    return lives.filter((live) => {
+      if (liveDate && dateKey(live.started_at) !== liveDate) return false;
+      if (!q) return true;
+      return live.items.some((item) =>
         [item.product_code, item.product_name, item.dictated_customer_name, item.customer_name]
           .filter(Boolean)
           .some((v) => String(v).toLowerCase().includes(q))
-      )
-    );
-  }, [lives, search]);
+      );
+    });
+  }, [lives, search, liveDate]);
 
   const customerMatches = useMemo(() => {
     const q = customerSearch.trim().toLowerCase();
@@ -314,7 +324,7 @@ export default function PedidosLive() {
           </div>
           <p className="mt-1 text-sm text-[#7a5362]">Revisa, vincula y reparte las solicitudes de cada transmisión.</p>
         </div>
-        <button onClick={loadLives} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#cda7b4] bg-white px-3 py-2 text-sm text-[#6d2943] disabled:opacity-50">
+        <button onClick={() => void loadLives()} disabled={loading} className="flex items-center gap-2 rounded-lg border border-[#cda7b4] bg-white px-3 py-2 text-sm text-[#6d2943] disabled:opacity-50">
           <RefreshCw size={15} className={loading ? "animate-spin" : ""} /> Actualizar
         </button>
       </div>
@@ -323,24 +333,42 @@ export default function PedidosLive() {
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
       <div className="rounded-xl border border-[#e3cbd3] bg-white p-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Buscar por código, producto o nombre dicho en el Live…"
-          className="w-full rounded-lg border border-[#d6aebc] px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#9b365c]/20"
-        />
+        <div className="grid gap-2 md:grid-cols-[1fr_220px]">
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por código, producto o nombre dicho en el Live…"
+            className="w-full rounded-lg border border-[#d6aebc] px-3 py-2.5 text-sm outline-none focus:ring-2 focus:ring-[#9b365c]/20"
+          />
+          <label className="flex items-center gap-2 text-xs font-semibold text-[#6d2943]">
+            Fecha del Live
+            <input type="date" aria-label="Buscar Live por fecha" value={liveDate} onChange={(e) => { const date = e.target.value; setLiveDate(date); void loadLives(date); }} className="min-w-0 flex-1 rounded-lg border border-[#d6aebc] px-2 py-2 text-sm font-normal" />
+          </label>
+        </div>
       </div>
 
       {loading && <div className="rounded-xl border border-[#ead8de] bg-white p-6 text-center text-sm text-[#7a5362]">Cargando Pedidos Live…</div>}
       {!loading && !error && filtered.length === 0 && <div className="rounded-xl border border-[#ead8de] bg-white p-8 text-center text-sm text-[#7a5362]">No hay Lives para mostrar.</div>}
 
-      {!loading && filtered.map((live) => {
+      {!loading && filtered.map((live, liveIndex) => {
         const open = openId === live.id;
         const totalUnits = live.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
         const unresolved = live.items.filter((x) => x.status === "pending" || x.status === "waiting").length;
+        const newDateFolder = liveIndex === 0 || dateKey(filtered[liveIndex - 1].started_at) !== dateKey(live.started_at);
+        const q = search.trim().toLowerCase();
+        const historyOpen = historyOpenId === live.id;
+        const distributionItems = historyOpen ? live.items : live.items.filter((item) => item.status === "pending" || item.status === "waiting");
+        const visibleItems = q ? distributionItems.filter((item) => [item.product_code, item.product_name, item.dictated_customer_name, item.customer_name].filter(Boolean).some((v) => String(v).toLowerCase().includes(q))) : distributionItems;
+        const groupedForDistribution = Object.values(live.items.filter((item) => item.status === "pending" || item.status === "waiting").reduce<Record<string, { code: string; name: string; items: LiveItem[]; units: number }>>((groups, item) => {
+          const key = item.product_id;
+          groups[key] ||= { code: item.product_code || "Sin código", name: item.product_name || "Producto", items: [], units: 0 };
+          groups[key].items.push(item); groups[key].units += Number(item.quantity || 0); return groups;
+        }, {}));
 
         return (
-          <div key={live.id} className="overflow-hidden rounded-xl border border-[#dfc4ce] bg-white shadow-sm">
+          <React.Fragment key={live.id}>
+          {newDateFolder && <h2 className="pt-2 text-sm font-bold uppercase tracking-wide text-[#7a2947]">Carpeta Live · {new Intl.DateTimeFormat("es-BO", { day: "2-digit", month: "long", year: "numeric", timeZone: "America/La_Paz" }).format(new Date(live.started_at))}</h2>}
+          <div className="overflow-hidden rounded-xl border border-[#dfc4ce] bg-white shadow-sm">
             <button onClick={() => setOpenId(open ? null : live.id)} className="w-full p-4 text-left hover:bg-[#fff8fa]">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -349,7 +377,7 @@ export default function PedidosLive() {
                     <span className="rounded-full bg-[#f3dce5] px-2.5 py-1 text-[11px] font-bold text-[#7a2548]">{statusLabel(live.status)}</span>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-4 text-xs text-[#775766]">
-                    <span className="flex items-center gap-1"><Users size={13} /> {live.items.length} solicitudes</span>
+                    <span className="flex items-center gap-1"><Users size={13} /> {live.items.filter((item) => item.status !== "shown").length} solicitudes · {live.items.filter((item) => item.status === "shown").length} ítems mostrados</span>
                     <span>{totalUnits} unidades</span>
                     <span className="font-semibold text-[#8a244d]">{live.pending_count} pendientes</span>
                     {live.waiting_count > 0 && <span>{live.waiting_count} en espera</span>}
@@ -361,23 +389,22 @@ export default function PedidosLive() {
 
             {open && (
               <div className="border-t border-[#ead8de] p-4">
-                {live.items.length === 0 ? (
-                  <div className="py-5 text-center text-sm text-[#806270]">Este Live no tuvo solicitudes.</div>
+                {groupedForDistribution.length > 0 && <div className="mb-4 rounded-xl border border-[#ead8de] bg-[#fffafb] p-3"><div className="mb-2 flex items-center gap-2 font-semibold text-[#54263b]"><PackageCheck size={16} /> Lista de reparto por ítem</div><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{groupedForDistribution.map((group) => <button key={group.code + group.name} onClick={() => setSearch(group.code)} className="rounded-lg border border-[#e3cbd3] bg-white p-3 text-left hover:bg-[#fff7f9]"><div className="font-bold text-[#7a2540]">{group.code} · {group.name}</div><div className="mt-1 text-xs text-[#806270]">{group.units} unidades pendientes</div><div className="mt-1 space-y-1 text-xs text-[#54263b]">{group.items.map((item) => <div key={item.id}>{item.customer_name || item.dictated_customer_name || "Sin nombre"}{item.ring_size ? ` (talla ${item.ring_size})` : ""} ×{item.quantity}<span className="block text-[11px] text-[#806270]">Pedido: {formatDate(item.created_at)}</span></div>)}</div><div className="mt-2 text-[11px] font-semibold text-[#8a244d]">Toca para filtrar este código y repartir</div></button>)}</div></div>}
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div className="text-xs text-[#806270]">{historyOpen ? "Archivo original del Live" : "Solo aparecen aquí las cantidades que faltan repartir."}</div><button onClick={() => setHistoryOpenId(historyOpen ? null : live.id)} className="rounded-lg border border-[#cda7b4] bg-white px-3 py-2 text-xs font-semibold text-[#6d2943]">{historyOpen ? "Volver a reparto pendiente" : `Ver archivo completo (${live.items.length} registros)`}</button></div>
+                {visibleItems.length === 0 ? (
+                  <div className="py-5 text-center text-sm text-[#806270]">{q ? "No hay ítems que coincidan con la búsqueda." : historyOpen ? "Este Live no tuvo códigos registrados." : "No quedan pedidos pendientes de repartir."}</div>
                 ) : (
                   <div className="space-y-3">
-                    {live.items.map((item) => {
-                      const image = item.live_image_url || item.product_image_url;
+                    {visibleItems.map((item) => {
                       const editing = editingId === item.id;
                       const canEdit = item.status === "pending";
                       const isWaiting = item.status === "waiting";
-                      const done = item.status === "assigned" || item.status === "rejected";
+                      const done = item.status === "assigned" || item.status === "rejected" || item.status === "shown";
 
                       return (
                         <div key={item.id} className="rounded-xl border border-[#ead8de] bg-[#fffafb] p-3">
                           <div className="flex flex-col gap-3 md:flex-row md:items-center">
-                            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[#eee5e8]">
-                              {image ? <img src={image} alt={item.product_code || "Producto"} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-[11px] text-[#987985]">Sin foto</div>}
-                            </div>
+                            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-[#f5e9ed] text-center text-xs font-bold text-[#7a2540]">{item.product_code || "Ítem"}</div>
 
                             <div className="min-w-0 flex-1">
                               <div className="flex flex-wrap items-center gap-2">
@@ -386,13 +413,19 @@ export default function PedidosLive() {
                                 <span className="rounded-full border border-[#dcb8c5] bg-white px-2 py-0.5 text-[11px] text-[#7a2947]">{itemStatusLabel(item.status)}</span>
                               </div>
                               <div className="mt-1 text-sm text-[#54263b]">
+                                {item.status === "shown" ? <span className="text-[#806270]">Sin pedidos registrados</span> : <>
                                 <strong>{item.customer_name || item.dictated_customer_name || "Sin nombre"}</strong>
                                 <span className="ml-2">· {item.quantity} unidad{Number(item.quantity) === 1 ? "" : "es"}</span>
                                 {item.ring_size && <span className="ml-2">· Talla {item.ring_size}</span>}
+                                {item.source && <span className="ml-2 text-xs text-[#806270]">· Origen: {item.source === "catalogo" ? "catálogo" : "stock"}</span>}
+                                </>}
                               </div>
                               <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-[#806270]">
                                 <span className="flex items-center gap-1"><Clock3 size={12} /> Video {formatElapsed(item.elapsed_seconds)}</span>
                                 <span>Mostrado: {formatDate(item.shown_at)}</span>
+                                {item.status !== "shown" && <span>Pedido: {formatDate(item.created_at)}</span>}
+                                {item.modified_at && <span>Ajustado: {formatDate(item.modified_at)}</span>}
+                                {item.resolved_at && item.status === "assigned" && <span>Asignado: {formatDate(item.resolved_at)}</span>}
                               </div>
                             </div>
 
@@ -520,6 +553,7 @@ export default function PedidosLive() {
               </div>
             )}
           </div>
+          </React.Fragment>
         );
       })}
     </div>
