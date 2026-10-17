@@ -731,7 +731,7 @@ if (linea) {
         )}
 
         <form onSubmit={buscarYAgregar} className="p-4 rounded-md mb-3 ls-code-search">
-          <p className="text-xs mb-2 flex items-center gap-1.5" className="ls-code-search-label"><ScanBarcode size={14} /> Escanear o escribir código — Enter agrega a la lista</p>
+          <p className="text-xs mb-2 flex items-center gap-1.5 ls-code-search-label"><ScanBarcode size={14} /> Escanear o escribir código — Enter agrega a la lista</p>
           <div className="flex gap-2">
             <input ref={inputRef} autoFocus value={codigo} onChange={(e) => { setCodigo(e.target.value); setNoEncontrado(false); }}
               onKeyDown={(e) => { if (e.key === "Enter" && !e.nativeEvent.isComposing) { e.preventDefault(); e.currentTarget.form?.requestSubmit(); } }} placeholder="80-50"
