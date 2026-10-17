@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BarChart3, FileDown, FileSpreadsheet, Users, Search } from "lucide-react";
 import { jsPDF } from "jspdf";
-import ExcelJS from "exceljs";
 import { BarChart, Bar, LineChart, Line, AreaChart, Area, PieChart, Pie, Cell, Legend, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { supabase } from "../lib/supabase";
 import StatCard from "../components/StatCard";
@@ -167,6 +166,7 @@ export default function Reportes(){
   doc.save(`${vista==="clientes"?'ventas_por_cliente':'informe_ventas'}_${periodo}.pdf`)
  }
  async function exportarExcel(){
+  const { default: ExcelJS } = await import("exceljs");
   const wb=new ExcelJS.Workbook();wb.creator="Loves Stories";const ws=wb.addWorksheet(`Informe ${periodo}`);const primary=color1.replace('#','').toUpperCase(),secondary=color2.replace('#','').toUpperCase();
   ws.mergeCells('A1:L1');ws.getCell('A1').value='LOVES STORIES — INFORME DE VENTAS';ws.getCell('A1').font={bold:true,size:18,color:{argb:'FFFFFFFF'}};ws.getCell('A1').fill={type:'pattern',pattern:'solid',fgColor:{argb:'FF'+primary}};ws.getCell('A1').alignment={horizontal:'center'};
   ws.mergeCells('A2:L2');ws.getCell('A2').value=`${periodo==="rango"?'Rango':periodo==="dia"?'Día':periodo==="mes"?'Mes':'Año'}: ${tituloPeriodo(periodo,rangoDesde,rangoHasta)}`;ws.getCell('A2').font={bold:true};ws.getCell('A2').alignment={horizontal:'center'};
