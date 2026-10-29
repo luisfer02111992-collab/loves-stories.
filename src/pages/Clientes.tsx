@@ -398,7 +398,7 @@ export default function Clientes() {
     if (!ordenId) return;
 
     const [{ data: producto, error: errorProducto }, { data: publicaciones, error: errorPublicacion }] = await Promise.all([
-      supabase.from("products").select("code, name, stock_available").eq("id", productId).single(),
+      supabase.from("products").select("code, name, stock_available, price").eq("id", productId).single(),
       supabase.from("catalog_products")
         .select("id, stock_available, variant_type, variant_stock")
         .eq("product_id", productId)
@@ -415,6 +415,11 @@ export default function Clientes() {
       alert(`No se pudieron consultar las tallas del catálogo: ${errorPublicacion.message}`);
       return;
     }
+
+    const precioManualCliente = items.find((item) => item.product_id === productId && item.precio_manual)?.precio_catalogo;
+    const precioAsignacion = precioManualCliente != null
+      ? Number(precioManualCliente)
+      : Number(producto.price);
 
     const publicacionAnillo = (publicaciones ?? []).find((p: any) =>
       p.variant_type === "ring_size" &&
@@ -452,6 +457,7 @@ export default function Clientes() {
           p_quantity: 1,
           p_seller_id: vendedorActivoId,
           p_session_id: sesionActivaId,
+          p_unit_price: precioAsignacion,
         })
       : await supabase.rpc("assign_product_to_order", {
           p_order_id: ordenId,
@@ -460,6 +466,7 @@ export default function Clientes() {
           p_origin: "manual",
           p_seller_id: vendedorActivoId,
           p_session_id: sesionActivaId,
+          p_unit_price: precioAsignacion,
         });
     if (error) {
       alert(`No se pudo agregar el producto: ${error.message}`);
