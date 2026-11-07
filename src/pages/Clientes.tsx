@@ -248,9 +248,16 @@ export default function Clientes() {
       ]);
       if (auditError) { console.error(auditError); setItems([]); alert("No se pudo comprobar los precios manuales. Intenta abrir el cliente nuevamente."); return; }
       const manuales = new Map<string, number>();
+      const precioResuelto = new Set<string>();
       for (const registro of auditoria ?? []) {
-        const d = registro.details as { product_id?: string; precio_nuevo?: number };
-        if (d?.product_id && d.precio_nuevo != null && !manuales.has(d.product_id)) manuales.set(d.product_id, Number(d.precio_nuevo));
+        const d = registro.details as { product_id?: string; precio_nuevo?: number; manual_price?: boolean };
+        if (!d?.product_id || precioResuelto.has(d.product_id)) continue;
+        precioResuelto.add(d.product_id);
+        // Los registros antiguos sin manual_price siguen siendo ediciones manuales.
+        // Un registro nuevo con false limpia un override anterior para este producto.
+        if (d.manual_price !== false && d.precio_nuevo != null) {
+          manuales.set(d.product_id, Number(d.precio_nuevo));
+        }
       }
       if (solicitud !== pedidoSolicitud.current) return;
       const detalle: LineaPedido[] = (filas ?? []).map((f: any) => ({
