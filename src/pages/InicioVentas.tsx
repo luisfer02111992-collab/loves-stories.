@@ -596,12 +596,13 @@ if (linea) {
       if (modo === "directa") {
         const { data: orden, error } = await supabase.from("orders").insert({ customer_id: null, direct_sale: true }).select().single();
         if (error || !orden) throw new Error(error?.message ?? "No se pudo iniciar la venta directa");
-        const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch", {
+        const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch_with_price_audit", {
           p_order_id: orden.id,
           p_items: carrito.map((l) => ({
             product_id: l.product.id,
             quantity: l.cantidad,
             unit_price: l.precioPersonalizado ?? Number(l.product.price),
+            manual_price: l.precioPersonalizado !== undefined,
             ring_size: l.ringSize ?? null,
           })),
           p_seller_id: vendedorActivoId,
@@ -618,12 +619,13 @@ if (linea) {
         setUltimoResultado(`Venta directa finalizada — Total Bs ${(totalReal ?? 0).toFixed(2)}`);
       } else if (customerId) {
         const orderId = await obtenerOrdenAbierta(customerId);
-        const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch", {
+        const { error: errAsig } = await supabase.rpc("assign_manual_catalog_batch_with_price_audit", {
           p_order_id: orderId,
           p_items: carrito.map((l) => ({
             product_id: l.product.id,
             quantity: l.cantidad,
             unit_price: l.precioPersonalizado ?? Number(l.product.price),
+            manual_price: l.precioPersonalizado !== undefined,
             ring_size: l.ringSize ?? null,
           })),
           p_seller_id: vendedorActivoId,
