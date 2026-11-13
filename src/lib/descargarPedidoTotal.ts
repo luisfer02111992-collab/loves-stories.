@@ -57,5 +57,5 @@ export async function prepararDescargaPedidoTotal(pdf: Blob, nombre: string) {
       "Cache-Control": "no-store",
     },
   }));
-  return { ruta, borrar: () => cache.delete(ruta) };
+  return { ruta, vence: ahora + VIGENCIA, borrar: () => cache.delete(ruta) };
 }

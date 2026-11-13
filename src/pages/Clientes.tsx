@@ -62,7 +62,7 @@ export default function Clientes() {
   const [clientePedidoTotalCargado, setClientePedidoTotalCargado] = useState<string | null>(null);
   const [preparacionPdfTotal, setPreparacionPdfTotal] = useState<{
     datos: Parameters<typeof generarPdfGrande>[0];
-    blob: Blob | null;
+    descarga: Awaited<ReturnType<typeof prepararDescargaPedidoTotal>> | null;
   } | null>(null);
   const [reintentoPdfTotal, setReintentoPdfTotal] = useState(0);
   const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
@@ -712,73 +712,89 @@ export default function Clientes() {
   }, [seleccionado, ordenId, clientePedidoTotalCargado, nombreNegocio, grupos,
     subtotalSinDescuento, descuentoTotal, total, depositado, saldoPendiente, saldoAFavor]);
 
+  const descargandoPdfTotal = useRef(false);
+
   useEffect(() => {
     if (!datosPdfTotal) return;
+    const datos = datosPdfTotal;
     const controlador = new AbortController();
+    let renovacion: number | undefined;
 
-    void activarDescargasPedidoTotal().catch(() => {});
-    void generarPdfGrande(datosPdfTotal, false, controlador.signal).then(
-      (blob) => {
-        if (!controlador.signal.aborted) setPreparacionPdfTotal({ datos: datosPdfTotal, blob });
-      },
-      (error) => {
+    async function preparar() {
+      try {
+        const [blob] = await Promise.all([
+          generarPdfGrande(datos, false, controlador.signal),
+          activarDescargasPedidoTotal(),
+        ]);
         if (controlador.signal.aborted) return;
-        console.error("Error generando PDF del pedido total:", error);
-        setPreparacionPdfTotal({ datos: datosPdfTotal, blob: null });
-      }
-    );
 
-    return () => controlador.abort();
+        const descarga = await prepararDescargaPedidoTotal(
+          blob, `pedido_total_${datos.cliente || "cliente"}.pdf`
+        );
+        if (controlador.signal.aborted) {
+          await descarga.borrar();
+          return;
+        }
+
+        setPreparacionPdfTotal({ datos: datos, descarga });
+        renovacion = window.setTimeout(() => setReintentoPdfTotal((intento) => intento + 1), 4 * 60_000);
+      } catch (error) {
+        if (controlador.signal.aborted) return;
+        console.error("Error preparando la descarga del pedido total:", error);
+        setPreparacionPdfTotal({ datos: datos, descarga: null });
+      }
+    }
+
+    void preparar();
+    return () => {
+      controlador.abort();
+      window.clearTimeout(renovacion);
+    };
   }, [datosPdfTotal, reintentoPdfTotal]);
 
   const pdfTotalActual = preparacionPdfTotal?.datos === datosPdfTotal ? preparacionPdfTotal : null;
 
-  const descargandoPdfTotal = useRef(false);
+  function descargarPdfTotal(evento: React.MouseEvent<HTMLAnchorElement>) {
+    const descarga = pdfTotalActual?.descarga;
+    if (!seleccionado || !descarga || generandoPdf || descargandoPdfTotal.current) {
+      evento.preventDefault();
+      return;
+    }
+    if (Date.now() >= descarga.vence) {
+      evento.preventDefault();
+      setPreparacionPdfTotal(null);
+      setReintentoPdfTotal((intento) => intento + 1);
+      return;
+    }
 
-  async function descargarPdfTotal() {
-    if (!seleccionado || !pdfTotalActual?.blob || generandoPdf || descargandoPdfTotal.current) return;
-
-    const pdf = pdfTotalActual.blob;
-    const nombre = `pedido_total_${seleccionado.name || "cliente"}.pdf`;
     const destinoWhatsapp = linkWhatsapp(seleccionado.phone, mensajeWhatsapp(false));
+    const marco = document.createElement("iframe");
+    const canal = new BroadcastChannel(descarga.ruta);
+    marco.name = crypto.randomUUID();
+    marco.hidden = true;
+    marco.title = "Descarga del pedido total";
+    document.body.appendChild(marco);
+    // La navegación nativa del enlace conserva el toque que inició esta descarga.
+    evento.currentTarget.target = marco.name;
     descargandoPdfTotal.current = true;
 
-    try {
-      await activarDescargasPedidoTotal();
-      const descarga = await prepararDescargaPedidoTotal(pdf, nombre);
-      const marco = document.createElement("iframe");
-      marco.hidden = true;
-      marco.title = "Descarga del pedido total";
-      const canal = new BroadcastChannel(descarga.ruta);
-      const quitarDescarga = () => {
-        marco.remove();
-        void descarga.borrar().catch(console.error);
-      };
-      const limite = window.setTimeout(() => {
-        canal.close();
-        quitarDescarga();
-        descargandoPdfTotal.current = false;
-        alert("El navegador no inició la descarga. Vuelve a tocar Pedido total / WhatsApp.");
-      }, 8000);
-
-      canal.onmessage = (evento) => {
-        if (evento.data !== "descarga-iniciada") return;
-        window.clearTimeout(limite);
-        canal.close();
-        window.setTimeout(quitarDescarga, 60_000);
-        window.setTimeout(() => {
-          descargandoPdfTotal.current = false;
-          window.location.assign(destinoWhatsapp);
-        }, 750);
-      };
-
-      marco.src = descarga.ruta;
-      document.body.appendChild(marco);
-    } catch (error) {
+    const limite = window.setTimeout(() => {
+      canal.close();
+      marco.remove();
       descargandoPdfTotal.current = false;
-      console.error("Error descargando PDF del pedido total:", error);
-      alert("No se pudo iniciar la descarga del PDF. Inténtalo de nuevo.");
-    }
+      alert("El navegador no solicitó el PDF. Vuelve a tocar Pedido total / WhatsApp.");
+    }, 8000);
+
+    canal.onmessage = (mensaje) => {
+      if (mensaje.data !== "descarga-iniciada") return;
+      window.clearTimeout(limite);
+      canal.close();
+      window.setTimeout(() => marco.remove(), 60_000);
+      window.setTimeout(() => {
+        descargandoPdfTotal.current = false;
+        window.location.assign(destinoWhatsapp);
+      }, 750);
+    };
   }
 
   // PDF por fecha: solo lo asignado ese día puntual, no todo el acumulado.
@@ -1271,12 +1287,12 @@ function linkWhatsapp(telefono: string, mensaje: string) {
                 <button onClick={() => setMostrarResumenCierre(true)} className="flex-1 py-2.5 rounded-md text-sm" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
                   Cerrar pedido
                 </button>
-                {pdfTotalActual?.blob && !generandoPdf ? (
-                  <button type="button" onClick={descargarPdfTotal}
+                {pdfTotalActual?.descarga && !generandoPdf ? (
+                  <a href={pdfTotalActual.descarga.ruta} onClick={descargarPdfTotal}
                     className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2"
                     style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                     <FileDown size={15} /> Pedido total / WhatsApp
-                  </button>
+                  </a>
                 ) : (
                   <button type="button" disabled={!pdfTotalActual || generandoPdf} onClick={() => {
                     setPreparacionPdfTotal(null);
