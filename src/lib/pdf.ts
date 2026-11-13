@@ -137,14 +137,12 @@ interface DatosPdfGrande {
 }
 
 async function cargarImagenComoDataUrl(
-  url: string,
-  signal?: AbortSignal
+  url: string
 ): Promise<{ dataUrl: string; formato: "PNG" | "JPEG" } | null> {
   try {
     const resp = await fetch(url, {
       mode: "cors",
       cache: "no-store",
-      signal,
     });
 
     if (!resp.ok) return null;
@@ -173,9 +171,7 @@ async function cargarImagenComoDataUrl(
 }
 
 export async function generarPdfGrande(
-  datos: DatosPdfGrande,
-  descargarAutomaticamente = true,
-  signal?: AbortSignal
+  datos: DatosPdfGrande
 ): Promise<Blob> {
   const doc = new jsPDF({
     unit: "mm",
@@ -201,7 +197,7 @@ export async function generarPdfGrande(
   try {
     const logoUrl = `${window.location.origin}/logo-loves-stories.png`;
 
-    const logo = await cargarImagenComoDataUrl(logoUrl, signal);
+    const logo = await cargarImagenComoDataUrl(logoUrl);
 
     if (logo) {
       try {
@@ -344,7 +340,6 @@ export async function generarPdfGrande(
   // ==========================================================
 
   for (const g of ordenarProductosAZ(datos.grupos)) {
-    signal?.throwIfAborted();
     let imagenCargada: Awaited<
       ReturnType<typeof cargarImagenComoDataUrl>
     > = null;
@@ -352,7 +347,7 @@ export async function generarPdfGrande(
     if (g.imagen) {
       try {
         imagenCargada =
-          await cargarImagenComoDataUrl(g.imagen, signal);
+          await cargarImagenComoDataUrl(g.imagen);
       } catch {
         imagenCargada = null;
       }
@@ -689,19 +684,19 @@ y += 8;
     y
   );
 
-  signal?.throwIfAborted();
+  const nombreArchivo =
+    `${datos.titulo
+      .toLowerCase()
+      .replace(/\s+/g, "_")}_` +
+    `${datos.cliente.replace(/\s+/g, "_")}.pdf`;
+
   const pdfBlob = doc.output("blob");
 
-  if (descargarAutomaticamente) {
-    const nombreArchivo =
-      `${datos.titulo.toLowerCase().replace(/\s+/g, "_")}_` +
-      `${datos.cliente.replace(/\s+/g, "_")}.pdf`;
-
-    try {
-      doc.save(nombreArchivo);
-    } catch {
-      // Si el navegador bloquea la descarga, se sigue devolviendo el Blob.
-    }
+  try {
+    doc.save(nombreArchivo);
+  } catch {
+    // Si el navegador bloquea la descarga,
+    // se sigue devolviendo el Blob.
   }
 
   return pdfBlob;
