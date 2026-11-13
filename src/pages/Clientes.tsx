@@ -717,7 +717,7 @@ export default function Clientes() {
         saldoPendiente,
         saldoAFavor,
         mostrarPagos: true,
-      });
+      }, false);
 
       const archivo = new File(
         [blob],
