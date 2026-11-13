@@ -137,12 +137,14 @@ interface DatosPdfGrande {
 }
 
 async function cargarImagenComoDataUrl(
-  url: string
+  url: string,
+  signal?: AbortSignal
 ): Promise<{ dataUrl: string; formato: "PNG" | "JPEG" } | null> {
   try {
     const resp = await fetch(url, {
       mode: "cors",
       cache: "no-store",
+      signal,
     });
 
     if (!resp.ok) return null;
@@ -172,7 +174,8 @@ async function cargarImagenComoDataUrl(
 
 export async function generarPdfGrande(
   datos: DatosPdfGrande,
-  descargarAutomaticamente = true
+  descargarAutomaticamente = true,
+  signal?: AbortSignal
 ): Promise<Blob> {
   const doc = new jsPDF({
     unit: "mm",
@@ -198,7 +201,7 @@ export async function generarPdfGrande(
   try {
     const logoUrl = `${window.location.origin}/logo-loves-stories.png`;
 
-    const logo = await cargarImagenComoDataUrl(logoUrl);
+    const logo = await cargarImagenComoDataUrl(logoUrl, signal);
 
     if (logo) {
       try {
@@ -341,6 +344,7 @@ export async function generarPdfGrande(
   // ==========================================================
 
   for (const g of ordenarProductosAZ(datos.grupos)) {
+    signal?.throwIfAborted();
     let imagenCargada: Awaited<
       ReturnType<typeof cargarImagenComoDataUrl>
     > = null;
@@ -348,7 +352,7 @@ export async function generarPdfGrande(
     if (g.imagen) {
       try {
         imagenCargada =
-          await cargarImagenComoDataUrl(g.imagen);
+          await cargarImagenComoDataUrl(g.imagen, signal);
       } catch {
         imagenCargada = null;
       }
@@ -685,6 +689,7 @@ y += 8;
     y
   );
 
+  signal?.throwIfAborted();
   const pdfBlob = doc.output("blob");
 
   if (descargarAutomaticamente) {
