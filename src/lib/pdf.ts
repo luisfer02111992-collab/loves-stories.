@@ -171,7 +171,8 @@ async function cargarImagenComoDataUrl(
 }
 
 export async function generarPdfGrande(
-  datos: DatosPdfGrande
+  datos: DatosPdfGrande,
+  descargarAutomaticamente = true
 ): Promise<Blob> {
   const doc = new jsPDF({
     unit: "mm",
@@ -684,19 +685,18 @@ y += 8;
     y
   );
 
-  const nombreArchivo =
-    `${datos.titulo
-      .toLowerCase()
-      .replace(/\s+/g, "_")}_` +
-    `${datos.cliente.replace(/\s+/g, "_")}.pdf`;
-
   const pdfBlob = doc.output("blob");
 
-  try {
-    doc.save(nombreArchivo);
-  } catch {
-    // Si el navegador bloquea la descarga,
-    // se sigue devolviendo el Blob.
+  if (descargarAutomaticamente) {
+    const nombreArchivo =
+      `${datos.titulo.toLowerCase().replace(/\s+/g, "_")}_` +
+      `${datos.cliente.replace(/\s+/g, "_")}.pdf`;
+
+    try {
+      doc.save(nombreArchivo);
+    } catch {
+      // Si el navegador bloquea la descarga, se sigue devolviendo el Blob.
+    }
   }
 
   return pdfBlob;
