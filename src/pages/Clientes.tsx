@@ -58,6 +58,14 @@ export default function Clientes() {
   const [mensajeRecordatorio, setMensajeRecordatorio] = useState("");
   const [pendienteSobrante, setPendienteSobrante] = useState(false);
   const [generandoPdf, setGenerandoPdf] = useState(false);
+  const [pdfTotal, setPdfTotal] = useState<{
+    clienteId: string;
+    ordenId: string;
+    archivo: File;
+    url: string;
+    chat: string;
+  } | null>(null);
+  const [errorCompartirPdfTotal, setErrorCompartirPdfTotal] = useState(false);
   const [mostrarSelectorFecha, setMostrarSelectorFecha] = useState(false);
   const [editandoPrecio, setEditandoPrecio] = useState<string | null>(null);
   const [precioManual, setPrecioManual] = useState(0);
@@ -97,6 +105,11 @@ export default function Clientes() {
   }
 
   useEffect(() => { setIndiceBusqueda(0); }, [busquedaCliente, pestanaClientes]);
+
+  useEffect(() => {
+    if (!pdfTotal) return;
+    return () => URL.revokeObjectURL(pdfTotal.url);
+  }, [pdfTotal]);
 
   useEffect(() => {
     if (seleccionado?.id) clienteRefs.current[seleccionado.id]?.scrollIntoView({ block: "nearest" });
@@ -683,62 +696,60 @@ export default function Clientes() {
   }
 
   async function generarPdfAbierto() {
-  if (!seleccionado) return;
+    if (!seleccionado || !ordenId) return;
 
-  // Reservar la pestaña durante el clic: Android/Chrome bloquea window.open
-  // si se llama después de esperar a que se genere el PDF.
-  const ventanaWhatsapp = window.open("about:blank", "_blank");
+    setGenerandoPdf(true);
+    setPdfTotal(null);
+    setErrorCompartirPdfTotal(false);
 
-  setGenerandoPdf(true);
+    try {
+      const blob = await generarPdfGrande({
+        negocio: nombreNegocio,
+        cliente: seleccionado.name,
+        telefono: seleccionado.phone,
+        fecha: new Date().toLocaleDateString("es-BO"),
+        titulo: "Pedido acumulado",
+        grupos,
+        subtotalSinDescuento,
+        descuentoTotal,
+        total,
+        depositado,
+        saldoPendiente,
+        saldoAFavor,
+        mostrarPagos: true,
+      });
 
-  try {
-    const blob = await generarPdfGrande({
-      negocio: nombreNegocio,
-      cliente: seleccionado.name,
-      telefono: seleccionado.phone,
-      fecha: new Date().toLocaleDateString("es-BO"),
-      titulo: "Pedido acumulado",
-      grupos,
-      subtotalSinDescuento,
-      descuentoTotal,
-      total,
-      depositado,
-      saldoPendiente,
-      saldoAFavor,
-      mostrarPagos: true,
-    });
+      const archivo = new File(
+        [blob],
+        `pedido_total_${seleccionado.name || "cliente"}.pdf`,
+        { type: "application/pdf" }
+      );
 
-    const texto = mensajeWhatsapp(false);
-
-    const archivo = new File(
-      [blob],
-      `pedido_acumulado_${seleccionado.name || "cliente"}.pdf`,
-      { type: "application/pdf" }
-    );
-
-const urlPdf = URL.createObjectURL(blob);
-const enlace = document.createElement("a");
-enlace.href = urlPdf;
-enlace.download = `pedido_total_${seleccionado.name || "cliente"}.pdf`;
-document.body.appendChild(enlace);
-enlace.click();
-document.body.removeChild(enlace);
-URL.revokeObjectURL(urlPdf);
-
-const destinoWhatsapp = linkWhatsapp(seleccionado.phone, texto);
-if (ventanaWhatsapp && !ventanaWhatsapp.closed) {
-  ventanaWhatsapp.location.href = destinoWhatsapp;
-} else {
-  window.location.href = destinoWhatsapp;
-}
-  } catch (error) {
-    ventanaWhatsapp?.close();
-    console.error("Error generando PDF y WhatsApp:", error);
-    alert("No se pudo generar el PDF. Inténtalo de nuevo.");
-  } finally {
-    setGenerandoPdf(false);
+      setPdfTotal({
+        clienteId: seleccionado.id,
+        ordenId,
+        archivo,
+        url: URL.createObjectURL(archivo),
+        chat: linkWhatsapp(seleccionado.phone, mensajeWhatsapp(false)),
+      });
+    } catch (error) {
+      console.error("Error generando PDF del pedido total:", error);
+      alert("No se pudo generar el PDF. Inténtalo de nuevo.");
+    } finally {
+      setGenerandoPdf(false);
+    }
   }
-}
+
+  async function compartirPdfTotal(archivo: File) {
+    setErrorCompartirPdfTotal(false);
+    try {
+      await navigator.share({ files: [archivo] });
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) {
+        setErrorCompartirPdfTotal(true);
+      }
+    }
+  }
 
   // PDF por fecha: solo lo asignado ese día puntual, no todo el acumulado.
   // No modifica ni cierra el pedido.
@@ -1251,6 +1262,31 @@ function linkWhatsapp(telefono: string, mensaje: string) {
                 <button onClick={() => setMostrarRecibo(true)} className="py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }} title="Ticket térmico 80 mm, sin imágenes">
                   <Printer size={15} />
                 </button>
+              </div>
+            )}
+
+            {pdfTotal && pdfTotal.clienteId === seleccionado.id && pdfTotal.ordenId === ordenId && (
+              <div className="p-3 mb-3 rounded-md" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>
+                <p role="status" className="text-xs mb-2">PDF del pedido total listo.</p>
+                <div className="flex flex-wrap gap-2">
+                  {navigator.share && navigator.canShare?.({ files: [pdfTotal.archivo] }) && (
+                    <button type="button" onClick={() => compartirPdfTotal(pdfTotal.archivo)}
+                      className="text-xs px-3 py-2 rounded-md" style={{ background: "#4F6F52", color: "#F7F3EC" }}>
+                      Compartir PDF
+                    </button>
+                  )}
+                  <a href={pdfTotal.url} download={pdfTotal.archivo.name} className="text-xs px-3 py-2 rounded-md"
+                    style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
+                    Descargar PDF
+                  </a>
+                  <a href={pdfTotal.chat} target="_blank" rel="noreferrer" className="text-xs px-3 py-2 rounded-md"
+                    style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+                    Abrir chat de WhatsApp
+                  </a>
+                </div>
+                {errorCompartirPdfTotal && (
+                  <p role="status" className="text-xs mt-2">Descarga el PDF y adjúntalo desde el chat de WhatsApp.</p>
+                )}
               </div>
             )}
 
