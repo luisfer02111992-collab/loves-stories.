@@ -31,7 +31,9 @@ function nombreArchivoSeguro(nombre: string) {
 // UNA sola descarga por toque. El enlace blob: no se revoca de inmediato (eso podía cortar
 // la descarga); se libera pasado un minuto.
 function descargarPdfUnaVez(blob: Blob, nombreArchivo: string) {
-  const url = URL.createObjectURL(blob);
+  // Entregar el PDF como archivo descargable, sin invocar el visor de Android.
+  const archivo = new Blob([blob], { type: "application/octet-stream" });
+  const url = URL.createObjectURL(archivo);
   const enlace = document.createElement("a");
   enlace.href = url;
   enlace.download = nombreArchivo;
