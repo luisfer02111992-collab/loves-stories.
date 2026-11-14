@@ -5,6 +5,7 @@ import { useSellerSession } from "../hooks/useSellerSession";
 import { useAuth } from "../hooks/useAuth";
 import { loadPricingRules, agruparPorProducto, PricingRule, LineaPedido, GrupoProducto } from "../lib/pricing";
 import { generarPdfGrande } from "../lib/pdf";
+import { activarDescargasPedidoTotal, prepararDescargaPedidoTotal } from "../lib/descargarPedidoTotal";
 import type { Customer } from "../lib/types";
 import { imprimirTicket } from "../lib/print";
 
@@ -30,6 +31,11 @@ function nombreArchivoSeguro(nombre: string) {
 
 // UNA sola descarga por toque. El enlace blob: no se revoca de inmediato (eso podía cortar
 // la descarga); se libera pasado un minuto.
+function nombrePdfTotal(cliente: string) {
+  const identificador = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+  return `pedido_total_${nombreArchivoSeguro(cliente)}_${identificador}.pdf`;
+}
+
 function descargarPdfUnaVez(blob: Blob, nombreArchivo: string) {
   // Entregar el PDF como archivo descargable, sin invocar el visor de Android.
   const archivo = new Blob([blob], { type: "application/octet-stream" });
@@ -107,7 +113,7 @@ export default function Clientes() {
   const [clientePedidoTotalCargado, setClientePedidoTotalCargado] = useState<string | null>(null);
   const [pdfTotalPreparado, setPdfTotalPreparado] = useState<{
     datos: Parameters<typeof generarPdfGrande>[0];
-    blob: Blob | null;
+    archivo: { blob: Blob; descarga?: Awaited<ReturnType<typeof prepararDescargaPedidoTotal>> } | null;
   } | null>(null);
   const [reintentoPdfTotal, setReintentoPdfTotal] = useState(0);
   const ultimoToquePdfTotal = useRef<{ blob: Blob; momento: number } | null>(null);
@@ -742,20 +748,44 @@ export default function Clientes() {
 
   useEffect(() => {
     if (!datosPdfTotal) return;
+    const datos = datosPdfTotal;
     let vigente = true;
 
-    void generarPdfGrande(datosPdfTotal, { guardar: false }).then(
-      (blob) => {
-        if (vigente) setPdfTotalPreparado({ datos: datosPdfTotal, blob });
-      },
-      (error) => {
+    let renovacion: number | undefined;
+
+    async function preparar() {
+      try {
+        const android = /Android/i.test(navigator.userAgent);
+        const [blob] = await Promise.all([
+          generarPdfGrande(datos, { guardar: false }),
+          android ? activarDescargasPedidoTotal() : undefined,
+        ]);
+        if (!vigente) return;
+
+        const descarga = android ? await prepararDescargaPedidoTotal(
+          blob, nombrePdfTotal(datos.cliente)
+        ) : undefined;
+        if (!vigente) {
+          await descarga?.borrar();
+          return;
+        }
+
+        setPdfTotalPreparado({ datos: datos, archivo: { blob, descarga } });
+        if (descarga) {
+          renovacion = window.setTimeout(() => setReintentoPdfTotal((intento) => intento + 1), 4 * 60_000);
+        }
+      } catch (error) {
         if (!vigente) return;
         console.error("Error preparando el PDF del pedido total:", error);
-        setPdfTotalPreparado({ datos: datosPdfTotal, blob: null });
+        setPdfTotalPreparado({ datos: datos, archivo: null });
       }
-    );
+    }
 
-    return () => { vigente = false; };
+    void preparar();
+    return () => {
+      vigente = false;
+      window.clearTimeout(renovacion);
+    };
   }, [datosPdfTotal, reintentoPdfTotal]);
 
   const pdfTotalActual = pdfTotalPreparado?.datos === datosPdfTotal ? pdfTotalPreparado : null;
@@ -771,12 +801,13 @@ export default function Clientes() {
   }
 
   function descargarPdfTotal(evento: React.MouseEvent<HTMLAnchorElement>) {
-    const blob = pdfTotalActual?.blob;
-    if (!blob || !datosPdfTotal) {
+    const archivo = pdfTotalActual?.archivo;
+    if (!archivo || !datosPdfTotal) {
       evento.preventDefault();
       return;
     }
 
+    const { blob, descarga } = archivo;
     const momento = Date.now();
     const anterior = ultimoToquePdfTotal.current;
     if (anterior?.blob === blob && momento - anterior.momento < 750) {
@@ -785,8 +816,25 @@ export default function Clientes() {
     }
 
     try {
-      const identificador = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
-      descargarPdfUnaVez(blob, `pedido_total_${nombreArchivoSeguro(datosPdfTotal.cliente)}_${identificador}.pdf`);
+      if (descarga) {
+        if (momento >= descarga.vence) {
+          evento.preventDefault();
+          setPdfTotalPreparado(null);
+          setReintentoPdfTotal((intento) => intento + 1);
+          return;
+        }
+
+        // La respuesta del worker marca el archivo como adjunto. La página
+        // principal conserva el toque para abrir el chat de WhatsApp.
+        const marco = document.createElement("iframe");
+        marco.hidden = true;
+        marco.title = "Descarga del pedido total";
+        marco.src = descarga.ruta;
+        document.body.appendChild(marco);
+        window.setTimeout(() => marco.remove(), 60_000);
+      } else {
+        descargarPdfUnaVez(blob, nombrePdfTotal(datosPdfTotal.cliente));
+      }
       ultimoToquePdfTotal.current = { blob, momento };
       // El enlace abre WhatsApp mediante la acción nativa del mismo toque.
     } catch (error) {
@@ -1286,7 +1334,7 @@ function linkWhatsapp(telefono: string, mensaje: string) {
                 <button onClick={() => setMostrarResumenCierre(true)} className="flex-1 py-2.5 rounded-md text-sm" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
                   Cerrar pedido
                 </button>
-                {pdfTotalActual?.blob && !generandoPdf ? (
+                {pdfTotalActual?.archivo && !generandoPdf ? (
                   <a href={enlaceWhatsappPedidoTotal(seleccionado.phone, mensajeWhatsapp(false))}
                     target={/Android/i.test(navigator.userAgent) ? "_self" : "_blank"}
                     rel="noopener noreferrer" onClick={descargarPdfTotal}
