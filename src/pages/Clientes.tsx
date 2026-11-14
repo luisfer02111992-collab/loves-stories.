@@ -743,7 +743,8 @@ export default function Clientes() {
         { guardar: false } // el generador ya NO descarga por su cuenta: la descarga la hace este botón
       );
 
-      descargarPdfUnaVez(blob, `pedido_total_${nombreArchivoSeguro(cliente.name)}.pdf`);
+      const identificador = crypto.randomUUID().replace(/-/g, "").slice(0, 12);
+      descargarPdfUnaVez(blob, `pedido_total_${nombreArchivoSeguro(cliente.name)}_${identificador}.pdf`);
 
       // Pequeña pausa para que la descarga arranque antes de abrir WhatsApp.
       await new Promise((r) => setTimeout(r, 500));
