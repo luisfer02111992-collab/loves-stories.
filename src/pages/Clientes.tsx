@@ -758,6 +758,16 @@ export default function Clientes() {
 
   const pdfTotalActual = pdfTotalPreparado?.datos === datosPdfTotal ? pdfTotalPreparado : null;
 
+  function enlaceWhatsappPedidoTotal(telefono: string, mensaje: string) {
+    const enlace = linkWhatsapp(telefono, mensaje);
+    if (!/Android/i.test(navigator.userAgent)) return enlace;
+
+    const destino = new URL(enlace);
+    const parametros = new URLSearchParams(destino.search);
+    parametros.set("phone", destino.pathname.slice(1));
+    return `intent://send?${parametros.toString()}#Intent;scheme=whatsapp;S.browser_fallback_url=${encodeURIComponent(enlace)};end`;
+  }
+
   function descargarPdfTotal(evento: React.MouseEvent<HTMLAnchorElement>) {
     const blob = pdfTotalActual?.blob;
     if (!blob || !datosPdfTotal) {
@@ -1275,8 +1285,9 @@ function linkWhatsapp(telefono: string, mensaje: string) {
                   Cerrar pedido
                 </button>
                 {pdfTotalActual?.blob && !generandoPdf ? (
-                  <a href={linkWhatsapp(seleccionado.phone, mensajeWhatsapp(false))}
-                    target="_blank" rel="noopener noreferrer" onClick={descargarPdfTotal}
+                  <a href={enlaceWhatsappPedidoTotal(seleccionado.phone, mensajeWhatsapp(false))}
+                    target={/Android/i.test(navigator.userAgent) ? "_self" : "_blank"}
+                    rel="noopener noreferrer" onClick={descargarPdfTotal}
                     className="flex-1 py-2.5 rounded-md text-sm flex items-center justify-center gap-2"
                     style={{ background: "#9C7A3C", color: "#F7F3EC" }}>
                     <FileDown size={15} /> Pedido total / WhatsApp
