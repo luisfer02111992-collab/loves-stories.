@@ -17,6 +17,32 @@ interface DepositoDetalle {
   paid_at: string;
 }
 
+function nombreArchivoSeguro(nombre: string) {
+  return (
+    String(nombre ?? "")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^A-Za-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 60) || "cliente"
+  );
+}
+
+// UNA sola descarga por toque. El enlace blob: no se revoca de inmediato (eso podía cortar
+// la descarga); se libera pasado un minuto.
+function descargarPdfUnaVez(blob: Blob, nombreArchivo: string) {
+  const url = URL.createObjectURL(blob);
+  const enlace = document.createElement("a");
+  enlace.href = url;
+  enlace.download = nombreArchivo;
+  enlace.rel = "noopener";
+  enlace.style.display = "none";
+  document.body.appendChild(enlace);
+  enlace.click();
+  enlace.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 const PLAZO_DIAS = 5;
 
 export default function Clientes() {
@@ -76,6 +102,7 @@ export default function Clientes() {
   const clienteRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const productoRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const pedidoSolicitud = useRef(0);
+  const pedidoTotalEnCurso = useRef(false);
 
   const clientesVisibles = useMemo(() => {
     const q = busquedaCliente.trim().toLowerCase();
@@ -683,62 +710,58 @@ export default function Clientes() {
   }
 
   async function generarPdfAbierto() {
-  if (!seleccionado) return;
+    if (!seleccionado || pedidoTotalEnCurso.current) return;
+    pedidoTotalEnCurso.current = true;
 
-  // Reservar la pestaña durante el clic: Android/Chrome bloquea window.open
-  // si se llama después de esperar a que se genere el PDF.
-  const ventanaWhatsapp = window.open("about:blank", "_blank");
+    // Se fija el cliente del toque: PDF, nombre de archivo y chat son siempre del mismo cliente.
+    const cliente = seleccionado;
+    const destinoWhatsapp = linkWhatsapp(cliente.phone, mensajeWhatsapp(false));
 
-  setGenerandoPdf(true);
+    // La pestaña de WhatsApp se reserva durante el toque: Android/Chrome bloquea window.open
+    // si se llama después de esperar a que se genere el PDF.
+    const ventanaWhatsapp = window.open("about:blank", "_blank");
 
-  try {
-    const blob = await generarPdfGrande({
-      negocio: nombreNegocio,
-      cliente: seleccionado.name,
-      telefono: seleccionado.phone,
-      fecha: new Date().toLocaleDateString("es-BO"),
-      titulo: "Pedido acumulado",
-      grupos,
-      subtotalSinDescuento,
-      descuentoTotal,
-      total,
-      depositado,
-      saldoPendiente,
-      saldoAFavor,
-      mostrarPagos: true,
-    });
+    setGenerandoPdf(true);
 
-    const texto = mensajeWhatsapp(false);
+    try {
+      const blob = await generarPdfGrande(
+        {
+          negocio: nombreNegocio,
+          cliente: cliente.name,
+          telefono: cliente.phone,
+          fecha: new Date().toLocaleDateString("es-BO"),
+          titulo: "Pedido acumulado",
+          grupos,
+          subtotalSinDescuento,
+          descuentoTotal,
+          total,
+          depositado,
+          saldoPendiente,
+          saldoAFavor,
+          mostrarPagos: true,
+        },
+        { guardar: false } // el generador ya NO descarga por su cuenta: la descarga la hace este botón
+      );
 
-    const archivo = new File(
-      [blob],
-      `pedido_acumulado_${seleccionado.name || "cliente"}.pdf`,
-      { type: "application/pdf" }
-    );
+      descargarPdfUnaVez(blob, `pedido_total_${nombreArchivoSeguro(cliente.name)}.pdf`);
 
-const urlPdf = URL.createObjectURL(blob);
-const enlace = document.createElement("a");
-enlace.href = urlPdf;
-enlace.download = `pedido_total_${seleccionado.name || "cliente"}.pdf`;
-document.body.appendChild(enlace);
-enlace.click();
-document.body.removeChild(enlace);
-URL.revokeObjectURL(urlPdf);
+      // Pequeña pausa para que la descarga arranque antes de abrir WhatsApp.
+      await new Promise((r) => setTimeout(r, 500));
 
-const destinoWhatsapp = linkWhatsapp(seleccionado.phone, texto);
-if (ventanaWhatsapp && !ventanaWhatsapp.closed) {
-  ventanaWhatsapp.location.href = destinoWhatsapp;
-} else {
-  window.location.href = destinoWhatsapp;
-}
-  } catch (error) {
-    ventanaWhatsapp?.close();
-    console.error("Error generando PDF y WhatsApp:", error);
-    alert("No se pudo generar el PDF. Inténtalo de nuevo.");
-  } finally {
-    setGenerandoPdf(false);
+      if (ventanaWhatsapp && !ventanaWhatsapp.closed) {
+        ventanaWhatsapp.location.href = destinoWhatsapp;
+      } else {
+        window.location.href = destinoWhatsapp;
+      }
+    } catch (error) {
+      console.error("Pedido total / WhatsApp:", error);
+      if (ventanaWhatsapp && !ventanaWhatsapp.closed) ventanaWhatsapp.close();
+      alert("No se pudo generar el PDF. Inténtalo de nuevo.");
+    } finally {
+      pedidoTotalEnCurso.current = false;
+      setGenerandoPdf(false);
+    }
   }
-}
 
   // PDF por fecha: solo lo asignado ese día puntual, no todo el acumulado.
   // No modifica ni cierra el pedido.
