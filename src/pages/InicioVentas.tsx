@@ -33,7 +33,7 @@ export default function InicioVentas() {
   >(null);
   const [filaSeleccionada, setFilaSeleccionada] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
-  const listaCarritoRef = useRef<HTMLDivElement>(null);
+  const [filaParaMostrar, setFilaParaMostrar] = useState<{ productId: string } | null>(null);
   const carritoRef = useRef<LineaCarrito[]>([]);
   const hidratadoRef = useRef(false);
   const productosCacheRef = useRef<Map<string, Product>>(new Map());
@@ -50,7 +50,7 @@ export default function InicioVentas() {
   const colaEscaneosRef = useRef<Promise<void>>(Promise.resolve());
   const [ultimoResultado, setUltimoResultado] = useState<string | null>(null);
   const [categorias, setCategorias] = useState<Category[]>([]);
-  const [tallaPendiente, setTallaPendiente] = useState<{ product: Product; tallas: Record<string, number> } | null>(null);
+  const [tallaPendiente, setTallaPendiente] = useState<{ product: Product; tallas: Record<string, number>; desdeFila: boolean } | null>(null);
   const [tallaElegida, setTallaElegida] = useState("");
 
   useEffect(() => {
@@ -208,7 +208,7 @@ useEffect(() => {
     return Object.fromEntries(Object.entries(acumuladas).filter(([, cantidad]) => cantidad > 0));
   }
 
-  function agregarUnidadAlCarrito(producto: Product, ringSize: string | null = null, maxCantidad: number | null = null) {
+  function agregarUnidadAlCarrito(producto: Product, ringSize: string | null = null, maxCantidad: number | null = null, desdeFila = false) {
     const actual = carritoRef.current;
     const existente = actual.find((linea) =>
       linea.product.id === producto.id && (linea.ringSize ?? null) === ringSize
@@ -230,9 +230,10 @@ useEffect(() => {
     carritoRef.current = siguiente;
     setCarrito(siguiente);
     setFilaSeleccionada(producto.id);
+    if (!desdeFila) setFilaParaMostrar({ productId: producto.id });
   }
 
-  async function solicitarTalla(producto: Product) {
+  async function solicitarTalla(producto: Product, desdeFila: boolean) {
     const tallas = await obtenerTallasPublicadas(producto);
     const tallasEnCarrito: Record<string, number> = {};
     for (const linea of carritoRef.current) {
@@ -249,13 +250,13 @@ useEffect(() => {
       setAvisoBloqueante({ tipo: "agotado", codigo: producto.code, nombre: producto.name });
       return false;
     }
-    setTallaPendiente({ product: producto, tallas: tallasRestantes });
+    setTallaPendiente({ product: producto, tallas: tallasRestantes, desdeFila });
     setTallaElegida("");
     inputRef.current?.blur();
     return true;
   }
 
-  async function procesarCodigoEscaneado(codigoLeido: string) {
+  async function procesarCodigoEscaneado(codigoLeido: string, desdeFila = false) {
     let seleccionarTalla = false;
     try {
       let producto = productosCacheRef.current.get(codigoLeido);
@@ -293,16 +294,16 @@ useEffect(() => {
 
       if (totalCatalogo > 0 && stockFueraCatalogo - unidadesSinTallaEnCarrito <= 0) {
         seleccionarTalla = true;
-        await solicitarTalla(producto);
+        await solicitarTalla(producto, desdeFila);
         return;
       }
 
-      agregarUnidadAlCarrito(producto, null, totalCatalogo > 0 ? stockFueraCatalogo : null);
+      agregarUnidadAlCarrito(producto, null, totalCatalogo > 0 ? stockFueraCatalogo : null, desdeFila);
     } catch (error: any) {
       alert(error?.message ?? "No se pudo agregar el producto.");
     } finally {
       setBuscando(false);
-      if (!seleccionarTalla) inputRef.current?.focus();
+      if (!seleccionarTalla && !desdeFila) inputRef.current?.focus();
     }
   }
 
@@ -312,29 +313,26 @@ useEffect(() => {
       .filter((linea) => linea.product.id === tallaPendiente.product.id && linea.ringSize === tallaElegida)
       .reduce((suma, linea) => suma + linea.cantidad, 0);
     const maxCantidad = enCarrito + (tallaPendiente.tallas[tallaElegida] ?? 0);
-    agregarUnidadAlCarrito(tallaPendiente.product, tallaElegida, maxCantidad);
+    agregarUnidadAlCarrito(tallaPendiente.product, tallaElegida, maxCantidad, tallaPendiente.desdeFila);
+    cerrarTallaPendiente();
+  }
+
+  function cerrarTallaPendiente() {
+    const desdeFila = tallaPendiente?.desdeFila;
     setTallaPendiente(null);
     setTallaElegida("");
-    setTimeout(() => inputRef.current?.focus(), 0);
+    if (!desdeFila) setTimeout(() => inputRef.current?.focus(), 0);
   }
+
   useEffect(() => {
-  if (!filaSeleccionada || !listaCarritoRef.current) return;
+    if (!filaParaMostrar) return;
+    const frame = requestAnimationFrame(() => {
+      document.getElementById(`producto-carrito-${filaParaMostrar.productId}`)
+        ?.scrollIntoView({ behavior: "auto", block: "nearest" });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [filaParaMostrar]);
 
-  requestAnimationFrame(() => {
-    const fila = listaCarritoRef.current?.querySelector(
-      `#producto-carrito-${filaSeleccionada}`
-    ) as HTMLElement | null;
-
-    if (fila && listaCarritoRef.current) {
-      const contenedor = listaCarritoRef.current;
-
-      fila.scrollIntoView({
-  behavior: "auto",
-  block: "nearest",
-});
-    }
-  });
-}, [filaSeleccionada, carrito]);
     function cambiarCantidad(productId: string, delta: number, ringSize?: string | null) {
   setCarrito((prev) =>
     prev
@@ -677,7 +675,7 @@ if (linea) {
               ))}
             </select>
             <div className="flex gap-2 justify-end">
-              <button type="button" onClick={() => { setTallaPendiente(null); setTallaElegida(""); setTimeout(() => inputRef.current?.focus(), 0); }} className="px-4 py-2 rounded text-sm" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
+              <button type="button" onClick={cerrarTallaPendiente} className="px-4 py-2 rounded text-sm" style={{ background: "#F7F3EC", border: "1px solid #D9D0C2" }}>Cancelar</button>
               <button type="button" disabled={!tallaElegida} onClick={confirmarTallaPendiente} className="px-4 py-2 rounded text-sm" style={{ background: "#9C7A3C", color: "#FFF9F7", opacity: tallaElegida ? 1 : 0.55 }}>Agregar con talla</button>
             </div>
           </section>
@@ -744,7 +742,7 @@ if (linea) {
           </div>
         </form>
 
-        <div ref={listaCarritoRef}
+        <div
   style={{
     background: "#F7F3EC",
     border: "1px solid #D9D0C2",
@@ -808,7 +806,9 @@ if (linea) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    void procesarCodigoEscaneado(l.product.code);
+                    colaEscaneosRef.current = colaEscaneosRef.current
+                      .catch(() => {})
+                      .then(() => procesarCodigoEscaneado(l.product.code, true));
                   }}
                   className="w-7 h-7 rounded-full flex items-center justify-center"
                   style={{ background: "#9C7A3C", color: "#F7F3EC" }}
