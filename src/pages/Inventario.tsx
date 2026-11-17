@@ -1,10 +1,14 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Upload, AlertTriangle, Search, Camera, Image as ImageIcon, Download, FileSpreadsheet } from "lucide-react";
 import * as XLSX from "xlsx";
-import ExcelJS from "exceljs";
 import { supabase } from "../lib/supabase";
 import CamaraCaptura from "../components/CamaraCaptura";
 import type { Product, Category } from "../lib/types";
+import type { ProductoExportable, ResultadoExportacion } from "../lib/exportarInventario.worker";
+
+type ProductoInventario = Product & {
+  purchase_batches?: { label: string | null; created_at: string | null } | null;
+};
 
 interface FilaExcel {
   fila: number;
@@ -44,7 +48,11 @@ function buscarValor(fila: Record<string, any>, ...alias: string[]) {
 }
 
 export default function Inventario() {
-  const [productos, setProductos] = useState<Product[]>([]);
+  const [productos, setProductos] = useState<ProductoInventario[]>([]);
+  const [estadoCarga, setEstadoCarga] = useState<"cargando" | "completa" | "error">("cargando");
+  const [exportando, setExportando] = useState(false);
+  const [errorExportacion, setErrorExportacion] = useState("");
+  const workerExportacion = useRef<Worker | null>(null);
   const [categorias, setCategorias] = useState<Category[]>([]);
   const [filtroLote, setFiltroLote] = useState<string>("Todos");
   const [busqueda, setBusqueda] = useState("");
@@ -74,27 +82,34 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
     buscadorRef.current?.focus({ preventScroll: true });
     cargar();
     supabase.from("categories").select("*").order("sort_order").then(({ data }) => setCategorias((data as Category[]) ?? []));
+    return () => {
+      workerExportacion.current?.terminate();
+      workerExportacion.current = null;
+    };
   }, []);
 
  async function cargar() {
+  setEstadoCarga("cargando");
   const TAMANO_PAGINA = 1000;
-  const todas: Product[] = [];
+  const todas: ProductoInventario[] = [];
   let desde = 0;
+  let cargaCompleta = true;
 
   while (true) {
     const { data, error } = await supabase
       .from("products")
-      .select("*, purchase_batches(label)")
+      .select("*, purchase_batches(label, created_at)")
       .is("deleted_at", null)
       .order("id", { ascending: true })
       .range(desde, desde + TAMANO_PAGINA - 1);
 
     if (error) {
       console.error("Error cargando inventario:", error);
+      cargaCompleta = false;
       break;
     }
 
-    const pagina = (data as Product[]) ?? [];
+    const pagina = (data as ProductoInventario[]) ?? [];
 
     todas.push(...pagina);
 
@@ -106,6 +121,7 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
   }
 
   setProductos(todas);
+  setEstadoCarga(cargaCompleta ? "completa" : "error");
 
   if (todas.length > 0) {
     setMermaCodigo(todas[0].code);
@@ -122,23 +138,66 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
   if (obsError) console.error("Error cargando observaciones:", obsError);
   setObservaciones(obs ?? []);
 }
-  async function exportarInventario() {
-    const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet("Inventario");
-    ws.columns=[
-      {header:"Código",key:"codigo",width:14},{header:"Descripción",key:"descripcion",width:28},{header:"Costo",key:"costo",width:13},
-      {header:"Precio de venta",key:"precio",width:16},{header:"Ganancia",key:"ganancia",width:14},{header:"Stock físico",key:"fisico",width:13},
-      {header:"Stock reservado",key:"reservado",width:15},{header:"Stock disponible",key:"disponible",width:15},{header:"Lote",key:"lote",width:22},
-      {header:"Imagen",key:"imagen",width:18},{header:"Estado",key:"estado",width:14}
-    ];
-    ws.getRow(1).font={bold:true}; ws.views=[{state:"frozen",ySplit:1}]; ws.autoFilter={from:"A1",to:"K1"};
-    for (const x of productos as any[]) {
-      const row=ws.addRow({codigo:x.code,descripcion:x.description || x.name,costo:Number(x.cost||0),precio:Number(x.price||0),ganancia:Number(x.price||0)-Number(x.cost||0),fisico:Number(x.stock_physical||0),reservado:Number(x.stock_reserved||0),disponible:Number(x.stock_available||0),lote:x.purchase_batches?.label || "",imagen:"",estado:Number(x.stock_available||0)>0?"Disponible":"Agotado"});
-      row.height=58;
-      if(x.image_url){ try { const r=await fetch(x.image_url); if(r.ok){ const blob=await r.blob(); const ext=(blob.type.includes("png")?"png":"jpeg") as "png"|"jpeg"; const base64=await new Promise<string>((resolve,reject)=>{const fr=new FileReader();fr.onload=()=>resolve(String(fr.result));fr.onerror=()=>reject(fr.error);fr.readAsDataURL(blob);}); const imageId=wb.addImage({base64,extension:ext}); ws.addImage(imageId,{tl:{col:9.15,row:row.number-0.9},ext:{width:62,height:62}}); } } catch {} }
+  function exportarInventario() {
+    if (workerExportacion.current || estadoCarga !== "completa" || listaPorLote.length === 0) return;
+
+    setErrorExportacion("");
+    setExportando(true);
+
+    function finalizar(error?: unknown) {
+      workerExportacion.current?.terminate();
+      workerExportacion.current = null;
+      setExportando(false);
+      if (error) {
+        console.error("Error exportando inventario:", error);
+        setErrorExportacion("No se pudo generar el Excel. Vuelve a intentar.");
+      }
     }
-    [3,4,5].forEach(c=>ws.getColumn(c).numFmt='"Bs" #,##0.00');
-    const buffer=await wb.xlsx.writeBuffer(); const blob=new Blob([buffer],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`Inventario-Loves-Stories-${new Date().toISOString().slice(0,10)}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
+
+    try {
+      const worker = new Worker(new URL("../lib/exportarInventario.worker.ts", import.meta.url), { type: "module" });
+      workerExportacion.current = worker;
+      worker.onmessage = ({ data }: MessageEvent<ResultadoExportacion>) => {
+        if (data?.tipo === "error") {
+          finalizar(data.mensaje || "El generador no devolvió el archivo.");
+          return;
+        }
+        if (data?.tipo !== "archivo") return;
+        try {
+          const url = URL.createObjectURL(data.archivo);
+          const enlace = document.createElement("a");
+          enlace.href = url;
+          enlace.download = `Inventario-Loves-Stories-${new Date().toISOString().slice(0, 10)}.xlsx`;
+          enlace.hidden = true;
+          document.body.appendChild(enlace);
+          try {
+            enlace.click();
+          } finally {
+            enlace.remove();
+            window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+          }
+          finalizar();
+        } catch (error) {
+          finalizar(error);
+        }
+      };
+      worker.onerror = (event) => finalizar(event.error || event.message || "Error en el generador de Excel.");
+      worker.onmessageerror = (event) => finalizar(event);
+      const datos: ProductoExportable[] = listaPorLote.map((producto) => ({
+        codigo: producto.code,
+        descripcion: producto.description || producto.name,
+        costo: Number(producto.cost || 0),
+        precio: Number(producto.price || 0),
+        fisico: Number(producto.stock_physical || 0),
+        reservado: Number(producto.stock_reserved || 0),
+        disponible: Number(producto.stock_available || 0),
+        lote: producto.purchase_batches?.label || "",
+        imagen: producto.image_url && producto.image_url.length <= 32_767 ? producto.image_url : "",
+      }));
+      worker.postMessage(datos);
+    } catch (error) {
+      finalizar(error);
+    }
   }
 
   function onArchivo(e: React.ChangeEvent<HTMLInputElement>) {
@@ -371,7 +430,18 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
     cargar();
   }
 
-  const lotes = ["Todos", ...Array.from(new Set(productos.map((p) => p.batch_id).filter(Boolean)))] as string[];
+  const lotesPorId = new Map<string, NonNullable<ProductoInventario["purchase_batches"]> | null>();
+  for (const producto of productos) {
+    if (producto.batch_id && !lotesPorId.has(producto.batch_id)) {
+      lotesPorId.set(producto.batch_id, producto.purchase_batches ?? null);
+    }
+  }
+  const lotes = [
+    { id: "Todos", etiqueta: "Todos" },
+    ...[...lotesPorId]
+      .sort(([, a], [, b]) => (b?.created_at ?? "").localeCompare(a?.created_at ?? ""))
+      .map(([id, lote]) => ({ id, etiqueta: lote?.label || "Lote" })),
+  ];
   const listaPorLote = filtroLote === "Todos" ? productos : productos.filter((p) => p.batch_id === filtroLote);
   const q = busqueda.trim().toLowerCase();
   const coincideBusqueda = (p: Product) => !q || p.code.toLowerCase().includes(q) || p.name.toLowerCase().includes(q);
@@ -389,7 +459,9 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
         <p className="font-serif text-lg">Inventario</p>
         <div className="flex gap-2">
           <a href="/PLANTILLA_CARGA_INVENTARIO_LOVES_STORIES.xlsx" download className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}><FileSpreadsheet size={13}/> Descargar plantilla</a>
-          <button onClick={exportarInventario} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}><Download size={13}/> Exportar Excel</button>
+          <button onClick={exportarInventario} disabled={exportando || estadoCarga !== "completa" || listaPorLote.length === 0} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5 disabled:opacity-60" style={{ background: "#EDE7DE", border: "1px solid #D9D0C2" }}>
+            <Download size={13}/> {exportando ? "Generando Excel…" : estadoCarga === "cargando" ? "Cargando inventario…" : "Exportar Excel"}
+          </button>
           <button onClick={() => setMostrarMerma(true)} className="text-xs px-3 py-2 rounded-md flex items-center gap-1.5" style={{ background: "#F4E3E6", color: "#7A2540" }}>
             <AlertTriangle size={13} /> Registrar merma
           </button>
@@ -399,6 +471,8 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
           </label>
         </div>
       </div>
+      {estadoCarga === "error" && <p role="alert" className="text-sm mb-2" style={{ color: "#7A2540" }}>No se cargó todo el inventario. <button className="underline" onClick={cargar}>Volver a cargar</button></p>}
+      {errorExportacion && <p role="alert" className="text-sm mb-2" style={{ color: "#7A2540" }}>{errorExportacion}</p>}
       <p className="text-xs mb-3" style={{ color: "#5B4E5E" }}>
         Usa <strong>Descargar plantilla</strong> para obtener el Excel editable de ejemplo. Columnas: <strong>Código, Descripción, Cantidad, Costo, Precio de venta, Imagen y Categoría</strong>.
         <strong>Imagen es opcional:</strong> el lote se carga normalmente con o sin foto. Si tienes una imagen, puedes colocar su enlace en la columna Imagen. Categoría también es opcional.
@@ -752,10 +826,10 @@ const [buscandoFoto, setBuscandoFoto] = useState(false);
         </div>
       )}
 
-      <div className="flex gap-1.5 mb-3">
-        {lotes.map((l) => (
-          <button key={l} onClick={() => setFiltroLote(l)} className="text-xs px-3 py-1.5 rounded-md" style={{ background: filtroLote === l ? "#9C7A3C" : "#F7F3EC", color: filtroLote === l ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
-            {l === "Todos" ? "Todos" : "Lote"}
+      <div className="flex flex-wrap gap-1.5 mb-3">
+        {lotes.map(({ id, etiqueta }) => (
+          <button key={id} onClick={() => setFiltroLote(id)} className="text-xs px-3 py-1.5 rounded-md" style={{ background: filtroLote === id ? "#9C7A3C" : "#F7F3EC", color: filtroLote === id ? "#F7F3EC" : "#5B4E5E", border: "1px solid #D9D0C2" }}>
+            {etiqueta}
           </button>
         ))}
       </div>
