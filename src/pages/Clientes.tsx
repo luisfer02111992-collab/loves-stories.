@@ -86,6 +86,10 @@ export default function Clientes() {
   const [metodoDeposito, setMetodoDeposito] = useState("efectivo");
   const [ultimoPdf, setUltimoPdf] = useState<{ blob: Blob; texto: string } | null>(null);
   const [cerrando, setCerrando] = useState(false);
+  const [limpiandoPedido, setLimpiandoPedido] = useState(false);
+  const limpiezaEnCurso = useRef(false);
+  const clienteVisible = useRef(seleccionado?.id);
+  clienteVisible.current = seleccionado?.id;
   const [mostrarResumenCierre, setMostrarResumenCierre] = useState(false);
   const [mostrarRecibo, setMostrarRecibo] = useState(false);
   const [mostrarRecordatorio, setMostrarRecordatorio] = useState(false);
@@ -426,6 +430,7 @@ export default function Clientes() {
   }
 
   async function quitarUnidad(itemId: string) {
+    if (limpiezaEnCurso.current) return;
     const pedidoActualId = ordenId;
     const clienteActualId = seleccionado?.id ?? null;
 
@@ -445,6 +450,7 @@ export default function Clientes() {
   }
 
   async function aumentarUnidad(productId: string) {
+    if (limpiezaEnCurso.current) return;
     if (!ordenId) return;
 
     const [{ data: producto, error: errorProducto }, { data: publicaciones, error: errorPublicacion }] = await Promise.all([
@@ -572,7 +578,45 @@ export default function Clientes() {
     }
   }
 
+  async function limpiarTodo() {
+    if (!seleccionado || !ordenId || items.length === 0 || limpiezaEnCurso.current) return;
+    const cliente = seleccionado;
+    const pedido = ordenId;
+    const lineas = items.map((item) => ({ id: item.id, quantity: item.cantidad }));
+    const unidades = lineas.reduce((suma, item) => suma + item.quantity, 0);
+    if (!confirm(`¿Limpiar todo el pedido de ${cliente.name} (${unidades} unidades)? Cada unidad regresará a su inventario o publicación y talla de origen. Los depósitos se conservan.`)) return;
+
+    limpiezaEnCurso.current = true;
+    setLimpiandoPedido(true);
+    let eliminado = false;
+    try {
+      const { error } = await supabase.rpc("clear_open_order", {
+        p_order_id: pedido,
+        p_items: lineas,
+      });
+      if (error) throw new Error(error.message);
+      eliminado = true;
+      await cerrarPedidoVacioSinDeposito(cliente.id, pedido);
+    } catch (error: any) {
+      alert(eliminado
+        ? `Los productos ya regresaron a su origen. No se pudo actualizar el estado de la cuenta: ${error.message}`
+        : `No se pudo limpiar el pedido: ${error.message}`);
+    } finally {
+      try {
+        if (clienteVisible.current === cliente.id) {
+          setProductoSeleccionado(null);
+          await cargarPedido(cliente.id);
+        }
+        await cargarClientes();
+      } finally {
+        limpiezaEnCurso.current = false;
+        setLimpiandoPedido(false);
+      }
+    }
+  }
+
   async function quitarProductoCompleto(g: GrupoProducto) {
+    if (limpiezaEnCurso.current) return;
     if (!confirm(`¿Quitar "${g.nombre}" completo (${g.cantidadTotal} unidades) de este pedido? Se devuelve todo al inventario.`)) return;
 
     const pedidoActualId = ordenId;
@@ -621,6 +665,7 @@ export default function Clientes() {
   }
 
   async function confirmarCierre() {
+    if (limpiezaEnCurso.current) return;
     if (!ordenId || !seleccionado || cerrando) return;
 
     // Abrimos la pestaña AHORA, directamente desde el clic del usuario.
@@ -1331,6 +1376,12 @@ function linkWhatsapp(telefono: string, mensaje: string) {
 
             {ordenId && (
               <div className="flex gap-2 mb-3 flex-wrap">
+                <button type="button" onClick={limpiarTodo}
+                  disabled={limpiandoPedido || cerrando || items.length === 0}
+                  className="py-2.5 px-3 rounded-md text-sm flex items-center justify-center gap-2 disabled:opacity-50"
+                  style={{ background: "#F4E3E6", color: "#7A2540", border: "1px solid #D9D0C2" }}>
+                  <Trash2 size={15} /> {limpiandoPedido ? "Limpiando..." : "Limpiar todo"}
+                </button>
                 <button onClick={() => setMostrarResumenCierre(true)} className="flex-1 py-2.5 rounded-md text-sm" style={{ background: "#2B1E2E", color: "#F7F3EC" }}>
                   Cerrar pedido
                 </button>
